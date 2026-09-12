@@ -2,10 +2,10 @@
 
 Perceptron::Perceptron(Key_Concepts &keys) {
   // Just a prototype now!
-  double weight = keys.weight;
-  double biases = keys.biases;
-  double forward_pass = keys.forward_pass;
-  double loss_function = keys.loss_function;
+  weight = keys.weight;
+  biases = keys.biases;
+  forward_pass = keys.forward_pass;
+  loss_function = keys.loss_function;
 
   // Test keys
   weight = 0.0;
@@ -17,7 +17,7 @@ Perceptron::Perceptron(Key_Concepts &keys) {
 /*
 Turn raw data samples into the parsed input vector;
 */
-double Perceptron::data_parser(Test_Sample &test, Input &input) {
+std::vector<double> Perceptron::data_parser(Test_Sample &test, Input &input) {
   // Parsed data
 
   // 1. Parse Text: Convert strings to doubles (e.g., sum of ASCII values)
@@ -54,4 +54,11 @@ double Perceptron::data_parser(Test_Sample &test, Input &input) {
   }
 
   return input.data;
-};
+}
+
+double Perceptron::mind() {
+  Test_Sample test;
+  Input input;
+  std::vector<double> entry = data_parser(test, input);
+  return 0.0;
+}

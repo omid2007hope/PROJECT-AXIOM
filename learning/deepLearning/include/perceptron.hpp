@@ -38,12 +38,18 @@ struct Test_Sample {
 
 struct Input {
   std::vector<double> data = {};
-}
+};
 
 class Perceptron {
 public:
+  double weight;
+  double biases;
+  double forward_pass;
+  double loss_function;
+
   Perceptron(Key_Concepts &keys);
-  double data_parser(Test_Sample &test, Input &input);
+  std::vector<double> data_parser(Test_Sample &test, Input &input);
+  double mind();
 };
 
 #endif // include_perceptron
