@@ -38,7 +38,7 @@ struct Test_Sample {
 
 class Perceptron {
 public:
-  Perceptron();
+  Perceptron(Key_Concepts &keys);
   void data_parser();
 };
 

@@ -1,10 +1,7 @@
 #include "../include/perceptron.hpp"
 
-Perceptron::Perceptron() {
+Perceptron::Perceptron(Key_Concepts &keys) {
   // Just a prototype now!
-
-  Key_Concepts keys;
-
   double weight = keys.weight;
   double biases = keys.biases;
   double forward_pass = keys.forward_pass;
