@@ -40,6 +40,9 @@ struct Input {
   std::vector<double> data = {};
 };
 
+// Standalone parser, isolated from Perceptron!
+std::vector<double> data_parser(Test_Sample &test, Input &input);
+
 class Perceptron {
 public:
   double weight;
@@ -48,7 +51,6 @@ public:
   double loss_function;
 
   Perceptron(Key_Concepts &keys);
-  std::vector<double> data_parser(Test_Sample &test, Input &input);
   double mind();
 };
 

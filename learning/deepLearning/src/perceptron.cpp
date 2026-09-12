@@ -16,10 +16,9 @@ Perceptron::Perceptron(Key_Concepts &keys) {
 
 /*
 Turn raw data samples into the parsed input vector;
+Now isolated from the neural network entirely.
 */
-std::vector<double> Perceptron::data_parser(Test_Sample &test, Input &input) {
-  // Parsed data
-
+std::vector<double> data_parser(Test_Sample &test, Input &input) {
   // 1. Parse Text: Convert strings to doubles (e.g., sum of ASCII values)
   for (const std::string &word : test.data_txt) {
     double unified = 0.0;
