@@ -1,3 +1,4 @@
+#include "../include/perceptron.hpp"
 #include <string>
 #include <vector>
 
@@ -5,10 +6,10 @@
 
 Key_Concepts keys;
 
-double Weight = ;
-double biases = ;
-double forward_pass = ;
-double loss_function = ;
+double weight = keys.weight;
+double biases = keys.biases;
+double forward_pass = keys.forward_pass;
+double loss_function = keys.loss_function;
 
 // Raw data samples
 
