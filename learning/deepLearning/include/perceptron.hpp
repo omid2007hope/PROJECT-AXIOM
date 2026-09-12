@@ -6,10 +6,10 @@
 #include <vector>
 
 struct Key_Concepts {
-  double weight;        // Weight
-  double biases;        // Bias
-  double forward_pass;  // Guess
-  double loss_function; // Calculate how wrong the guess was
+  double weight = 0.0;        // Weight
+  double biases = 0.0;        // Bias
+  double forward_pass = 0.0;  // Guess
+  double loss_function = 0.0; // Calculate how wrong the guess was
 };
 
 // Raw data samples
@@ -36,10 +36,14 @@ struct Test_Sample {
                     -0.0105, -0.0334, -0.0451}; // 16kHz PCM samples
 };
 
+struct Input {
+  std::vector<double> data = {};
+}
+
 class Perceptron {
 public:
   Perceptron(Key_Concepts &keys);
-  void data_parser(Test_Sample &test);
+  double data_parser(Test_Sample &test, Input &input);
 };
 
 #endif // include_perceptron
