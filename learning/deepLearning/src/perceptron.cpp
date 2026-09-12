@@ -36,9 +36,9 @@ std::vector<double> data_parser(Test_Sample &test, Input &input) {
     input.data.push_back(unified);
   }
 
-  // 2. Parse Numbers: Already doubles, push directly
+  // 2. Parse Numbers: Min-Max normalize based on known dataset bounds (e.g. Iris max ~10.0)
   for (double val : test.data_num) {
-    double unified = val;
+    double unified = val / 10.0;
     input.data.push_back(unified);
   }
 
@@ -48,9 +48,9 @@ std::vector<double> data_parser(Test_Sample &test, Input &input) {
     input.data.push_back(unified);
   }
 
-  // 4. Parse Video: Push frame deltas directly
+  // 4. Parse Video: Normalize frame deltas (-255 to 255) to (-1.0 to 1.0)
   for (double delta : test.data_video) {
-    double unified = delta;
+    double unified = delta / 255.0;
     input.data.push_back(unified);
   }
 
