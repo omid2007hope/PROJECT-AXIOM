@@ -13,6 +13,7 @@ struct Key_Concepts {
 
 class Perceptron {
 public:
+  Perceptron();
 };
 
 #endif // include_perceptron

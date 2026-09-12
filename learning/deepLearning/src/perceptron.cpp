@@ -42,7 +42,16 @@ Turn raw data samples into the parsed input vector;
 */
 void data_parser() {
 
-  double unified = ;
+  double unified = 0.0;
 
   input.push_back(unified);
+}
+
+Perceptron::Perceptron() {
+
+  // Test keys
+  weight = 0.0;
+  biases = 0.0;
+  forward_pass = 0.0;
+  loss_function = 0.0;
 }
