@@ -39,7 +39,7 @@ struct Test_Sample {
 class Perceptron {
 public:
   Perceptron(Key_Concepts &keys);
-  void data_parser();
+  void data_parser(Test_Sample &test);
 };
 
 #endif // include_perceptron

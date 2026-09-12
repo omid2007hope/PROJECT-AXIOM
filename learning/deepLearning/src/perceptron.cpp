@@ -17,7 +17,7 @@ Perceptron::Perceptron(Key_Concepts &keys) {
 /*
 Turn raw data samples into the parsed input vector;
 */
-void Perceptron::data_parser() {
+void Perceptron::data_parser(Test_Sample &test) {
   // Parsed data
   std::vector<double> input = {};
 
