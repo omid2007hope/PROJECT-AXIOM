@@ -16,6 +16,7 @@ std::vector<double> Parser::tokenization(Input &input, Test &test) {
   for (const std::string &word : test.data_txt) {
     // If the word isn't in our dictionary, add it
     if (input.text.find(word) == input.text.end()) {
+      // Assign each <string>word an <double> id
       input.text[word] = input.next_id;
       input.next_id += 1.0;
     }
