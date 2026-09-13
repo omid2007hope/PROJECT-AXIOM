@@ -6,7 +6,7 @@
 #include <vector>
 
 // Raw data samples
-struct Test_Sample {
+struct Test {
   // Text by user
   std::vector<std::string> data_txt = {"The",  "quick", "brown", "fox", "jumps",
                                        "over", "the",   "lazy",  "dog"};
@@ -30,16 +30,17 @@ struct Test_Sample {
 };
 
 struct Input {
-  std::vector<double> data = {};
+  std::vector<double> tokenized_data = {};
+  std::vector<double> embedded_data = {};
 };
 
 class Parser {
 public:
   // Standalone parser, isolated from Perceptron!
-  std::vector<double> tokenization(Input &input);
+  std::vector<double> tokenization(Input &input, Test &test);
 
   // Standalone parser, isolated from Perceptron!
-  std::vector<double> embedding(Input &input);
+  std::vector<double> embedding(Input &input, Test &test);
 };
 
 #endif

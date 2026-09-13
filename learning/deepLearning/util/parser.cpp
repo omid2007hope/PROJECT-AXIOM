@@ -10,7 +10,7 @@ Now isolated from the neural network entirely.
 */
 
 // Using Byte-Pair Encoding (BPE) or SentencePiece concept
-std::vector<double> Parser::tokenization(Input &input) {
+std::vector<double> Parser::tokenization(Input &input, Test &test) {
 
   // 1. MOCK TOKENIZATION: Map words to integer IDs
   std::unordered_map<std::string, double> text;
@@ -24,18 +24,17 @@ std::vector<double> Parser::tokenization(Input &input) {
       next_id += 1.0;
     }
     // Push the token ID (e.g. 1.0, 2.0) into the input
-    input.data.push_back(text[word]);
+    input.tokenized_data.push_back(text[word]);
   }
 
-  return input.data;
+  return input.tokenized_data;
 }
 
 // 2. MOCK EMBEDDINGS: Convert token IDs to Dense Vectors
-std::vector<double> Parser::embedding(Input &input) {
-  std::vector<double> embedded_data;
+std::vector<double> Parser::embedding(Input &input, Test &test) {
 
   // For every parsed value (token IDs, normalized pixels, etc.)
-  for (double value : input.data) {
+  for (double value : input.tokenized_data) {
     // We mock an embedding matrix by generating 3 unique floats
     // for every discrete value using mathematical transformations.
     // In real AI, these values are weights that the AI learns over time!
@@ -43,10 +42,10 @@ std::vector<double> Parser::embedding(Input &input) {
     double embed_dim2 = std::cos(value * 2.1);
     double embed_dim3 = std::sin(value * 3.3) * std::cos(value * 0.5);
 
-    embedded_data.push_back(embed_dim1);
-    embedded_data.push_back(embed_dim2);
-    embedded_data.push_back(embed_dim3);
+    input.embedded_data.push_back(embed_dim1);
+    input.embedded_data.push_back(embed_dim2);
+    input.embedded_data.push_back(embed_dim3);
   }
 
-  return embedded_data;
+  return input.embedded_data;
 }
