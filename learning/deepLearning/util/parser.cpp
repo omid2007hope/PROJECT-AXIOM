@@ -12,19 +12,15 @@ Now isolated from the neural network entirely.
 // Using Byte-Pair Encoding (BPE) or SentencePiece concept
 std::vector<double> Parser::tokenization(Input &input, Test &test) {
 
-  // 1. MOCK TOKENIZATION: Map words to integer IDs
-  std::unordered_map<std::string, double> text;
-  double next_id = 1.0;
-
   // for each word
   for (const std::string &word : test.data_txt) {
     // If the word isn't in our dictionary, add it
-    if (text.find(word) == text.end()) {
-      text[word] = next_id;
-      next_id += 1.0;
+    if (input.text.find(word) == input.text.end()) {
+      input.text[word] = input.next_id;
+      input.next_id += 1.0;
     }
     // Push the token ID (e.g. 1.0, 2.0) into the input
-    input.tokenized_data.push_back(text[word]);
+    input.tokenized_data.push_back(input.text[word]);
   }
 
   return input.tokenized_data;
