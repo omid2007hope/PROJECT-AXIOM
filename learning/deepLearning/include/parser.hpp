@@ -31,7 +31,7 @@ struct Test {
 
 struct Input {
   // 1. MOCK TOKENIZATION: Map words to integer IDs
-  std::unordered_map<std::string, double> text;
+  std::unordered_map<std::string, double> text = {};
 
   double next_id = 1.0;
 
