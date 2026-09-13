@@ -34,7 +34,7 @@ struct Polynomial {
   long long p = 31;
   long long m = 1000000009; // Large prime modulus (1e9 + 9)
   long long p_pow = 1;
-}
+};
 
 struct Input {
   std::vector<double> data = {};
@@ -49,6 +49,6 @@ public:
   // Standalone parser, isolated from Perceptron!
   std::vector<double> embedding(Test_Sample &test, Input &input,
                                 Polynomial &polynomial);
-}
+};
 
 #endif
