@@ -7,7 +7,7 @@ void conduct_test() {
   Input input_data;
 
   // Execute the standalone data parser without instantiating Perceptron
-  std::vector<double> result = data_parser(test_data, input_data);
+  std::vector<double> result = tokenization(test_data, input_data);
 
   std::cout << "--- Parser Unification Test ---\n";
   for (size_t i = 0; i < result.size(); i++) {

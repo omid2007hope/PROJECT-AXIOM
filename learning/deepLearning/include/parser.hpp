@@ -43,8 +43,12 @@ struct Input {
 class Parser {
 public:
   // Standalone parser, isolated from Perceptron!
-  std::vector<double> data_parser(Test_Sample &test, Input &input,
-                                  Polynomial &polynomial);
+  std::vector<double> tokenization(Test_Sample &test, Input &input,
+                                   Polynomial &polynomial);
+
+  // Standalone parser, isolated from Perceptron!
+  std::vector<double> embedding(Test_Sample &test, Input &input,
+                                Polynomial &polynomial);
 }
 
 #endif
