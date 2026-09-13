@@ -29,13 +29,6 @@ struct Test_Sample {
                     -0.0105, -0.0334, -0.0451}; // 16kHz PCM samples
 };
 
-struct Polynomial {
-  long long hash_value = 0;
-  long long p = 31;
-  long long m = 1000000009; // Large prime modulus (1e9 + 9)
-  long long p_pow = 1;
-};
-
 struct Input {
   std::vector<double> data = {};
 };
@@ -43,12 +36,10 @@ struct Input {
 class Parser {
 public:
   // Standalone parser, isolated from Perceptron!
-  std::vector<double> tokenization(Test_Sample &test, Input &input,
-                                   Polynomial &polynomial);
+  std::vector<double> tokenization(Input &input);
 
   // Standalone parser, isolated from Perceptron!
-  std::vector<double> embedding(Test_Sample &test, Input &input,
-                                Polynomial &polynomial);
+  std::vector<double> embedding(Input &input);
 };
 
 #endif
