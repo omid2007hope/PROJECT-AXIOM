@@ -6,6 +6,8 @@
 Turn raw data samples into the parsed input vector;
 Now isolated from the neural network entirely.
 */
+
+// Using Byte-Pair Encoding (BPE) or SentencePiece
 std::vector<double> tokenization(Test_Sample &test, Input &input,
                                  Polynomial &polynomial) {
   // 1. Parse Text: Polynomial rolling hash to prevent anagram collisions and
