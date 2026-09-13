@@ -1,24 +1,24 @@
+#include "../include/parser.hpp"
+
 /*
 Turn raw data samples into the parsed input vector;
 Now isolated from the neural network entirely.
 */
-std::vector<double> data_parser(Test_Sample &test, Input &input) {
+std::vector<double> data_parser(Test_Sample &test, Input &input,
+                                Polynomial &polynomial) {
   // 1. Parse Text: Polynomial rolling hash to prevent anagram collisions and
   // normalize magnitude
   for (const std::string &word : test.data_txt) {
-    long long hash_value = 0;
-    long long p = 31;
-    long long m = 1000000009; // Large prime modulus (1e9 + 9)
-    long long p_pow = 1;
-
     for (unsigned char c : word) {
-      hash_value = (hash_value + c * p_pow) % m;
-      p_pow = (p_pow * p) % m;
+      polynomial.hash_value =
+          (polynomial.hash_value + c * polynomial.p_pow) % polynomial.m;
+      polynomial.p_pow = (polynomial.p_pow * polynomial.p) % polynomial.m;
     }
 
     // Normalize to [0.0, 1.0] to mathematically align with other modalities
     // (like image pixels)
-    double unified = static_cast<double>(hash_value) / static_cast<double>(m);
+    double unified =
+        static_cast<double>(polynomial.hash_value) / static_cast<double>(m);
     input.data.push_back(unified);
   }
 
