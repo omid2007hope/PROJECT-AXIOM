@@ -1,8 +1,8 @@
-# Memory Hierarchy & Hardware Acceleration
+# AI Memory Hierarchy & Hardware Acceleration
 
-## 1. The Three-Tier Memory Architecture
+## 1. The Three-Tier AI Memory Architecture
 
-Deep learning training and inference pipelines operate under rigid physical memory constraints. A system must orchestrate data across three distinct hardware tiers:
+Executing Artificial Intelligence architectures—from elementary Perceptrons to 70B parameter LLaMA foundation models—imposes strict physical memory constraints. A production AI runtime must orchestrate data across three hardware tiers:
 
 ```
 +-------------------------------------------------------------------------------+
@@ -33,20 +33,20 @@ Deep learning training and inference pipelines operate under rigid physical memo
 
 ---
 
-## 2. Component Residency & Life Cycle
+## 2. Component Residency & Life Cycle in AI Systems
 
-### A. The Vocabulary Dictionaries (The "Rosetta Stone")
+### A. The Vocabulary Dictionaries (The AI "Rosetta Stone")
 - **Footprint:** $\sim 5\text{ MB} - 50\text{ MB}$ (e.g., 100,000 subwords or 8,192 visual codebook indices).
 - **Residency:** Permanent in **System RAM**.
-- **Immutable Invariant:** The dictionary must **never be cleared or re-indexed** once training begins:
-  - Neural network weights are mathematically trained to associate specific token IDs (e.g., ID `1` = `"The"`, ID `20001` = `"Pixel_0"`) with dense semantic vectors.
-  - If the dictionary is cleared or regenerated dynamically, token IDs drift. The model receives scrambled representations, completely destroying previously learned weights (catastrophic forgetting).
-  - In production, vocabularies are persisted to disk as static configuration files (e.g., `vocab.json`, `tokenizer.model`, `codebook.bin`).
+- **Immutable Invariant:** The dictionary must **never be cleared or re-indexed** once training commences:
+  - An AI's neural parameters are trained to associate specific token IDs (e.g., ID `1` = `"The"`, ID `20001` = `"Pixel_0"`) with dense semantic vectors.
+  - If the dictionary is cleared or regenerated dynamically, token IDs drift. The AI receives scrambled representations, completely destroying previously learned weights (catastrophic semantic degradation).
+  - In production AI, vocabularies are serialized as immutable static files (e.g., `vocab.json`, `tokenizer.model`, `codebook.bin`).
 
 ### B. The Dataset & The Streaming Pipeline (Batching)
 - **Footprint:** $100\text{ GB} - \text{Multiple Terabytes}$.
 - **Physical Wall:** Loading an entire dataset into System RAM causes immediate Out-of-Memory (OOM) crashes or operating system thrashing.
-- **The Solution (DataLoader / Conveyor-Belt Architecture):**
+- **The AI Conveyor-Belt Architecture (DataLoader):**
   1. The raw dataset remains stored on the NVMe SSD.
   2. The host CPU streams a small **Batch** (e.g., 32 or 64 samples) into System RAM.
   3. The `Parser` transforms the batch into unified token tensors.
@@ -89,7 +89,7 @@ During neural training or inference, VRAM must accommodate:
 2. **Optimizer States (Training):** In AdamW, momentum and variance tracking consume an additional 8 bytes per parameter in FP32.
 3. **Activations & KV Cache:** Dynamic memory storing intermediate layer states during forward execution.
 
-When working locally, modern deep learning utilizes two critical engineering strategies to prevent Out-of-Memory (OOM) failures:
+When working locally, modern AI development utilizes two critical engineering strategies to prevent Out-of-Memory (OOM) failures:
 
 ### Strategy 1: Weight Quantization (GGUF, AWQ, GPTQ)
 Instead of storing weights in 16-bit floating point format, weights are mathematically mapped into low-bit integers:
@@ -102,10 +102,10 @@ $$\mathbf{W}_{\text{int4}} = \text{round}\left(\frac{\mathbf{W}_{\text{fp16}}}{\
 | **14 Billion Parameters** | $\approx 28.0\text{ GB}$ (OOM) | $\approx 8.5\text{ GB}$ | Full model fits comfortably |
 | **32 Billion Parameters** | $\approx 64.0\text{ GB}$ (OOM) | $\approx 19.5\text{ GB}$ | Requires offloading |
 
-Quantization enables consumer hardware to execute industrial-scale architectures locally without sacrificing significant perplexity or inference accuracy.
+Quantization enables consumer hardware to execute industrial-scale AI architectures locally without catastrophic loss of perplexity or reasoning capability.
 
 ### Strategy 2: Layer Offloading & Hybrid Inference (llama.cpp Architecture)
-When a model exceeds the physical 16 GB boundary of the RTX 4080, the execution graph is partitioned across hardware tiers:
+When an AI model exceeds the physical 16 GB boundary of the RTX 4080, the execution graph is partitioned across hardware tiers:
 
 ```
 +-------------------------------------------------------------------------------+

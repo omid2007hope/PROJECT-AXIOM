@@ -1,17 +1,18 @@
-# C++ Design Patterns & Data Structures
+# C++ Design Patterns & Data Structures for AI Engineering
 
 ## 1. Core Engineering Principles
 
-The DeepLearning Core is designed around strict systems-level principles:
-- **Zero-Dependency Mandate:** Built entirely with standard modern C++ (C++17 standard library) without reliance on external frameworks (e.g., PyTorch, ONNX, Eigen).
-- **Simplicity Over Complexity:** Minimalistic, transparent data structures that expose raw computational mechanics rather than obfuscating them behind deep abstraction hierarchies.
-- **Strict Decoupling:** Complete separation between the input parsing pipeline (`Parser`) and the neural execution pipeline (`Perceptron`).
+The **AI Core** engine is built around foundational systems-level principles for high-performance artificial intelligence:
+- **Zero-Dependency Mandate:** Engineered purely with the standard modern C++ library (C++17), avoiding heavy opaque frameworks to retain total control over mathematical execution and memory layout.
+- **Simplicity Over Complexity:** Transparent, cache-friendly data structures that expose raw computational mechanics rather than hiding them behind layers of virtual inheritance.
+- **Strict Decoupling:** Complete separation between the input perceptual pipeline ([Parser](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L53)) and the cognitive neural execution pipeline ([Perceptron](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/perceptron.hpp#L15)).
+- **Experimental Modularity:** Code is structured to enable agile AI experimentation—isolating prototypes, measuring empirical convergence, and polishing proven routines into clean, reusable open-source modules.
 
 ---
 
 ## 2. Associative Containers & Dictionary Mechanics
 
-The tokenization subsystem relies heavily on hash tables (`std::unordered_map`) to maintain associative vocabularies for each modality:
+The tokenization subsystem relies on hash tables (`std::unordered_map`) to maintain discrete associative vocabularies for each modality:
 
 ```cpp
 std::unordered_map<std::string, double> text_vocab;

@@ -1,20 +1,20 @@
-# Multimodal Architecture Specification
+# AI Multimodal Cognitive Architecture Specification
 
 ## 1. Architectural Overview
 
-The DeepLearning Core engine implements an **Early Fusion Discrete Multimodal Architecture**, conceptually aligned with modern foundation models such as Google Gemini and Meta Chameleon. 
+The **AI Core** engine implements an **Early Fusion Discrete Multimodal Architecture**, designed as the universal perceptual frontend for an advancing Artificial Intelligence system.
 
-Rather than maintaining separate, disparate neural pathways for each input medium (images, text, audio, video, tabular numbers), the system maps all modalities into a **single, unified, discrete token space** before projecting them into a shared continuous embedding space.
+Rather than maintaining isolated, ad-hoc pipelines for different sensory formats (vision, natural language, audio, telemetry, temporal video), the AI maps all environmental inputs into a **single, unified, discrete token space** before projecting them into a shared continuous embedding space for the neural core.
 
 ```
 +-----------------------------------------------------------------------------------+
-|                                Raw Multimodal Data                                |
+|                        Raw Environmental Inputs (Sensory World)                   |
 |  [Text: "The quick..."]  [Numbers: 5.1...]  [Images: 0..255]  [Video]  [Audio PCM]|
 +-----------------------------------------------------------------------------------+
                                           |
                                           v
 +-----------------------------------------------------------------------------------+
-|                        Discrete Tokenizer (Parser Subsystem)                       |
+|                      AI Discrete Tokenizer (Parser Subsystem)                     |
 |   - Modality Dictionaries (std::unordered_map)                                   |
 |   - Non-overlapping Global ID Ranges                                              |
 |   - Template-driven dynamic ingestion (add_assign_increase<T>)                    |
@@ -34,39 +34,39 @@ Rather than maintaining separate, disparate neural pathways for each input mediu
                                           |
                                           v
 +-----------------------------------------------------------------------------------+
-|                             Neural Engine (Perceptron)                            |
-|                            Forward Pass & Optimization                            |
+|                            AI Neural Processing Core                              |
+|           Perceptron (Atomic) -> MLP -> Transformer / LLaMA Primitives            |
 +-----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Early Fusion vs. Late Fusion
+## 2. Early Fusion vs. Late Fusion in Artificial Intelligence
 
-In modern deep learning architectures, multimodal processing generally follows one of two paradigms:
+Modern multimodal AI architectures process disparate media via two competing paradigms:
 
-### Option 1: Continuous Encoders / Late Fusion (GPT-4 Vision / CLIP Style)
-- Text is converted into discrete token IDs.
-- Vision and audio are routed through dedicated heavy encoders (e.g., Vision Transformer / CNN) that directly output dense vectors ($\mathbb{R}^d$).
-- The vectors are concatenated or cross-attended inside the transformer layers.
-- **Trade-off:** High model complexity; separate pre-trained feature extractors required for each non-text modality.
+### Option 1: Continuous Encoders / Late Fusion (e.g., GPT-4 Vision / CLIP)
+- Language is tokenized into integer IDs.
+- Vision and audio bypass tokenization and are fed through heavy external encoders (e.g., Vision Transformer / ResNet / Whisper) that output continuous feature vectors ($\mathbb{R}^d$).
+- These continuous vectors are fused via cross-attention layers.
+- **Limitation:** High architectural complexity; requires maintaining separate large pre-trained models for each modality.
 
-### Option 2: Discrete Quantization / Early Fusion (Gemini / Chameleon Style) — *Adopted*
-- **Every** modality is converted into discrete integer tokens ($z \in \mathbb{Z}^+$) at the input boundary.
+### Option 2: Discrete Quantization / Early Fusion (e.g., Gemini / Chameleon) — *Adopted*
+- **All modalities** are converted into discrete integer tokens ($z \in \mathbb{Z}^+$) at the earliest perceptual stage.
 - Continuous visual/auditory signals are quantized into discrete codebook indices (Vector Quantization / VQ-VAE).
 - All tokens enter a single, unified sequence vector (`input.tokenized_data`).
-- A single embedding table maps all tokens—regardless of origin modality—into the latent dimension.
-- **Advantage:** Maximum structural simplicity, uniform attention mechanisms, and complete modality agnosticism inside the neural processor.
+- A unified embedding table projects all tokens into a common latent representation.
+- **Advantage:** Maximum architectural elegance, unified representation, and complete modality agnosticism inside the AI neural core.
 
 ---
 
 ## 3. Global Vocabulary Partitioning & Collision Prevention
 
-When multiple modalities are flattened into one unified sequence, a critical ambiguity arises if token IDs overlap:
+When multiple modalities are flattened into one unified sequence, an AI can suffer from severe semantic cross-contamination if token IDs overlap:
 
 > **The Cross-Modal Collision Problem:**  
 > If the text tokenizer assigns ID `1` to the word `"The"`, and the image quantizer assigns ID `1` to a `"Black Pixel (0.0)"`, the unified sequence receives `[1, 1]`.  
-> The downstream Embedding Matrix receives only the integer array without modality metadata. Consequently, the matrix would look up row `1` for both tokens, assigning identical mathematical semantics to an English article and a black pixel.
+> The downstream Embedding Matrix receives only the raw integer vector without modality metadata. Consequently, the matrix would look up row `1` for both tokens, assigning identical mathematical semantics to an English article and a black pixel.
 
 ### The ID Segregation Solution
 To preserve complete semantic segregation while maintaining a unified sequence, the vocabulary space is partitioned into deterministic, disjoint numerical ranges:
@@ -88,15 +88,33 @@ To preserve complete semantic segregation while maintaining a unified sequence, 
 ```
 
 Because each ID range is strictly non-overlapping:
-1. `Parser` never generates ambiguous tokens across modalities.
-2. The `Embedding` layer can represent each modality in its own mathematical subspace without collision.
-3. The neural network can correlate cross-modal patterns (e.g., matching the concept `"dog"` with visual pixel patterns of a dog) via cross-token attention.
+1. `Parser` never emits ambiguous tokens across modalities.
+2. The `Embedding` layer projects each modality into its own distinct geometric subspace.
+3. The AI neural engine can correlate cross-modal concepts (e.g., associating the word `"dog"` with the visual pixels of a dog) via associative weights.
 
 ---
 
-## 4. Subsystem Decoupling
+## 4. Subsystem Decoupling: Perception vs. Cognition
 
-Following the Single Responsibility Principle, data parsing is strictly isolated from neural computation:
+Following the Single Responsibility Principle, sensory parsing is strictly isolated from neural computation:
 
 - **`Parser` (`util/parser.cpp`, `include/parser.hpp`)**: Handles tokenization, dictionary state tracking, vocabulary assignment, and embedding synthesis. It has zero knowledge of neural weights, biases, or forward pass logic.
-- **`Perceptron` (`src/perceptron.cpp`, `include/perceptron.hpp`)**: Operates strictly on numerical input vectors (`std::vector<double>`). It has zero knowledge of strings, file formats, or tokenization dictionaries.
+- **`Perceptron` (`src/perceptron.cpp`, `include/perceptron.hpp`)**: Operates strictly on numerical input tensors (`std::vector<double>`). It has zero knowledge of raw strings, image formats, or tokenization dictionaries.
+
+---
+
+## 5. Architectural Trajectory: From Perceptron to LLaMA
+
+This architecture is deliberately designed as a progressive stepping stone:
+
+1. **Atomic Foundation (Perceptron):** The simplest possible AI computational unit:
+   $$y = \sigma\left(\sum_{i=1}^n w_i x_i + b\right)$$
+   Where $x$ is the unified embedding vector emitted by `Parser::embedding`.
+2. **Hidden Layer Synthesis (MLP):** Stacking perceptrons to create non-linear multi-layer representations.
+3. **Sequence Modeling & Attention:** Introducing Query, Key, Value transformations over the unified token sequence:
+   $$\text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{softmax}\left(\frac{\mathbf{Q} \mathbf{K}^T}{\sqrt{d_k}}\right) \mathbf{V}$$
+4. **LLaMA Reverse-Engineering:** Integrating modern open-source LLM innovations:
+   - **RoPE (Rotary Positional Embeddings):** Encoding positional awareness directly into Q and K vectors.
+   - **RMSNorm:** Eliminating mean computation for faster layer normalization.
+   - **SwiGLU Activation:** Gated linear units replacing standard ReLU/GELU.
+   - **KV Caching:** Storing previous key-value states for fast autoregressive inference.
