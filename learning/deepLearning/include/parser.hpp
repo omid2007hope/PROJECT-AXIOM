@@ -32,11 +32,11 @@ struct Test {
 
 struct Input {
   // Global Vocabulary Dictionaries (The Discrete VQ-VAEs)
-  std::unordered_map<std::string, double> text_vocab = {};
-  std::unordered_map<double, double> number_vocab = {};
-  std::unordered_map<double, double> image_vocab = {};
-  std::unordered_map<double, double> video_vocab = {};
-  std::unordered_map<double, double> voice_vocab = {};
+  std::unordered_map<std::string, double> text_dictionary = {};
+  std::unordered_map<double, double> number_dictionary = {};
+  std::unordered_map<double, double> image_dictionary = {};
+  std::unordered_map<double, double> video_dictionary = {};
+  std::unordered_map<double, double> voice_dictionary = {};
 
   // Global ID Counters (Ensuring Modalities Never Overlap)
   double next_text_id = 1.0;       // 1 to 9,999
