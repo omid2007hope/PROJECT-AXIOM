@@ -51,6 +51,17 @@ struct Input {
 };
 
 class Parser {
+private:
+  template <typename T>
+  void add_assign_increase(const T &item, std::unordered_map<T, double> &vocab,
+                           double &next_id, std::vector<double> &output_data) {
+    if (vocab.find(item) == vocab.end()) {
+      vocab[item] = next_id;
+      next_id += 1.0;
+    }
+    output_data.push_back(vocab[item]);
+  }
+
 public:
   // Standalone parser, isolated from Perceptron!
   std::vector<double> tokenization(Input &input, Test &test);
