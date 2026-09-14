@@ -3,8 +3,8 @@
 
 #include <cstddef>
 #include <string>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 // Raw data samples
 struct Test {
@@ -39,11 +39,11 @@ struct Input {
   std::unordered_map<double, double> voice_vocab = {};
 
   // Global ID Counters (Ensuring Modalities Never Overlap)
-  double next_text_id = 1.0;          // 1 to 9,999
-  double next_number_id = 10000.0;    // 10,000 to 19,999
-  double next_image_id = 20000.0;     // 20,000 to 29,999
-  double next_video_id = 30000.0;     // 30,000 to 39,999
-  double next_voice_id = 40000.0;     // 40,000 to 49,999
+  double next_text_id = 1.0;       // 1 to 9,999
+  double next_number_id = 10000.0; // 10,000 to 19,999
+  double next_image_id = 20000.0;  // 20,000 to 29,999
+  double next_video_id = 30000.0;  // 30,000 to 39,999
+  double next_voice_id = 40000.0;  // 40,000 to 49,999
 
   // The unified output sequence
   std::vector<double> tokenized_data = {};
@@ -53,13 +53,15 @@ struct Input {
 class Parser {
 private:
   template <typename T>
-  void add_assign_increase(const T &item, std::unordered_map<T, double> &vocab,
-                           double &next_id, std::vector<double> &output_data) {
-    if (vocab.find(item) == vocab.end()) {
-      vocab[item] = next_id;
+
+  void add_assign_increase(const T &data,
+                           std::unordered_map<T, double> &dictionary,
+                           double &next_id, Input &input) {
+    if (dictionary.find(data) == dictionary.end()) {
+      dictionary[data] = next_id;
       next_id += 1.0;
     }
-    output_data.push_back(vocab[item]);
+    input.tokenized_data.push_back(dictionary[data]);
   }
 
 public:
