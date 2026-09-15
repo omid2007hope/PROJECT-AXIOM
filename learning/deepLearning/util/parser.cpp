@@ -30,33 +30,19 @@ std::vector<double> Parser::tokenization(Input &input, Test &test) {
   // 3. Image Tokenization (IDs 20000 - 29999)
   // Note: We use exact matches for now. A real VQ-VAE would round/quantize
   // these.
-  tokenize_from_disk("Photo.jpeg", input.image_dictionary, input.next_image_id, input);
+  tokenize_from_disk("Photo.jpeg", input.image_dictionary, input.next_image_id,
+                     input);
 
   // 4. Video Tokenization (IDs 30000 - 39999)
-  tokenize_from_disk("Video.mp4", input.video_dictionary, input.next_video_id, input);
+  tokenize_from_disk("Video.mp4", input.video_dictionary, input.next_video_id,
+                     input);
 
   // 5. Voice/Audio Tokenization (IDs 40000 - 49999)
-  tokenize_from_disk("Voice.ogg", input.voice_dictionary, input.next_voice_id, input);
+  tokenize_from_disk("Voice.ogg", input.voice_dictionary, input.next_voice_id,
+                     input);
 
   return input.tokenized_data;
 }
 
 // MOCK EMBEDDINGS: Convert global token IDs to Dense Vectors
-std::vector<double> Parser::embedding(Input &input, Test &test) {
-  (void)test; // Suppress unused-parameter warning
-
-  for (double value : input.tokenized_data) {
-    // We mock an embedding matrix. Because the IDs are strictly segregated
-    // by modality (e.g. 1 vs 20000), the math naturally produces
-    // wildly different embedding vectors for different modalities!
-    double embed_dim1 = std::sin(value * 1.5);
-    double embed_dim2 = std::cos(value * 2.1);
-    double embed_dim3 = std::sin(value * 3.3) * std::cos(value * 0.5);
-
-    input.embedded_data.push_back(embed_dim1);
-    input.embedded_data.push_back(embed_dim2);
-    input.embedded_data.push_back(embed_dim3);
-  }
-
-  return input.embedded_data;
-}
+std::vector<double> Parser::embedding(Input &input, Test &test) {}
