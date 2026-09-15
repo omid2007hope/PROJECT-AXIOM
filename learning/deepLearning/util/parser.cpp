@@ -51,6 +51,7 @@ std::vector<double> Parser::tokenization(Input &input, Test &test) {
 
 // MOCK EMBEDDINGS: Convert global token IDs to Dense Vectors
 std::vector<double> Parser::embedding(Input &input, Test &test) {
+  (void)test; // Suppress unused-parameter warning
 
   for (double value : input.tokenized_data) {
     // We mock an embedding matrix. Because the IDs are strictly segregated
