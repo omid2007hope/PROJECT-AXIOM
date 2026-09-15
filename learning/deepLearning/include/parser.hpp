@@ -2,13 +2,13 @@
 #define include_parser
 
 #include <cstddef>
+#include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iostream>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <filesystem>
 
 // Raw data samples
 struct Test {
@@ -16,9 +16,8 @@ struct Test {
   std::vector<std::string> data_txt = {"The",  "quick", "brown", "fox", "jumps",
                                        "over", "the",   "lazy",  "dog"};
   // Number by user
-  std::vector<double> data_num = {
-      5.1, 3.5, 1.4, 0.2, 4.9, 3.0,
-      1.4, 0.2, 4.7, 3.2, 1.3, 0.2}; // Iris dataset (3 samples)
+  std::vector<double> data_num = {5.1, 3.5, 1.4, 0.2, 4.9, 3.0,
+                                  1.4, 0.2, 4.7, 3.2, 1.3, 0.2};
 };
 
 struct Input {
@@ -28,6 +27,13 @@ struct Input {
   std::unordered_map<double, double> image_dictionary = {};
   std::unordered_map<double, double> video_dictionary = {};
   std::unordered_map<double, double> voice_dictionary = {};
+
+  // Production Mode User Inputs (When developer_mode = false)
+  std::vector<std::string> user_text = {};
+  std::vector<double> user_numbers = {};
+  std::vector<std::string> user_image_paths = {};
+  std::vector<std::string> user_video_paths = {};
+  std::vector<std::string> user_voice_paths = {};
 
   // Global ID Counters (Ensuring Modalities Never Overlap)
   double next_text_id = 1.0;       // 1 to 9,999
@@ -39,20 +45,11 @@ struct Input {
   // The unified output sequence
   std::vector<double> tokenized_data = {};
   std::vector<double> embedded_data = {};
-
-  // Production Mode User Inputs (When developer_mode = false)
-  std::vector<std::string> user_text = {};
-  std::vector<double> user_numbers = {};
-  std::vector<std::string> user_image_paths = {};
-  std::vector<std::string> user_video_paths = {};
-  std::vector<std::string> user_voice_paths = {};
 };
 
 class Parser {
-public:
-  bool developer_mode = true;
-
 private:
+  // add to dictionaries
   template <typename T>
   void add_assign_increase(const T &data,
                            std::unordered_map<T, double> &dictionary,
@@ -64,32 +61,41 @@ private:
     input.tokenized_data.push_back(dictionary[data]);
   }
 
-  void tokenize_from_disk(const std::string &filename,
+  // Read from disk
+  void tokenize_from_disk(const std::string &fileName,
                           std::unordered_map<double, double> &dictionary,
                           double &next_id, Input &input) {
-    std::filesystem::path asset_path(filename);
-    
-    // If it's just a file name (like "Photo.jpeg"), auto-locate it in asset_sample
-    if (!asset_path.is_absolute()) {
-      std::filesystem::path header_path(__FILE__);
-      asset_path = header_path.parent_path().parent_path() / "asset_sample" / filename;
+
+    std::filesystem::path c_standard_fileName(fileName);
+
+    // If it's just a file name (like "Photo.jpeg"), auto-locate it in
+    // asset_sample
+    if (!c_standard_fileName.is_absolute()) {
+      std::filesystem::path absolute_path(__FILE__);
+
+      c_standard_fileName =
+          absolute_path.parent_path().parent_path() / "asset_sample" / fileName;
     }
-    
-    std::ifstream file(asset_path, std::ios::binary);
-    if (!file) {
-      std::cerr << "Failed to open " << asset_path << "\n";
+
+    std::ifstream parsed_data(c_standard_fileName, std::ios::binary);
+
+    if (!parsed_data) {
+      std::cerr << "Failed to open " << c_standard_fileName << "\n";
       return;
     }
 
     // Stream directly from disk to avoid loading massive files into memory
     char byte;
-    while (file.get(byte)) {
+    while (parsed_data.get(byte)) {
       add_assign_increase(static_cast<double>(static_cast<unsigned char>(byte)),
                           dictionary, next_id, input);
     }
   }
 
 public:
+  // Mode
+  bool developer_mode = true;
+
   // Standalone parser, isolated from Perceptron!
   std::vector<double> tokenization(Input &input, Test &test);
 
