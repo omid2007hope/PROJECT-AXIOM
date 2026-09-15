@@ -39,9 +39,19 @@ struct Input {
   // The unified output sequence
   std::vector<double> tokenized_data = {};
   std::vector<double> embedded_data = {};
+
+  // Production Mode User Inputs (When developer_mode = false)
+  std::vector<std::string> user_text = {};
+  std::vector<double> user_numbers = {};
+  std::vector<std::string> user_image_paths = {};
+  std::vector<std::string> user_video_paths = {};
+  std::vector<std::string> user_voice_paths = {};
 };
 
 class Parser {
+public:
+  bool developer_mode = true;
+
 private:
   template <typename T>
   void add_assign_increase(const T &data,
@@ -57,9 +67,13 @@ private:
   void tokenize_from_disk(const std::string &filename,
                           std::unordered_map<double, double> &dictionary,
                           double &next_id, Input &input) {
-    // Resolve absolute path using the header's location (__FILE__)
-    std::filesystem::path header_path(__FILE__);
-    std::filesystem::path asset_path = header_path.parent_path().parent_path() / "asset_sample" / filename;
+    std::filesystem::path asset_path(filename);
+    
+    // If it's just a file name (like "Photo.jpeg"), auto-locate it in asset_sample
+    if (!asset_path.is_absolute()) {
+      std::filesystem::path header_path(__FILE__);
+      asset_path = header_path.parent_path().parent_path() / "asset_sample" / filename;
+    }
     
     std::ifstream file(asset_path, std::ios::binary);
     if (!file) {
