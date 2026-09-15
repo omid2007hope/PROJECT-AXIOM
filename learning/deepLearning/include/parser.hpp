@@ -2,8 +2,9 @@
 #define include_parser
 
 #include <cstddef>
-#include <ifstream>
+#include <fstream>
 #include <ios>
+#include <iostream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -41,18 +42,18 @@ struct Input {
 
 class Parser {
 private:
+  std::vector<unsigned char> from_disk(const std::string &path) {
+    std::vector<unsigned char> buffer;
+    std::ifstream file(path, std::ios::binary);
+    if (file) {
+      buffer.assign(std::istreambuf_iterator<char>(file), {});
+    } else {
+      std::cerr << "Failed to open " << path << "\n";
+    }
+    return buffer;
+  }
+
   template <typename T>
-
-  void from_disk(const T &path) {
-    std::ifstream file(path, std::ios::binary) if (file) {
-      std::vector<unsigned char> buffer(std::istreambuf_iterator<char>(file),
-                                        {})
-    }
-    else {
-      std::cerr << "Failed to open", path, "/n";
-    }
-  };
-
   void add_assign_increase(const T &data,
                            std::unordered_map<T, double> &dictionary,
                            double &next_id, Input &input) {

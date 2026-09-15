@@ -30,21 +30,21 @@ std::vector<double> Parser::tokenization(Input &input, Test &test) {
   // 3. Image Tokenization (IDs 20000 - 29999)
   // Note: We use exact matches for now. A real VQ-VAE would round/quantize
   // these.
-
+  std::vector<unsigned char> buffer = from_disk("asset_sample/Photo.jpeg");
   for (unsigned char byte : buffer) {
     add_assign_increase(static_cast<double>(byte), input.image_dictionary,
                         input.next_image_id, input);
   }
 
   // 4. Video Tokenization (IDs 30000 - 39999)
-
+  buffer = from_disk("asset_sample/Video.mp4");
   for (unsigned char byte : buffer) {
     add_assign_increase(static_cast<double>(byte), input.video_dictionary,
                         input.next_video_id, input);
   }
 
   // 5. Voice/Audio Tokenization (IDs 40000 - 49999)
-
+  buffer = from_disk("asset_sample/Voice.ogg");
   for (unsigned char byte : buffer) {
     add_assign_increase(static_cast<double>(byte), input.voice_dictionary,
                         input.next_voice_id, input);
