@@ -1,6 +1,8 @@
 #include "../include/parser.hpp"
 
 #include <cmath>
+#include <fstream>
+#include <iostream>
 #include <unordered_map>
 #include <vector>
 
@@ -16,8 +18,7 @@ std::vector<double> Parser::tokenization(Input &input, Test &test) {
 
   // 1. Text Tokenization (IDs 1 - 9999)
   for (const std::string &word : test.data_txt) {
-    add_assign_increase(word, input.text_dictionary, input.next_text_id,
-                        input);
+    add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
   }
 
   // 2. Number Tokenization (IDs 10000 - 19999)
@@ -29,21 +30,24 @@ std::vector<double> Parser::tokenization(Input &input, Test &test) {
   // 3. Image Tokenization (IDs 20000 - 29999)
   // Note: We use exact matches for now. A real VQ-VAE would round/quantize
   // these.
-  for (double pixel : test.data_img) {
-    add_assign_increase(pixel, input.image_dictionary, input.next_image_id,
-                        input);
+
+  for (unsigned char byte : buffer) {
+    add_assign_increase(static_cast<double>(byte), input.image_dictionary,
+                        input.next_image_id, input);
   }
 
   // 4. Video Tokenization (IDs 30000 - 39999)
-  for (double delta : test.data_video) {
-    add_assign_increase(delta, input.video_dictionary, input.next_video_id,
-                        input);
+
+  for (unsigned char byte : buffer) {
+    add_assign_increase(static_cast<double>(byte), input.video_dictionary,
+                        input.next_video_id, input);
   }
 
   // 5. Voice/Audio Tokenization (IDs 40000 - 49999)
-  for (double sample : test.data_voice) {
-    add_assign_increase(sample, input.voice_dictionary, input.next_voice_id,
-                        input);
+
+  for (unsigned char byte : buffer) {
+    add_assign_increase(static_cast<double>(byte), input.voice_dictionary,
+                        input.next_voice_id, input);
   }
 
   return input.tokenized_data;
