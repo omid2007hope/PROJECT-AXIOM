@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <filesystem>
 
 // Raw data samples
 struct Test {
@@ -42,17 +43,6 @@ struct Input {
 
 class Parser {
 private:
-  std::vector<unsigned char> from_disk(const std::string &path) {
-    std::vector<unsigned char> buffer;
-    std::ifstream file(path, std::ios::binary);
-    if (file) {
-      buffer.assign(std::istreambuf_iterator<char>(file), {});
-    } else {
-      std::cerr << "Failed to open " << path << "\n";
-    }
-    return buffer;
-  }
-
   template <typename T>
   void add_assign_increase(const T &data,
                            std::unordered_map<T, double> &dictionary,
@@ -62,6 +52,27 @@ private:
       next_id += 1.0;
     }
     input.tokenized_data.push_back(dictionary[data]);
+  }
+
+  void tokenize_from_disk(const std::string &filename,
+                          std::unordered_map<double, double> &dictionary,
+                          double &next_id, Input &input) {
+    // Resolve absolute path using the header's location (__FILE__)
+    std::filesystem::path header_path(__FILE__);
+    std::filesystem::path asset_path = header_path.parent_path().parent_path() / "asset_sample" / filename;
+    
+    std::ifstream file(asset_path, std::ios::binary);
+    if (!file) {
+      std::cerr << "Failed to open " << asset_path << "\n";
+      return;
+    }
+
+    // Stream directly from disk to avoid loading massive files into memory
+    char byte;
+    while (file.get(byte)) {
+      add_assign_increase(static_cast<double>(static_cast<unsigned char>(byte)),
+                          dictionary, next_id, input);
+    }
   }
 
 public:
