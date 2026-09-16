@@ -1,5 +1,4 @@
 #include "../include/parser.hpp"
-#include "../util/parser.cpp"
 
 void test_tokenization() {
   Input input;

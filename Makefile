@@ -1,16 +1,35 @@
 CXX = g++
-CXXFLAGS = -Wall -std=c++17
+CXXFLAGS = -Wall -std=c++17 -Ilearning/deepLearning/include
 
-TARGET = learning/deepLearning/test/test_tokenization.exe
-SRC = learning/deepLearning/test/test_tokenization.cpp
+# Directories
+SRC_DIR = learning/deepLearning/src
+TEST_DIR = learning/deepLearning/test
+UTIL_DIR = learning/deepLearning/util
 
-all: $(TARGET)
+# Source Files (using wildcards!)
+UTIL_SRCS = $(wildcard $(UTIL_DIR)/*.cpp)
+APP_SRCS = $(wildcard $(SRC_DIR)/*.cpp) $(UTIL_SRCS)
+TEST_SRCS = $(wildcard $(TEST_DIR)/*.cpp) $(UTIL_SRCS)
 
-$(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)
+# Output Targets
+APP_TARGET = learning/deepLearning/app.exe
+TEST_TARGET = learning/deepLearning/test.exe
 
+# Default: compile both!
+all: $(APP_TARGET) $(TEST_TARGET)
+
+# Compile the main application
+$(APP_TARGET): $(APP_SRCS)
+	$(CXX) $(CXXFLAGS) $(APP_SRCS) -o $(APP_TARGET)
+
+# Compile the test application
+$(TEST_TARGET): $(TEST_SRCS)
+	$(CXX) $(CXXFLAGS) $(TEST_SRCS) -o $(TEST_TARGET)
+
+# Clean both executables
 clean:
-	cmd.exe /C del /Q /F learning\deepLearning\test\*.exe
+	cmd.exe /C del /Q /F learning\deepLearning\*.exe
 
-test: $(TARGET)
-	cmd.exe /C "cd learning\deepLearning\test && test_tokenization.exe"
+# Run the test
+test: $(TEST_TARGET)
+	cmd.exe /C ".\learning\deepLearning\test.exe"
