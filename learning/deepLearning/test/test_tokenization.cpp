@@ -9,13 +9,13 @@ void test_tokenization() {
   std::vector<double> tokenized = parser.tokenization(input, test);
 
   std::cout << "Successfully generated " << tokenized.size() << " tokens!\n";
-  std::cout << "First 15 tokens: ";
+  std::cout << "All tokens: ";
   
-  // Print first 15 tokens (otherwise the video tokens will flood the screen!)
-  for (size_t i = 0; i < std::min(tokenized.size(), (size_t)15); ++i) {
+  // Print all tokens
+  for (size_t i = 0; i < tokenized.size(); ++i) {
       std::cout << tokenized[i] << " ";
   }
-  std::cout << "...\n";
+  std::cout << "\n";
 }
 
 int main() {
