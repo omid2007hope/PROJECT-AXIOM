@@ -69,4 +69,6 @@ std::vector<double> Parser::tokenization(Input &input, Test &test) {
 }
 
 // MOCK EMBEDDINGS: Convert global token IDs to Dense Vectors
-std::vector<double> Parser::embedding(Input &input, Test &test) {}
+std::vector<double> Parser::embedding(Input &input, Test &test) {
+  return input.embedded_data;
+}
