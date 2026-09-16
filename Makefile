@@ -28,8 +28,8 @@ $(TEST_TARGET): $(TEST_SRCS)
 
 # Clean both executables
 clean:
-	cmd.exe /C del /Q /F learning\deepLearning\*.exe
+	-rm -f $(APP_TARGET) $(TEST_TARGET)
 
 # Run the test
 test: $(TEST_TARGET)
-	cmd.exe /C ".\learning\deepLearning\test.exe"
+	$(TEST_TARGET)

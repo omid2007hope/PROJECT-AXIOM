@@ -71,13 +71,31 @@ private:
     // If it's just a file name (like "Photo.jpeg"), auto-locate it in
     // asset_sample
     if (!c_standard_fileName.is_absolute()) {
-      std::filesystem::path absolute_path(__FILE__);
+      std::filesystem::path paths_to_try[] = {
+          std::filesystem::path("learning/deepLearning/asset_sample") /
+              fileName,
+          std::filesystem::path("asset_sample") / fileName,
+          std::filesystem::path("../asset_sample") / fileName};
 
-      c_standard_fileName =
-          absolute_path.parent_path().parent_path() / "asset_sample" / fileName;
+      bool found = false;
+      for (const auto &p : paths_to_try) {
+        if (std::filesystem::exists(p)) {
+          c_standard_fileName = p;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        // Fallback to the original __FILE__ logic
+        std::filesystem::path absolute_path(__FILE__);
+        c_standard_fileName = absolute_path.parent_path().parent_path() /
+                              "asset_sample" / fileName;
+      }
     }
+    xd
 
-    std::ifstream parsed_data(c_standard_fileName, std::ios::binary);
+        std::ifstream parsed_data(c_standard_fileName, std::ios::binary);
 
     if (!parsed_data) {
       std::cerr << "Failed to open " << c_standard_fileName << "\n";
