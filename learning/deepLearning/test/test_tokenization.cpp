@@ -15,4 +15,24 @@ void test_tokenization() {
     std::cout << tokenized[i] << " ";
   }
   std::cout << "\n";
+
+  // Vocabulary summary: count and ID range per modality
+  auto summary = [](const char* name, auto& dict) {
+    if (dict.empty()) { std::cout << "  " << name << ": 0 unique tokens\n"; return; }
+    uint32_t lo = UINT32_MAX, hi = 0;
+    for (const auto& [key, id] : dict) {
+      if (id < lo) lo = id;
+      if (id > hi) hi = id;
+    }
+    std::cout << "  " << name << ": " << dict.size()
+              << " unique tokens  [" << lo << " .. " << hi << "]\n";
+  };
+
+  std::cout << "\n--- Vocabulary Summary ---\n";
+  summary("Text  ", input.text_dictionary);
+  summary("Number", input.number_dictionary);
+  summary("Image ", input.image_dictionary);
+  summary("Video ", input.video_dictionary);
+  summary("Voice ", input.voice_dictionary);
+  std::cout << "--------------------------\n";
 }
