@@ -14,7 +14,7 @@ Now isolated from the neural network entirely.
 */
 
 // MOCK DISCRETE TOKENIZER (Gemini / Chameleon Early Fusion style)
-std::vector<double> Parser::tokenization(Input &input, Test &test) {
+std::vector<uint32_t> Parser::tokenization(Input &input, Test &test) {
 
   if (developer_mode) {
     // 1. Text Tokenization (IDs 1 - 9999)
