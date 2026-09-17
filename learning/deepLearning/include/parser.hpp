@@ -24,9 +24,9 @@ struct Input {
   // Global Vocabulary Dictionaries (The Discrete VQ-VAEs)
   std::unordered_map<std::string, uint32_t> text_dictionary = {};
   std::unordered_map<double, uint32_t> number_dictionary = {};
-  std::unordered_map<double, uint32_t> image_dictionary = {};
-  std::unordered_map<double, uint32_t> video_dictionary = {};
-  std::unordered_map<double, uint32_t> voice_dictionary = {};
+  std::unordered_map<uint8_t, uint32_t> image_dictionary = {};
+  std::unordered_map<uint8_t, uint32_t> video_dictionary = {};
+  std::unordered_map<uint8_t, uint32_t> voice_dictionary = {};
 
   // Production Mode User Inputs (When developer_mode = false)
   std::vector<std::string> user_text = {};
@@ -63,7 +63,7 @@ private:
 
   // Read from disk
   void tokenize_from_disk(const std::string &fileName,
-                          std::unordered_map<double, uint32_t> &dictionary,
+                          std::unordered_map<uint8_t, uint32_t> &dictionary,
                           uint32_t &next_id, Input &input) {
 
     std::filesystem::path c_standard_fileName(fileName);
@@ -97,7 +97,7 @@ private:
     // Stream directly from disk to avoid loading massive files into memory
     char byte;
     while (parsed_data.get(byte)) {
-      add_assign_increase(static_cast<double>(static_cast<unsigned char>(byte)),
+      add_assign_increase(static_cast<uint8_t>(byte),
                           dictionary, next_id, input);
     }
   }
