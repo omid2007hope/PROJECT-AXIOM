@@ -11,7 +11,7 @@ void test_tokenization() {
   std::cout << "All tokens: ";
 
   // Print all tokens
-  for (size_t i = 0; i < tokenized.size() && i < 100; ++i) {
+  for (size_t i = 0; i < tokenized.size() && i < 1000; ++i) {
     std::cout << tokenized[i] << " ";
   }
   std::cout << "\n";
