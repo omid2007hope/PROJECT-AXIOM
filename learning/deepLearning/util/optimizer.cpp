@@ -1,5 +1,9 @@
 #include "../include/optimizer.hpp"
 
-void disk_to_ram(const Portion &portion) {};
+void Optimizer::disk_to_ram(const Portion &portion) {
+    // TODO: Implement loading from disk into portion.ram_buffer_tokens
+}
 
-void ram_to_neuralNetwork(const Portion &portion) {};
+void Optimizer::ram_to_neuralNetwork(const Portion &portion) {
+    // TODO: Implement sliding window over ram_buffer_tokens to populate context_window_tokens
+}
