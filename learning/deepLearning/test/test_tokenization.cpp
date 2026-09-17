@@ -16,13 +16,3 @@ void test_tokenization() {
   }
   std::cout << "\n";
 }
-
-int main(int argc, char *argv[]) {
-  test_tokenization();
-
-  // Wait for user input before closing, so the console doesn't close immediately
-  std::cout << "Press Enter to exit..." << std::endl;
-  std::cin.get();
-
-  return 0;
-}

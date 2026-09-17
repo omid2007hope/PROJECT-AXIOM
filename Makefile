@@ -8,8 +8,9 @@ UTIL_DIR = learning/deepLearning/util
 
 # Source Files (using wildcards!)
 UTIL_SRCS = $(wildcard $(UTIL_DIR)/*.cpp)
-APP_SRCS = $(wildcard $(SRC_DIR)/*.cpp) $(UTIL_SRCS)
-TEST_SRCS = $(wildcard $(TEST_DIR)/*.cpp) $(UTIL_SRCS)
+ALL_SRCS = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(TEST_DIR)/*.cpp) $(UTIL_SRCS)
+APP_SRCS = $(ALL_SRCS)
+TEST_SRCS = $(ALL_SRCS)
 
 # Output Targets
 APP_TARGET = learning/deepLearning/app.exe
