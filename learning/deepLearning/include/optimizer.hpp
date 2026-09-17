@@ -29,9 +29,9 @@ struct Portion {
 
 class Optimizer {
 public:
-  void disk_to_ram(const Portion &portion);
+  void disk_to_ram(Portion &portion);
 
-  void ram_to_neuralNetwork(const Portion &portion);
+  void ram_to_neuralNetwork(Portion &portion);
 };
 
 #endif
