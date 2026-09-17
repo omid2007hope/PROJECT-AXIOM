@@ -1,177 +1,222 @@
-# AI Core: Native C++ Artificial Intelligence Engine (Version 1.0)
+# AI Core: Native C++ Artificial Intelligence Engine
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Standard: C++17](https://img.shields.io/badge/Standard-C%2B%2B17-green.svg)](#)
-[![Status: Open Source](https://img.shields.io/badge/Status-Open%20Source-orange.svg)](#)
+[![Architecture: Early--Fusion%20Multimodal](https://img.shields.io/badge/Architecture-Early--Fusion%20Multimodal-purple.svg)](#)
+[![Status: Active Development](https://img.shields.io/badge/Status-Active%20Development-brightgreen.svg)](#)
 
-Welcome to the **AI Core** technical documentation. This project is an open-source, zero-dependency **Artificial Intelligence (AI)** engine written from scratch in native C++17, licensed under the **GNU General Public License v3 (GNU GPL v3)**.
+Welcome to the **AI Core** technical documentation. AI Core is an open-source, zero-dependency artificial intelligence runtime engineered from fundamental principles in native C++17. The project bridges the gap between atomic neural computational units (the single Perceptron) and state-of-the-art foundation models (such as Meta's LLaMA, Chameleon, and Gemini-style early-fusion architectures).
 
 ---
 
-## 1. Project Philosophy & Vision: From Perceptron to LLaMA
+## 1. Project Philosophy & Vision
 
-This repository is **not** a generic deep learning exercise—it is a full-stack **AI Architecture Project**. 
-
-True machine intelligence begins at first principles:
-1. **The Minimal Atomic Unit of AI:** We begin with the foundational mathematical nucleus of artificial intelligence: the single **Perceptron** (weights, biases, forward pass, error evaluation).
-2. **Expansion to Frontiers:** From this simplest unit, the system iteratively evolves into complex cognitive systems: multimodal early-fusion perception, discrete tokenization, attention mechanisms, and reverse-engineering foundational Large Language Models (such as Meta's **LLaMA**).
-3. **The Empirical Open-Source Pipeline:** The engine develops through iterative experimentation—conducting mathematical trials, producing high-performance modular components, stress-testing hardware limits, and polishing them into production-ready open-source AI building blocks.
+Modern deep learning frameworks frequently hide fundamental computational mechanics behind heavyweight runtimes, dynamic Python bindings, and opaque memory managers. **AI Core** takes the opposite approach: complete architectural transparency, cache-conscious data structures, and deterministic systems programming in C++17.
 
 ```
-+-------------------------------------------------------------------------------+
-|                             AI Core Evolution Path                            |
-+-------------------------------------------------------------------------------+
-| Stage 1: The Perceptron (Minimal Atomic AI Nucleus)                           |
-|          -> Linear decision boundaries, weights, biases, error metrics        |
-+-------------------------------------------------------------------------------+
-                                       |
-                                       v
-Stage 2: Multimodal Cognitive Perception (Current Milestone)
-         -> Discrete early fusion, global tokenization across text, visual,
-            auditory, and temporal sensory inputs
-+-------------------------------------------------------------------------------+
-                                       |
-                                       v
-Stage 3: Dense Representation & Continuous Latent Manifolds
-         -> Embedding projection, semantic geometry, vector arithmetic
-+-------------------------------------------------------------------------------+
-                                       |
-                                       v
-Stage 4: Reverse-Engineering LLaMA & Transformer Primitives
-         -> Multi-Head Attention, RoPE (Rotary Positional Embeddings),
-            RMSNorm, SwiGLU activations, and KV Cache mechanics
-+-------------------------------------------------------------------------------+
-                                       |
-                                       v
-Stage 5: Local Hardware Execution & Quantization
-         -> INT4/INT8 GGUF-style weights, RTX 4080 Tensor Core acceleration,
-            and hybrid CPU/VRAM layer offloading
-+-------------------------------------------------------------------------------+
+========================================================================================
+                               AI CORE EVOLUTIONARY ROADMAP
+========================================================================================
+
+  Stage 1: Atomic Perceptron Foundation
+  --------------------------------------------------------------------------------------
+  * Single artificial neuron: inputs, weights, bias, dot-product accumulation
+  * Activation functions and scalar loss metrics
+  * Verification of forward computation accuracy
+
+                                          |
+                                          v
+
+  Stage 2: Universal Multimodal Early-Fusion Perception [CURRENT MILESTONE]
+  --------------------------------------------------------------------------------------
+  * Discrete tokenization across 5 sensory modalities (Text, Number, Image, Video, Audio)
+  * Non-overlapping 10-million slot ID namespace allocation
+  * Streaming binary ingestion directly from storage
+  * Verifiable scale: 8,289,605 tokens generated across media assets
+
+                                          |
+                                          v
+
+  Stage 3: Dense Latent Manifolds & Embedding Matrix [CURRENT MILESTONE]
+  --------------------------------------------------------------------------------------
+  * Discrete Token ID -> Continuous Dense Vector projection
+  * Dynamic, deterministic harmonic embedding table
+  * Verifiable scale: 786 unique vocabulary embeddings -> 33,158,420 dense floats
+
+                                          |
+                                          v
+
+  Stage 4: LLaMA Foundation & Attention Primitives [UPCOMING]
+  --------------------------------------------------------------------------------------
+  * Scaled Dot-Product Attention & Multi-Head Self-Attention (MHA)
+  * Rotary Positional Embeddings (RoPE)
+  * RMSNorm pre-normalization & SwiGLU gated activations
+  * Autoregressive Key-Value (KV) Cache mechanics
+
+                                          |
+                                          v
+
+  Stage 5: Local Hardware Acceleration & Quantization [FUTURE]
+  --------------------------------------------------------------------------------------
+  * SIMD vectorization (AVX2 / AVX-512)
+  * INT8 / INT4 GGUF-style block quantization
+  * GPU Tensor Core offloading (NVIDIA RTX 4080 / CUDA)
+========================================================================================
 ```
 
 ---
 
 ## 2. Technical Documentation Index
 
-Detailed architectural specifications and engineering standards are organized into modular documents:
+All architectural specifications, memory models, algorithms, and engineering guidelines are maintained in modular documents:
 
-| Specification Document | Topic Coverage |
+| Specification Document | Focus Area |
 | :--- | :--- |
-| **[AI Multimodal Architecture Specification](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/document/architecture.md)** | Early fusion discrete tokenization, unified sequences, modality ID offset spaces, collision prevention, and subsystem decoupling. |
-| **[Tokenization & Embeddings Specification](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/document/tokenization_and_embeddings.md)** | Evolution of text and sensory encoding in AI (ASCII $\to$ Polynomial Hash $\to$ BPE Subwords $\to$ Dense Vectors), VQ-VAE codebooks, and harmonic projection. |
-| **[AI Memory Hierarchy & Hardware Acceleration](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/document/memory_hierarchy_and_hardware.md)** | 3-tier memory model (NVMe Disk $\to$ RAM $\to$ GPU VRAM), immutable vocabularies, batch streaming, RTX 4080 (16GB) constraints, Tensor Cores, GGUF/AWQ quantization, and llama.cpp offloading. |
-| **[C++ Design Patterns & Data Structures for AI](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/document/data_structures_and_cpp_design.md)** | Standard library internals (`std::unordered_map`, `.find() == .end()`, `operator[]`), the DRY template engine (`add_assign_increase<T>`), memory safety, and verification harness. |
+| **[Multimodal Architecture Specification](architecture.md)** | Early-fusion discrete tokenization, universal sequence design, 10M ID offset spacing, and subsystem isolation. |
+| **[Tokenization & Embeddings](tokenization_and_embeddings.md)** | Binary streaming, byte-level quantization, exact token census (8.28M tokens), and dense vector projection. |
+| **[Memory Hierarchy & Hardware](memory_hierarchy_and_hardware.md)** | 3-tier memory model (NVMe -> Host RAM -> GPU VRAM), streaming batch loaders, footprint analysis, and quantization. |
+| **[C++ Design Patterns & Data Structures](data_structures_and_cpp_design.md)** | C++17 systems programming, `add_assign_increase<T>`, type safety (`uint8_t`/`uint32_t`), and memory layout. |
+| **[Build & Toolchain Guide](build_and_toolchain.md)** | Makefile targets, compiler flags, test harnesses, cross-platform path resolution, and debugging. |
 
 ---
 
-## 3. High-Level AI System Pipeline
+## 3. High-Level Data Pipeline
 
 ```
-+-----------------------------------------------------------------------------------+
-|                            Raw Sensory Input (World State)                        |
-|    - Text (Language symbols)                                                      |
-|    - Numbers (Tabular feature vectors)                                            |
-|    - Image (Visual pixel matrices)                                                |
-|    - Video (Temporal motion deltas)                                               |
-|    - Audio (Acoustic PCM waveforms)                                               |
-+-----------------------------------------------------------------------------------+
++------------------------------------------------------------------------------------+
+|                         RAW MULTIMODAL WORLD SENSORY INPUTS                        |
+|  - Text Tokens:   {"The", "quick", "brown", "fox", "jumps", "over", ...}          |
+|  - Number Data:   {5.1, 3.5, 1.4, 0.2, 4.9, 3.0, 1.4, 0.2, 4.7, 3.2, 1.3, 0.2}    |
+|  - Photo Asset:   "Photo.jpeg" (130,513 binary bytes)                              |
+|  - Video Asset:   "Video.mp4"  (8,096,817 binary bytes)                            |
+|  - Audio Asset:   "Voice.ogg"  (62,254 binary bytes)                               |
++------------------------------------------------------------------------------------+
                                           |
                                           v
-+-----------------------------------------------------------------------------------+
-|                       AI Parser Subsystem (Discrete Perception)                   |
-|    - Text Vocab:    IDs 1       - 9,999                                           |
-|    - Number Vocab:  IDs 10,000  - 19,999                                          |
-|    - Image Vocab:   IDs 20,000  - 29,999                                          |
-|    - Video Vocab:   IDs 30,000  - 39,999                                          |
-|    - Voice Vocab:   IDs 40,000  - 49,999                                          |
-|    - DRY Template:  Parser::add_assign_increase<T>()                              |
-+-----------------------------------------------------------------------------------+
++------------------------------------------------------------------------------------+
+|                       PARSER SUBSYSTEM (DISCRETE TOKENIZER)                        |
+|  - Modality ID Allocator (10,000,000 slots per modality)                          |
+|    * Text IDs:   [1 .. 9,999,999]                                                  |
+|    * Number IDs: [10,000,000 .. 19,999,999]                                        |
+|    * Image IDs:  [20,000,000 .. 29,999,999]                                        |
+|    * Video IDs:  [30,000,000 .. 39,999,999]                                        |
+|    * Voice IDs:  [40,000,000 .. 49,999,999]                                        |
+|  - Generic Insertion Engine: Parser::add_assign_increase<T>()                     |
++------------------------------------------------------------------------------------+
                                           |
                                           v
-+-----------------------------------------------------------------------------------+
-|                      Unified Token Vector (tokenized_data)                        |
-|                     [ 63 total discrete multimodal tokens ]                       |
-+-----------------------------------------------------------------------------------+
++------------------------------------------------------------------------------------+
+|                    UNIFIED DISCRETE TOKEN SEQUENCE (tokenized_data)                |
+|  - Type: std::vector<uint32_t>                                                     |
+|  - Length: 8,289,605 discrete tokens                                               |
+|  - Unique Vocabulary Entries: 786 distinct tokens                                  |
++------------------------------------------------------------------------------------+
                                           |
                                           v
-+-----------------------------------------------------------------------------------+
-|                         Continuous Embedding Projection                           |
-|                      [ 189-dimensional dense latent vector ]                      |
-+-----------------------------------------------------------------------------------+
++------------------------------------------------------------------------------------+
+|                   CONTINUOUS LATENT EMBEDDING PROJECTION (embedding)               |
+|  - Lookup Table: std::unordered_map<uint32_t, std::vector<double>>                 |
+|  - Latent Dimension (d_model): 4 doubles per token                                |
+|  - Unified Output Buffer: std::vector<double> embedded_data                        |
+|  - Total Output Floats: 33,158,420 continuous values                               |
++------------------------------------------------------------------------------------+
                                           |
                                           v
-+-----------------------------------------------------------------------------------+
-|                              AI Neural Engine (Perceptron)                        |
-|                     Forward Pass Dot-Product, Activation, Inference               |
-+-----------------------------------------------------------------------------------+
++------------------------------------------------------------------------------------+
+|                        NEURAL CORE EXECUTION (PERCEPTRON)                          |
+|  - Forward Pass: Dot product accumulation (y = W * x + b)                          |
+|  - Activation and Error Evaluation                                                 |
++------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 4. Directory Structure
+## 4. Empirical System Benchmark
+
+The complete verification harness executes natively against active media samples in `asset_sample/`:
+
+| Modality | Source Entity | Raw Size | Generated Tokens | Unique Vocab IDs | Active ID Range |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Text** | In-Memory Words | 9 entries | 9 | 9 | `[1 .. 9]` |
+| **Number** | In-Memory Doubles | 12 entries | 12 | 9 | `[10000000 .. 10000008]` |
+| **Image** | `Photo.jpeg` | 130,513 B | 130,513 | 256 | `[20000000 .. 20000255]` |
+| **Video** | `Video.mp4` | 8,096,817 B | 8,096,817 | 256 | `[30000000 .. 30000255]` |
+| **Voice** | `Voice.ogg` | 62,254 B | 62,254 | 256 | `[40000000 .. 40000255]` |
+| **TOTAL** | — | **8.289 MB** | **8,289,605** | **786** | **Disjoint 10M Blocks** |
+
+---
+
+## 5. Repository Directory Layout
 
 ```
 learning/deepLearning/
-├── document/                               # Open-Source Technical Documentation
-│   ├── README.md                           # Master AI documentation index (this file)
-│   ├── architecture.md                     # AI Multimodal system architecture & design
-│   ├── tokenization_and_embeddings.md      # Tokenizer algorithms & vector embeddings in AI
-│   ├── memory_hierarchy_and_hardware.md    # Local AI hardware scaling, VRAM, & batching
-│   └── data_structures_and_cpp_design.md   # C++17 design patterns, templates & containers
-├── include/                                # Header specifications
-│   ├── parser.hpp                          # Parser class, Test, and Input structs
-│   └── perceptron.hpp                      # Perceptron class & Key_Concepts struct
-├── src/                                    # AI core neural implementation
-│   ├── main.cpp                            # Main application entry point
-│   └── perceptron.cpp                      # Perceptron implementation
-├── util/                                   # Data processing & tokenization
-│   └── parser.cpp                          # Multimodal parser & embedding routines
-└── test/                                   # Validation test harnesses
-    └── test_parser.cpp                     # Tokenizer & embedding verification tests
+├── Makefile                          # Unified build rules (all, test, clean)
+├── asset_sample/                     # Real multimodal binary media test files
+│   ├── Photo.jpeg                    # Visual sample asset (130 KB)
+│   ├── Video.mp4                     # Temporal video sample asset (8.1 MB)
+│   └── Voice.ogg                     # Acoustic audio sample asset (62 KB)
+├── document/                         # Technical specifications & design docs
+│   ├── README.md                     # Master project entrypoint (this file)
+│   ├── architecture.md               # Multimodal early fusion architectural spec
+│   ├── tokenization_and_embeddings.md# Tokenizer mechanics & embedding vectors
+│   ├── memory_hierarchy_and_hardware.md # 3-tier memory model & VRAM budget
+│   ├── data_structures_and_cpp_design.md# C++17 design patterns & containers
+│   └── build_and_toolchain.md        # Build instructions, flags & test harness
+├── include/                          # Header definitions
+│   ├── parser.hpp                    # Input, Test, and Parser declarations
+│   └── perceptron.hpp                # Perceptron & Key_Concepts definitions
+├── ref/                              # Visual architectural reference assets
+│   ├── Ai.jpg                        # Early neural network references
+│   └── Deep_Learning.jpg             # Multimodal latent space diagrams
+├── src/                              # Core application implementation
+│   ├── main.cpp                      # Test runner entry point
+│   └── perceptron.cpp                # Perceptron atomic forward pass
+├── test/                             # Modular test verification suites
+│   ├── run_test.ps1                  # Standalone verification script
+│   ├── test_embeddings.cpp           # Embedding unit test harness
+│   ├── test_header.hpp               # Header path inspection helper
+│   ├── test_ifstream.cpp             # Binary I/O test suite
+│   ├── test_path.cpp                 # Path resolution test suite
+│   └── test_tokenization.cpp         # Tokenization & embedding verification
+└── util/                             # Systems utilities & data parsers
+    └── parser.cpp                    # Multimodal tokenizer & embedding logic
 ```
 
 ---
 
-## 5. Build & Test Instructions
+## 6. Quickstart & Build Instructions
 
-The codebase is built strictly to standard C++17 and requires zero third-party dependencies.
+### Prerequisites
+- Any standard C++17 compliant compiler (`g++` >= 9.0, `clang++` >= 10.0, or MSVC 2019+).
+- GNU Make or MinGW32-Make (`mingw32-make` on Windows).
 
-### Compiling & Running the Verification Suite
-Using GCC (`g++`):
+### Build Targets
+
 ```bash
-# Compile the test runner
-g++ -std=c++17 -Wall -Wextra -pedantic test/test_parser.cpp -o test/test_parser.exe
+# Build the test harness and application
+mingw32-make all
 
-# Execute the test suite
-./test/test_parser.exe
+# Run the complete test suite
+mingw32-make test
+
+# Clean build artifacts
+mingw32-make clean
 ```
 
-### Syntax Verification on Core Modules
+### Manual Compilation
 ```bash
-# Verify parser header & source syntax
-g++ -fsyntax-only -Wall -Wextra -pedantic -std=c++17 util/parser.cpp
-
-# Verify perceptron implementation syntax
-g++ -fsyntax-only -Wall -Wextra -pedantic -std=c++17 src/perceptron.cpp
+g++ -Wall -std=c++17 -Ilearning/deepLearning/include \
+    learning/deepLearning/src/main.cpp \
+    learning/deepLearning/src/perceptron.cpp \
+    learning/deepLearning/test/test_tokenization.cpp \
+    learning/deepLearning/test/test_path.cpp \
+    learning/deepLearning/test/test_ifstream.cpp \
+    learning/deepLearning/util/parser.cpp \
+    -o learning/deepLearning/test.exe
 ```
-
----
-
-## 6. Project Roadmap
-
-- [x] **Discrete Multimodal Tokenizer**: Segregated dictionary ranges for text, numbers, image, video, voice.
-- [x] **DRY Generic Template Engine**: Unified `add_assign_increase<T>` routine.
-- [x] **Dense Embedding Simulation**: Projection from discrete IDs to continuous latent vectors.
-- [x] **Technical Documentation**: Open-source specification files covering architecture, memory hierarchy, and C++ design.
-- [ ] **Forward Pass Dot Product**: Implement `input * weight + bias` matrix operations in `Perceptron`.
-- [ ] **Non-Linear Activation**: Integrate activation functions (ReLU, Sigmoid, GELU).
-- [ ] **Backpropagation & Gradient Descent**: Parameter optimization using computed loss derivatives.
-- [ ] **Multi-Layer Architecture (MLP)**: Chaining perceptrons into hidden layers.
-- [ ] **LLaMA Primitive Exploration**: Self-attention, RMSNorm, and Rotary Positional Embeddings (RoPE).
 
 ---
 
 ## 7. License
 
-This project is licensed under the **GNU General Public License v3.0 (GNU GPL v3)**.  
-You are free to copy, distribute, study, and modify this software provided that all modifications and derivative works remain open source under the same license terms.
+This project is licensed under the **GNU General Public License v3 (GPL-3.0)**. You are free to copy, modify, distribute, and run this software, provided all modifications and derivative works remain open-source under the identical GPL-3.0 license.
