@@ -1,6 +1,7 @@
 #ifndef include_parser
 #define include_parser
 
+#include <cstdint>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -44,7 +45,11 @@ struct Input {
 
   // The unified output sequence
   std::vector<uint32_t> tokenized_data = {};
-  std::vector<double> embedded_data = {};
+  std::vector<double>   embedded_data  = {};
+
+  // Embedding lookup table: token_id -> dense vector of size embedding_dim
+  uint32_t embedding_dim = 4;
+  std::unordered_map<uint32_t, std::vector<double>> embedding_table = {};
 };
 
 class Parser {
