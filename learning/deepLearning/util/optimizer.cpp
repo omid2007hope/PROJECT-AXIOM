@@ -3,7 +3,10 @@
 // Tier 1: Stream chunks from disk into the RAM buffer
 void Optimizer::disk_to_ram(Portion &portion) {
 
-  // Ensure neither buffer is currently locked and RAM buffer is ready for a new chunk
+  // =========================================================================
+  // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
+  // Verify buffer state locks before touching memory to prevent corruption!
+  // =========================================================================
   if (portion.buffer_in_use == false && portion.context_in_use == false &&
       portion.ram_buffer_tokens.empty()) {
     portion.buffer_in_use = true;
@@ -69,7 +72,10 @@ void Optimizer::ram_to_contextWindow(Portion &portion) {
   // TODO: Implement sliding window over ram_buffer_tokens to populate
   // context_window_tokens
 
-  // Ensure neither buffer is locked and context window is ready for next input
+  // =========================================================================
+  // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
+  // Verify context window state locks before populating neural network batches!
+  // =========================================================================
   while (portion.context_in_use == false && portion.buffer_in_use == false &&
          portion.context_window_tokens.empty()) {
     portion.context_in_use = true;

@@ -13,10 +13,18 @@
 
 struct Portion {
 
-  // State flag: locks the RAM buffer while reading data from disk
+  // =========================================================================
+  // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
+  // -------------------------------------------------------------------------
+  // PAY MAXIMUM ATTENTION: If you mess up these synchronization flags, you
+  // risk corrupting both historical and ongoing training data across the
+  // entire pipeline — causing millions of dollars in wasted compute, forcing
+  // a full wipe back to zero, and resulting in catastrophic failure.
+  // DO NOT tamper with or bypass these state locks under any circumstances!
+  // =========================================================================
   bool buffer_in_use = false;
-  // State flag: locks the context window while populating batches for the network
   bool context_in_use = false;
+  // =========================================================================
 
   // ---------------------------------------------------------
   // Tier 1: The RAM Buffer (Disk -> RAM)
