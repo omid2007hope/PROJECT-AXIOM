@@ -89,7 +89,24 @@ struct Portion {
 
 ---
 
-## 4. The Cascading Exclusion Hierarchy
+## 4. The Synchronization Trap: Spin-Locks vs. The Conductor
+
+In early implementations, the system paused using a `while(busy)` loop waiting for the neural network to finish. However, this introduces a catastrophic fork in the road:
+- **Scenario A: Single-Threaded Deadlock:** If everything runs on a single thread, checking a boolean in an infinite loop causes a permanent freeze.
+- **Scenario B: Multithreaded Spin-Lock:** If running on multiple threads, a `while(busy)` loop burns 100% CPU on one core just checking a boolean millions of times a second.
+
+### The Conductor Solution (Path 1)
+To guarantee stability before transitioning to GPU/CUDA, **AI Core implements the Single-Threaded "Conductor" model**. The main training loop explicitly dictates execution sequentially:
+1. Conductor tells the `Optimizer` to prepare one 128-token context window.
+2. `Optimizer` carves out the data, locks the state, and immediately returns control to the Conductor.
+3. Conductor tells the `Perceptron` to consume the data.
+4. `Perceptron` updates weights, clears the locks, and returns control.
+
+This completely bypasses the spin-lock trap. Everything happens sequentially on the CPU, serving as the perfect, safe data delivery mechanism to eventually push context windows over the PCIe bus to the GPU.
+
+---
+
+## 5. The Cascading Exclusion Hierarchy
 
 The core operational rule dictates a strict cascading dependency across the tiers:
 
@@ -138,7 +155,7 @@ The core operational rule dictates a strict cascading dependency across the tier
 
 ---
 
-## 5. Summary Table: States and Permitted Operations
+## 6. Summary Table: States and Permitted Operations
 
 | `buffer_in_use` | `context_in_use` | RAM Buffer Status | Permitted Action | Prohibited Action |
 | :---: | :---: | :---: | :--- | :--- |
@@ -150,7 +167,7 @@ The core operational rule dictates a strict cascading dependency across the tier
 
 ---
 
-## 6. Architectural Conclusion
+## 7. Architectural Conclusion
 
 The Life and Death Guarantee ensures that:
 1. **Zero Tokens Lost:** Every single byte generated during multi-modal early fusion is ingested by the model in exact causal sequence.

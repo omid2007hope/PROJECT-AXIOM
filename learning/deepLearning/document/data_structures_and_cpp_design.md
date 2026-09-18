@@ -37,24 +37,26 @@ The **AI Core** codebase adheres to foundational systems-level programming princ
 
 ---
 
-## 2. Type System Refactoring: From `double` to Fixed-Width Types
+## 2. Type System Refactoring: The "Double" Anti-Pattern
 
-In early prototypes, floating-point types (`double`) were used indiscriminately for both continuous mathematical values and discrete integer identifiers. **AI Core v2.0** enforces strict type boundaries:
+In early prototypes, floating-point types (`double` - 64-bit) were used indiscriminately for continuous mathematical values, discrete integer identifiers, and media byte keys. **AI Core v2.0** enforces strict type boundaries to align perfectly with Tensor Core hardware logic:
 
 ```cpp
 // =========================================================================
-// ANTI-PATTERN: Using double for discrete IDs and binary byte keys
+// ANTI-PATTERN: Using double for discrete IDs, binary byte keys, and neural arrays
 // =========================================================================
 std::unordered_map<double, double> image_dictionary; // KEY: double, VALUE: double
 double next_image_id = 20000.0;
 std::vector<double> tokenized_data;
+std::vector<double> embedded_data; // BAD: 64-bit floats tank Tensor Core performance
 
 // =========================================================================
-// PRODUCTION PATTERN: Exact-width categorical types (Current Implementation)
+// PRODUCTION PATTERN: Exact-width categorical types & GPU-aligned 32-bit floats
 // =========================================================================
 std::unordered_map<uint8_t, uint32_t> image_dictionary; // KEY: byte, VALUE: ID
 uint32_t next_image_id = 20000000;
 std::vector<uint32_t> tokenized_data;
+std::vector<float> embedded_data; // GOOD: 32-bit float ready for CUDA & Tensor Cores
 ```
 
 ### 2.1 Rationale for `uint32_t` Token Identifiers
@@ -62,7 +64,10 @@ std::vector<uint32_t> tokenized_data;
 2. **Memory Compaction:** Storing 8,289,605 tokens as `uint32_t` requires **33.16 MB** of contiguous memory. Storing them as `double` requires **66.32 MB**—doubling the memory bandwidth pressure over the system memory bus.
 3. **Indexing Semantics:** Token IDs serve as direct row indices into embedding matrices ($E[\text{ID}]$). Standard array and tensor indices must be discrete unsigned integers (`uint32_t` or `size_t`).
 
-### 2.2 Rationale for `uint8_t` Media Dictionary Keys
+### 2.2 Rationale for `float` (32-bit) Neural Tensors
+A Tensor Core is a physical silicon chip hardwired to perform massive parallel multiplication on 32-bit (`float`), 16-bit (FP16), or Brain-Floats (BF16). If a 64-bit `double` is pushed to a Tensor Core, the GPU will silently fall back to legacy graphics cores, causing training to run exponentially slower. Transitioning to 32-bit `float` halves the RAM footprint and seamlessly prepares the buffers for `cudaMemcpy` to the GPU.
+
+### 2.3 Rationale for `uint8_t` Media Dictionary Keys
 Binary files emit raw octets (`char` with values `0..255`). Storing them as `double` keys in `unordered_map<double, uint32_t>` caused unnecessary float conversions and 8-byte key overhead. Using `uint8_t` restricts the key domain strictly to $2^8 = 256$ entries, matching the physical reality of byte-level tokenization.
 
 ---
@@ -144,9 +149,9 @@ In the embedding layer (`Parser::embedding` in `util/parser.cpp`), continuous ve
 
 ```cpp
 if (input.embedding_table.find(id) == input.embedding_table.end()) {
-  std::vector<double> vec(input.embedding_dim);
+  std::vector<float> vec(input.embedding_dim);
   for (uint32_t d = 0; d < input.embedding_dim; ++d) {
-    vec[d] = std::sin(static_cast<double>(id) * (d + 1.0));
+    vec[d] = std::sinf(static_cast<float>(id) * (d + 1.0f));
   }
   // Move semantics transfer vector ownership without heap reallocation
   input.embedding_table[id] = std::move(vec);

@@ -168,3 +168,15 @@ Press Enter to exit...
   ```bash
   make CXX=clang++ test
   ```
+
+---
+
+## 6. The Future Architecture: CUDA & `nvcc` Transition
+
+As **AI Core** pivots to execute its Perceptron matrices on physical GPU hardware via the PCIe bus, the toolchain will undergo a fundamental upgrade:
+
+1. **The NVIDIA CUDA Toolkit:** The build system will adopt NVIDIA's compiler infrastructure.
+2. **The `nvcc` Compiler:** While `g++` will continue to compile standard `.cpp` host (CPU) files, `nvcc` will be introduced to compile `.cu` device (GPU) kernel files.
+3. **Host-Device Separation:** `nvcc` automatically separates host code (routed back to `g++` or `msvc`) from device code (compiled into PTX assembly for the Tensor Cores).
+
+This transition will allow the project to natively write `__global__` and `__device__` kernel launches to execute matrix dot-products directly in VRAM.

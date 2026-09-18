@@ -39,7 +39,26 @@ Artificial intelligence architectures face a fundamental design decision when in
 +---------------------------------------------------------------------------------------+
 ```
 
-**AI Core** implements the **Early Fusion** paradigm. At the earliest perceptual interface, all incoming signals are converted into a single unified stream of discrete categorical identifiers (`std::vector<uint32_t> tokenized_data`), which are subsequently projected into a shared continuous embedding space (`std::vector<double> embedded_data`).
+**AI Core** implements the **Early Fusion** paradigm. At the earliest perceptual interface, all incoming signals are converted into a single unified stream of discrete categorical identifiers (`std::vector<uint32_t> tokenized_data`), which are subsequently projected into a shared continuous embedding space (`std::vector<float> embedded_data`).
+
+---
+
+## 2. The Producer-Consumer Architecture & Conductor Orchestration
+
+The deep learning data pipeline is a textbook implementation of the **Producer-Consumer Problem**:
+- **Producer:** The `Optimizer` DataLoader (reads chunks from disk, extracts tokens, structures context windows).
+- **Consumer:** The `Perceptron` (ingests the context window, multiplies against weights, updates gradients).
+
+### 2.1 The Two Paths of Execution
+When engineering the flow of data between the Producer and Consumer, there are two distinct paths:
+
+1. **Path 1: The Single-Threaded "Conductor" (Sequential Execution)**
+   The training loop acts as a strict orchestra conductor. The Conductor tells the Optimizer to carve out a 128-token window and wait. The Optimizer returns control. The Conductor then tells the Perceptron to consume the data. No concurrent tasks run; everything is predictable, guaranteeing absolute synchronization without deadlocks.
+2. **Path 2: The Multi-Threaded "Conveyor Belt" (Concurrent Execution)**
+   Thread A (DataLoader) reads from disk constantly. Thread B (Perceptron) does matrix math. To prevent spinning CPU locks, OS-level **Condition Variables** and **Mutexes** put threads to sleep and wake them only when data is ready. This provides massive speedups but introduces severe race condition risks.
+
+### 2.2 The Current Implementation
+**AI Core** currently implements **Path 1: The Single-Threaded Conductor**. The CPU operates as the sole logistics engine, meticulously organizing memory buffers sequentially to ensure mathematical stability and enforce the Life and Death Data Synchronization Guarantee before introducing complex threading.
 
 ---
 
@@ -72,7 +91,7 @@ To guarantee zero mathematical overlap while maintaining complete modality agnos
 | Sensory Domain | Active ID Counter | Counter Init | Theoretical Capacity | Active Dictionary Key Type | Dictionary Storage Container |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Natural Language** | `next_text_id` | `1` | 9,999,999 tokens | `std::string` | `std::unordered_map<std::string, uint32_t>` |
-| **Tabular Numbers** | `next_number_id` | `10,000,000` | 10,000,000 tokens | `double` | `std::unordered_map<double, uint32_t>` |
+| **Tabular Numbers** | `next_number_id` | `10,000,000` | 10,000,000 tokens | `float` | `std::unordered_map<float, uint32_t>` |
 | **Visual Imagery** | `next_image_id` | `20,000,000` | 10,000,000 tokens | `uint8_t` | `std::unordered_map<uint8_t, uint32_t>` |
 | **Temporal Video** | `next_video_id` | `30,000,000` | 10,000,000 tokens | `uint8_t` | `std::unordered_map<uint8_t, uint32_t>` |
 | **Acoustic Audio** | `next_voice_id` | `40,000,000` | 10,000,000 tokens | `uint8_t` | `std::unordered_map<uint8_t, uint32_t>` |
@@ -101,13 +120,16 @@ Following the Single Responsibility Principle and modern systems-engineering gui
        [ Test / Input Structs ]   <--- Plain Data Carriers (State & Configuration)
                   |
                   v
-         [ Parser Engine ]        <--- Perceptual Frontend (Tokenization & Embeddings)
-                  |
-                  v
-       [ Unified Tensor Stream ]  <--- Pure Numerical Vectors (std::vector<double>)
-                  |
-                  v
-       [ Perceptron Engine ]      <--- Cognitive Execution (Forward Pass & Activation)
+          [ Parser Engine ]        <--- Perceptual Frontend (Tokenization & Embeddings)
+                   |
+                   v
+        [ Unified Tensor Stream ]  <--- Pure Numerical Vectors (std::vector<float>)
+                   |
+                   v
+     [ PCIe Bus / CUDA Memory Map] <--- Hand-off from CPU Host to GPU Device
+                   |
+                   v
+        [ GPU Tensor Cores ]       <--- Cognitive Execution (Forward Pass & Activation)
 ```
 
 ### Component Responsibilities:
@@ -160,21 +182,22 @@ Following the Single Responsibility Principle and modern systems-engineering gui
   1. For each token ID in input.tokenized_data:
      - Check if token ID exists in input.embedding_table.
      - If absent: generate deterministic d_model vector (d = 4) via:
-       v[d] = sin(token_id * (d + 1.0))
+       v[d] = sinf(token_id * (d + 1.0f))
      - Insert dense vector into input.embedding_table[token_id].
      - Append dense slice to input.embedded_data.
-  -> Result: 33,158,420 continuous floating-point values (8.289M tokens * 4 dimensions).
+  -> Result: 33,158,420 continuous 32-bit floating-point values (8.289M tokens * 4 dimensions).
 
                                           |
                                           v
 
 +---------------------------------------------------------------------------------------+
-| STAGE 3: NEURAL FORWARD EXECUTION (Perceptron / Transformer Primitives)               |
+| STAGE 3: HOST TO DEVICE TRANSFER & NEURAL EXECUTION (CUDA / Tensor Cores)             |
 +---------------------------------------------------------------------------------------+
-  1. Dense vector stream feeds downstream dot-product kernels:
+  1. Host CPU issues cudaMemcpy to push 512-float buffer over PCIe to GPU VRAM.
+  2. GPU Tensor Cores execute massive parallel dot-product kernels:
      y = dot_product(X, W) + b
-  2. Non-linear activation evaluation (ReLU, GELU, SwiGLU).
-  3. Scalar error computation against ground truth.
+  3. Non-linear activation evaluation (ReLU, GELU, SwiGLU).
+  4. Scalar error computation against ground truth.
 ```
 
 ---

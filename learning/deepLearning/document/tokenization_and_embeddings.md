@@ -48,7 +48,7 @@ The engine orchestrates tokenization across five sensory channels in `util/parse
 
 2. NUMBERS (Tabular & Telemetry Data)
    - Source: Floating-point scalars from test.data_num or input.user_numbers.
-   - Mechanism: Scalar value matching via std::unordered_map<double, uint32_t>.
+   - Mechanism: Scalar value matching via std::unordered_map<float, uint32_t>.
    - Target Range: [10,000,000 .. 19,999,999].
 
 3. IMAGE (Visual Data)
@@ -165,6 +165,10 @@ This streaming pattern ensures that memory usage during tokenization scales with
 
 Once the sequence of discrete integer IDs is populated in `input.tokenized_data`, the cognitive engine requires continuous vector representations.
 
+A discrete identifier `5` holds no mathematical relationship to `6` or `12`. To enable machine learning algorithms (which rely on gradients and continuous calculus) to understand the *meaning* of a token, discrete IDs are projected into a high-dimensional continuous space.
+
+This continuous space is defined by `d_model` (the embedding dimension). For our structural prototype, `d_model = 4`.
+
 ### 6.1 Lookup Architecture & Vector Sizing
 
 ```
@@ -172,26 +176,26 @@ Input: Token ID (uint32_t) ---> [ embedding_table Lookup ] ---> Dense Vector [d_
 ```
 
 - **Embedding Dimension ($d_{\text{model}}$):** Set to `uint32_t embedding_dim = 4` in `Input` (easily reconfigured to 512, 768, 2048, or 4096).
-- **Lookup Table:** `std::unordered_map<uint32_t, std::vector<double>> embedding_table`.
-- **Output Tensor:** A contiguous flat buffer `std::vector<double> embedded_data` of size:
-  $$\text{Total Floats} = N_{\text{tokens}} \times d_{\text{model}} = 8,289,605 \times 4 = 33,158,420 \text{ doubles}$$
+- **Lookup Table:** `std::unordered_map<uint32_t, std::vector<float>> embedding_table`.
+- **Output Tensor:** A contiguous flat buffer `std::vector<float> embedded_data` of size:
+  $$\text{Total Floats} = N_{\text{tokens}} \times d_{\text{model}} = 8,289,605 \times 4 = 33,158,420 \text{ floats}$$
 
 ### 6.2 Deterministic Harmonic Initialization
 
 To enable consistent, reproducible neural forward passes without requiring multi-gigabyte pretrained weights on disk, `Parser::embedding()` synthesizes orthogonal continuous embeddings deterministically based on the token ID:
 
 ```cpp
-std::vector<double> Parser::embedding(Input &input, Test &test) {
+std::vector<float> Parser::embedding(Input &input, Test &test) {
   input.embedded_data.clear();
   input.embedded_data.reserve(input.tokenized_data.size() * input.embedding_dim);
 
   for (uint32_t id : input.tokenized_data) {
     // Check if token embedding already exists in cache
     if (input.embedding_table.find(id) == input.embedding_table.end()) {
-      std::vector<double> vec(input.embedding_dim);
+      std::vector<float> vec(input.embedding_dim);
       for (uint32_t d = 0; d < input.embedding_dim; ++d) {
         // Deterministic harmonic function based on ID and dimension index
-        vec[d] = std::sin(static_cast<double>(id) * (d + 1.0));
+        vec[d] = std::sinf(static_cast<float>(id) * (d + 1.0f));
       }
       input.embedding_table[id] = std::move(vec);
     }
@@ -205,9 +209,21 @@ std::vector<double> Parser::embedding(Input &input, Test &test) {
 }
 ```
 
-### 6.3 Mathematical Properties of Harmonic Embeddings:
+### 6.3 Output: The Unified Tensor Stream
+
+As each token is processed, its dense vector is retrieved (or generated) and appended to `std::vector<float> embedded_data`.
+
+Because standard `std::vector` stores elements contiguously in RAM, the resulting `embedded_data` array is a perfectly flat, contiguous stream of floating-point numbers.
+
+**The Book of Genesis Scale:**
+- Input: `8,289,605` discrete tokens (`uint32_t`)
+- Output: `33,158,420` continuous 32-bit `float` values (Tokens $\times 4$)
+
+This output stream is mathematically identical to a flattened $(8289605 \times 4)$ tensor, which is the exact geometric shape required to feed into the Matrix Multiplication units (Tensor Cores) of the Perceptron over the PCIe bus in the next stage.
+
+### 6.4 Mathematical Properties of Harmonic Embeddings:
 1. **Bounded Invariant:** Since $\sin(x) \in [-1.0, 1.0]$, all embedding values are inherently normalized, preventing gradient explosion in early layers.
 2. **Deterministic Stability:** The token ID `1` ("The") will *always* generate the exact same continuous coordinates:
    $$\mathbf{v}_1 = [\sin(1), \sin(2), \sin(3), \sin(4)] \approx [0.841471, 0.909297, 0.141120, -0.756802]$$
 3. **Orthogonal Clustering by Modality:** Because token IDs are separated by 10,000,000 offsets, the harmonic frequencies create distinct geometric clusters in latent space for each modality.
-4. **Exact Memory Footprint:** With 786 unique tokens discovered across all modalities, the `embedding_table` contains exactly 786 vectors ($786 \times 4 \times 8 \text{ bytes} \approx 25.15 \text{ KB}$), achieving near-instant cache warm-up.
+4. **Exact Memory Footprint:** With 786 unique tokens discovered across all modalities, the `embedding_table` contains exactly 786 vectors ($786 \times 4 \times 4 \text{ bytes} \approx 12.58 \text{ KB}$), achieving near-instant cache warm-up.

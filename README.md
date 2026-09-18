@@ -46,21 +46,22 @@ Modern deep learning frameworks frequently hide fundamental computational mechan
                                           |
                                           v
 
-  Stage 4: LLaMA Foundation & Attention Primitives [UPCOMING]
+  Stage 4: The GPU Pivot & CUDA Infrastructure [ACTIVE DEVELOPMENT]
+  --------------------------------------------------------------------------------------
+  * Precision downgrade: 64-bit `double` to 32-bit `float` for Tensor Core alignment
+  * CPU (Host) logistics to GPU (Device) muscle transfer via PCIe bus
+  * `nvcc` integration and `cudaMalloc` / `cudaMemcpy` orchestration
+  * Conductor Producer-Consumer pipeline synchronization
+
+                                          |
+                                          v
+
+  Stage 5: LLaMA Foundation & Attention Primitives [UPCOMING]
   --------------------------------------------------------------------------------------
   * Scaled Dot-Product Attention & Multi-Head Self-Attention (MHA)
   * Rotary Positional Embeddings (RoPE)
   * RMSNorm pre-normalization & SwiGLU gated activations
   * Autoregressive Key-Value (KV) Cache mechanics
-
-                                          |
-                                          v
-
-  Stage 5: Local Hardware Acceleration & Quantization [FUTURE]
-  --------------------------------------------------------------------------------------
-  * SIMD vectorization (AVX2 / AVX-512)
-  * INT8 / INT4 GGUF-style block quantization
-  * GPU Tensor Core offloading (NVIDIA RTX 4080 / CUDA)
 ========================================================================================
 ```
 
@@ -115,16 +116,24 @@ All architectural specifications, memory models, algorithms, and engineering gui
                                           v
 +------------------------------------------------------------------------------------+
 |                   CONTINUOUS LATENT EMBEDDING PROJECTION (embedding)               |
-|  - Lookup Table: std::unordered_map<uint32_t, std::vector<double>>                 |
-|  - Latent Dimension (d_model): 4 doubles per token                                |
-|  - Unified Output Buffer: std::vector<double> embedded_data                        |
-|  - Total Output Floats: 33,158,420 continuous values                               |
+|  - Lookup Table: std::unordered_map<uint32_t, std::vector<float>>                  |
+|  - Latent Dimension (d_model): 4 floats per token                                 |
+|  - Unified Output Buffer: std::vector<float> embedded_data                         |
+|  - Total Output Floats: 33,158,420 continuous 32-bit values                        |
 +------------------------------------------------------------------------------------+
                                           |
                                           v
 +------------------------------------------------------------------------------------+
-|                        NEURAL CORE EXECUTION (PERCEPTRON)                          |
-|  - Forward Pass: Dot product accumulation (y = W * x + b)                          |
+|                        CPU-TO-GPU PCI-e LOGISTICS TRANSFER                         |
+|  - Host (CPU): Conductor orchestrates token logistics and chunking.                |
+|  - Bus: `cudaMemcpy` transfers the 512-float active context window.                |
+|  - Device (GPU VRAM): Receives tensors for matrix multiplication.                  |
++------------------------------------------------------------------------------------+
+                                          |
+                                          v
++------------------------------------------------------------------------------------+
+|               NEURAL CORE EXECUTION (GPU TENSOR CORES / PERCEPTRON)                |
+|  - Forward Pass: Massive parallel dot product accumulation (y = W * x + b)         |
 |  - Activation and Error Evaluation                                                 |
 +------------------------------------------------------------------------------------+
 ```
