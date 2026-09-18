@@ -69,26 +69,34 @@ std::vector<uint32_t> Parser::tokenization(Input &input, Test &test) {
 }
 
 // EMBEDDINGS: Convert global token IDs to a flat dense vector
-// Each unique token ID gets a fixed embedding vector (seeded by ID for stability).
-// Layout: [emb(token_0)..., emb(token_1)..., ...] size = tokenized_data.size() * embedding_dim
+// Each unique token ID gets a fixed embedding vector (seeded by ID for
+// stability). Layout: [emb(token_0)..., emb(token_1)..., ...] size =
+// tokenized_data.size() * embedding_dim
 std::vector<double> Parser::embedding(Input &input, Test &test) {
   input.embedded_data.clear();
-  input.embedded_data.reserve(input.tokenized_data.size() * input.embedding_dim);
+  input.embedded_data.reserve(input.tokenized_data.size() *
+                              input.embedding_dim);
 
   for (uint32_t id : input.tokenized_data) {
     // Create entry on first encounter, seeded by the token ID for determinism
     if (input.embedding_table.find(id) == input.embedding_table.end()) {
       std::vector<double> vec(input.embedding_dim);
-      // Simple deterministic init: sin/cos of (id * dim_index) — no random needed
+      // Simple deterministic init: sin/cos of (id * dim_index) — no random
+      // needed
       for (uint32_t d = 0; d < input.embedding_dim; ++d) {
         vec[d] = std::sin(static_cast<double>(id) * (d + 1.0));
       }
       input.embedding_table[id] = std::move(vec);
     }
-    // Append the dense vector for this token to the output
+
+    // Append the dense vector for this token to the RAM output
     const auto &vec = input.embedding_table[id];
-    input.embedded_data.insert(input.embedded_data.end(), vec.begin(), vec.end());
+    input.embedded_data.insert(input.embedded_data.end(), vec.begin(),
+                               vec.end());
   }
+
+  // Use our new generalized save method
+  save_data(input.embedded_data, "embedded_data.bin");
 
   return input.embedded_data;
 }
