@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-// Architecture principle: Storage drives are hyper-optimized for sequential forward reads.
+// Architecture principle: Storage drives are hyper-optimized for sequential
+// forward reads.
 
 struct Portion {
 
@@ -50,12 +51,13 @@ struct Portion {
 
 class Optimizer {
 private:
-  // Kept permanently open: ~8KB OS buffer cost, zero syscall overhead per chunk.
+  // Kept permanently open: ~8KB OS buffer cost, zero syscall overhead per
+  // chunk.
   std::ifstream file_stream;
 
 public:
   void disk_to_ram(Portion &portion);
-  void ram_to_contextWindow(Portion &portion);
+  void ram_to_contextWindow(Portion &portion, bool training_in_use);
 };
 
 #endif

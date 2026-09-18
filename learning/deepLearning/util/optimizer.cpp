@@ -11,7 +11,8 @@ void Optimizer::disk_to_ram(Portion &portion) {
       portion.ram_buffer_tokens.empty()) {
     portion.buffer_in_use = true;
 
-    // Open the binary file stream once; keep it open across chunks to minimize syscalls
+    // Open the binary file stream once; keep it open across chunks to minimize
+    // syscalls
     if (!file_stream.is_open()) {
       file_stream.open("database/embedded_data.bin", std::ios::binary);
       if (!file_stream) {
@@ -21,7 +22,8 @@ void Optimizer::disk_to_ram(Portion &portion) {
       }
     }
 
-    // Reset stream position if EOF was reached on a previous pass (start a new training epoch)
+    // Reset stream position if EOF was reached on a previous pass (start a new
+    // training epoch)
     if (file_stream.eof()) {
       file_stream.clear();
       file_stream.seekg(0, std::ios::beg);
@@ -67,10 +69,20 @@ void Optimizer::disk_to_ram(Portion &portion) {
   }
 }
 
-// Tier 2: Extract sliding context windows from RAM buffer to feed neural network
-void Optimizer::ram_to_contextWindow(Portion &portion) {
+// Tier 2: Extract sliding context windows from RAM buffer to feed neural
+// network
+void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
   // TODO: Implement sliding window over ram_buffer_tokens to populate
   // context_window_tokens
+
+  // Whenever the training executes it makes the training_in_use true
+  // Which means for sure the buffer is in use
+  while (training_in_use == true) {
+    portion.context_in_use = true;
+    portion.buffer_in_use = true;
+
+    std::cerr << "Warring:Learning";
+  }
 
   // =========================================================================
   // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
@@ -78,7 +90,7 @@ void Optimizer::ram_to_contextWindow(Portion &portion) {
   // =========================================================================
   while (portion.context_in_use == false && portion.buffer_in_use == false &&
          portion.context_window_tokens.empty()) {
-    portion.context_in_use = true;
+
     // Buffer locked — conduct batch extraction
 
     while (portion.context_window_tokens.size() < portion.context_window_size) {
