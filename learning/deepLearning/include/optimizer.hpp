@@ -57,7 +57,7 @@ private:
 
 public:
   void disk_to_ram(Portion &portion);
-  void ram_to_contextWindow(Portion &portion, bool training_in_use);
+  void ram_to_contextWindow(Portion &portion, bool &training_in_use);
 };
 
 #endif

@@ -36,9 +36,11 @@ void Optimizer::disk_to_ram(Portion &portion) {
     // RAM cost: a few KB. CPU cost: negligible. Disk reads stay sequential.
     // ----------------------------------------------------------------
     std::vector<double> carry = {};
-    if (portion.ram_buffer_tokens.size() >= portion.context_window_size) {
+    size_t token_dim = 4; // 1 token = 4 doubles
+    size_t carry_doubles = portion.context_window_size * token_dim;
+    if (portion.ram_buffer_tokens.size() >= carry_doubles) {
       auto it = portion.ram_buffer_tokens.end() -
-                static_cast<std::ptrdiff_t>(portion.context_window_size);
+                static_cast<std::ptrdiff_t>(carry_doubles);
       carry.assign(it, portion.ram_buffer_tokens.end());
     }
 
@@ -72,33 +74,45 @@ void Optimizer::disk_to_ram(Portion &portion) {
 // Tier 2: Extract sliding context windows from RAM buffer to feed neural
 // network
 void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
-  // TODO: Implement sliding window over ram_buffer_tokens to populate
-  // context_window_tokens
+  size_t token_dim = 4; // 1 token = 4 doubles
+  size_t window_doubles = portion.context_window_size * token_dim;
+  size_t target_doubles = 1 * token_dim;
 
-  // Whenever the training executes it makes the training_in_use true
-  // Which means for sure the buffer is in use
-  while (training_in_use == true) {
+  // Slide through the RAM buffer one token at a time until the end
+  // (Stop when there isn't enough data for a full context window + target)
+  for (size_t i = 0; i + window_doubles + target_doubles <= portion.ram_buffer_tokens.size(); i += token_dim) {
+
+    // =========================================================================
+    // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
+    // Pause if the neural network is currently using the data, or if the
+    // context window hasn't been emptied yet by the consumer!
+    // =========================================================================
+    while (training_in_use == true || portion.context_in_use == true ||
+           !portion.context_window_tokens.empty()) {
+      // Yield or wait for the neural network to finish its pass
+      // In a real threaded environment we would sleep or yield here.
+    }
+
+    // Lock the context window and buffer
     portion.context_in_use = true;
     portion.buffer_in_use = true;
 
-    std::cerr << "Warring:Learning";
-  }
+    // Clear previous tokens
+    portion.context_window_tokens.clear();
+    portion.target_tokens.clear();
 
-  // =========================================================================
-  // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
-  // Verify context window state locks before populating neural network batches!
-  // =========================================================================
-  while (portion.context_in_use == false && portion.buffer_in_use == false &&
-         portion.context_window_tokens.empty()) {
+    // Extract Context Window (X)
+    portion.context_window_tokens.assign(
+        portion.ram_buffer_tokens.begin() + i,
+        portion.ram_buffer_tokens.begin() + i + window_doubles);
 
-    // Buffer locked — conduct batch extraction
+    // Extract Target (Y)
+    portion.target_tokens.assign(
+        portion.ram_buffer_tokens.begin() + i + window_doubles,
+        portion.ram_buffer_tokens.begin() + i + window_doubles + target_doubles);
 
-    while (portion.context_window_tokens.size() < portion.context_window_size) {
-      double one_portion_128;
-      portion.context_window_tokens.push_back(one_portion_128);
-    }
-
-    // Release context window lock
+    // Release locks so the neural network can start learning on the new data
+    portion.buffer_in_use = false;
     portion.context_in_use = false;
   }
 }

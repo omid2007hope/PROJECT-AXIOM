@@ -2,7 +2,7 @@
 #include "../include/optimizer.hpp"
 
 // Right now the only thing that it does is make contextWindow in use True
-void Training::training(const Train &train) {
+void Training::training(Train &train) {
   Portion portion;
   Optimizer optimizer;
 
