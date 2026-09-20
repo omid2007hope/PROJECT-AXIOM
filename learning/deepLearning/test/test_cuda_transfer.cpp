@@ -120,20 +120,83 @@ static void test_gpu_portion_mock() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section 2 — GPU tests (placeholder until MSVC + nvcc are available)
+// Section 2 — GPU tests
 // ─────────────────────────────────────────────────────────────────────────────
-static void gpu_test_summary() {
-  std::cout << "\n[GPU] The following tests will run once MSVC Build Tools\n"
-            << "      are installed and nvcc can compile transfer.cu:\n\n"
-            << "  PENDING upload_to_gpu() — first call: cudaMalloc + cudaMemcpy\n"
-            << "  PENDING upload_to_gpu() — second call same size: reuse buffer\n"
-            << "  PENDING upload_to_gpu() — size change: free + realloc\n"
-            << "  PENDING upload_to_gpu() — verify H→D values match (cudaMemcpy D→H)\n"
-            << "  PENDING free_gpu()      — releases both device pointers\n"
-            << "  PENDING free_gpu()      — safe to call twice (no double-free)\n"
-            << "  PENDING GpuPortion      — d_context_window byte count == 1024\n"
-            << "  PENDING GpuPortion      — d_target byte count == 8\n\n"
-            << "  Install: vs_installer.exe modify --add Microsoft.VisualStudio.Workload.VCTools\n";
+#include "../src/CUDA/transfer.cuh"
+#include <vector>
+
+static void test_gpu_roundtrip() {
+  GpuPortion gpu{};
+
+  // Create CPU context data (128 tokens * 4 dim = 512 elements)
+  const size_t ctx_elems = 512;
+  std::vector<std::bfloat16_t> h_ctx_in(ctx_elems);
+  for (size_t i = 0; i < ctx_elems; ++i) {
+    h_ctx_in[i] = static_cast<std::bfloat16_t>(i * 0.5f);
+  }
+
+  // Create CPU target data (1 token * 4 dim = 4 elements)
+  const size_t tgt_elems = 4;
+  std::vector<std::bfloat16_t> h_tgt_in(tgt_elems);
+  for (size_t i = 0; i < tgt_elems; ++i) {
+    h_tgt_in[i] = static_cast<std::bfloat16_t>(i * 0.1f);
+  }
+
+  // 1. First call: cudaMalloc + cudaMemcpy
+  bool up1 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu);
+  check(up1, "upload_to_gpu() — first call allocates and copies");
+  check(gpu.d_context_window != nullptr, "gpu.d_context_window is not null");
+  check(gpu.d_target != nullptr, "gpu.d_target is not null");
+  check_eq(gpu.context_elements, ctx_elems, "gpu.context_elements matches");
+  check_eq(gpu.target_elements, tgt_elems, "gpu.target_elements matches");
+
+  // Save pointers to check reuse
+  void* old_ctx_ptr = gpu.d_context_window;
+  void* old_tgt_ptr = gpu.d_target;
+
+  // 2. Second call same size: reuse buffer
+  bool up2 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu);
+  check(up2, "upload_to_gpu() — second call succeeds");
+  check(gpu.d_context_window == old_ctx_ptr, "d_context_window pointer reused (no realloc)");
+  check(gpu.d_target == old_tgt_ptr, "d_target pointer reused (no realloc)");
+
+  // 3. Verify H→D values match by downloading back (D→H)
+  std::vector<std::bfloat16_t> h_ctx_out(ctx_elems, static_cast<std::bfloat16_t>(0.0f));
+  std::vector<std::bfloat16_t> h_tgt_out(tgt_elems, static_cast<std::bfloat16_t>(0.0f));
+  
+  bool down = download_from_gpu(h_ctx_out.data(), ctx_elems, h_tgt_out.data(), tgt_elems, &gpu);
+  check(down, "download_from_gpu() succeeds");
+
+  bool ctx_match = true;
+  for (size_t i = 0; i < ctx_elems; ++i) {
+    if (h_ctx_in[i] != h_ctx_out[i]) ctx_match = false;
+  }
+  check(ctx_match, "upload_to_gpu() — verify H→D→H context values match precisely");
+
+  bool tgt_match = true;
+  for (size_t i = 0; i < tgt_elems; ++i) {
+    if (h_tgt_in[i] != h_tgt_out[i]) tgt_match = false;
+  }
+  check(tgt_match, "upload_to_gpu() — verify H→D→H target values match precisely");
+
+  // 4. Size change: free + realloc
+  const size_t new_ctx_elems = 1024;
+  std::vector<std::bfloat16_t> new_h_ctx_in(new_ctx_elems, static_cast<std::bfloat16_t>(1.0f));
+  bool up3 = upload_to_gpu(new_h_ctx_in.data(), new_ctx_elems, h_tgt_in.data(), tgt_elems, &gpu);
+  check(up3, "upload_to_gpu() — size change succeeds");
+  check(gpu.d_context_window != old_ctx_ptr, "d_context_window reallocated for new size");
+  check_eq(gpu.context_elements, new_ctx_elems, "context_elements updated to new size");
+
+  // 5. Free GPU
+  free_gpu(&gpu);
+  check(gpu.d_context_window == nullptr, "free_gpu() releases d_context_window");
+  check(gpu.d_target == nullptr, "free_gpu() releases d_target");
+  check_eq(gpu.context_elements, size_t{0}, "free_gpu() resets context_elements");
+  check_eq(gpu.target_elements, size_t{0}, "free_gpu() resets target_elements");
+
+  // Safe to call twice
+  free_gpu(&gpu);
+  check(true, "free_gpu() safe to call twice (no double-free)");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,10 +216,9 @@ void test_cuda_transfer() {
   test_gpu_portion_mock();
 
   std::cout << "\n[5] GPU transfer tests\n";
-  gpu_test_summary();
+  test_gpu_roundtrip();
 
   std::cout << "=== CUDA Transfer Test Suite: " << s_pass << " passed, "
-            << s_fail << " failed, "
-            << "8 GPU tests PENDING ===\n";
+            << s_fail << " failed ===\n";
   s_pass = s_fail = 0;
 }

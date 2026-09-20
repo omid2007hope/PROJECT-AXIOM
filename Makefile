@@ -5,16 +5,12 @@ CXXFLAGS = -Wall -std=c++23 -Ilearning/deepLearning/include
 CUDA_DIR  = C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3
 NVCC      = "$(CUDA_DIR)/bin/nvcc.exe"
 # sm_89 = RTX 4080 Laptop (Ada Lovelace, compute capability 8.9)
-# -ccbin g++ : use MinGW g++ as the host compiler instead of cl.exe (MSVC)
-NVCCFLAGS = -arch=sm_89 --std=c++17 -ccbin g++ \
+# -ccbin points to MSVC compiler (cl.exe) which is strictly required by nvcc on Windows
+NVCCFLAGS = -arch=sm_89 --std=c++17 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64" \
             -I"$(CUDA_DIR)/include"
 
 CUDA_SRC_DIR = learning/deepLearning/src/CUDA
 CUDA_SRCS    = $(wildcard $(CUDA_SRC_DIR)/*.cu)
-CUDA_OBJ     = learning/deepLearning/cuda_transfer.o
-
-# CUDA runtime library (links cudaMalloc, cudaMemcpy, etc.)
-CUDA_LIBS = -L"$(CUDA_DIR)/lib/x64" -lcudart
 
 # ─── CPU sources ─────────────────────────────────────────────────────────────
 SRC_DIR  = learning/deepLearning/src
@@ -33,22 +29,22 @@ TEST_TARGET = learning/deepLearning/test.exe
 # ─── Default: compile everything ─────────────────────────────────────────────
 all: $(APP_TARGET) $(TEST_TARGET)
 
-# ─── Compile CUDA sources into a single relocatable object ───────────────────
-# If nvcc fails (e.g., MSVC cl.exe not yet installed), skip and build CPU only.
-$(CUDA_OBJ): $(CUDA_SRCS)
-	-$(NVCC) $(NVCCFLAGS) -c $(CUDA_SRCS) -o $(CUDA_OBJ)
+# ─── Compile CUDA sources into a single DLL ──────────────────────────────────
+# Build a shared library so MSVC's linker handles all MSVC-specific symbols.
+CUDA_DLL = learning/deepLearning/cuda_transfer.dll
+$(CUDA_DLL): $(CUDA_SRCS)
+	-$(NVCC) $(NVCCFLAGS) -DBUILDING_CUDA_DLL -shared $(CUDA_SRCS) -o $(CUDA_DLL)
 
-# Helper: return the CUDA obj only if it was successfully built
-CUDA_LINK = $(if $(wildcard $(CUDA_OBJ)),$(CUDA_OBJ),)
-CUDA_LIB  = $(if $(wildcard $(CUDA_OBJ)),$(CUDA_LIBS),)
+# Helper: return the CUDA DLL only if it was successfully built
+CUDA_LINK = $(if $(wildcard $(CUDA_DLL)),$(CUDA_DLL),)
 
 # ─── Link CPU + GPU into the app ─────────────────────────────────────────────
-$(APP_TARGET): $(APP_SRCS) $(CUDA_OBJ)
-	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_LINK) $(CUDA_LIB) -o $(APP_TARGET)
+$(APP_TARGET): $(APP_SRCS) $(CUDA_DLL)
+	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_LINK) -o $(APP_TARGET)
 
 # ─── Link CPU + GPU into the test binary ─────────────────────────────────────
-$(TEST_TARGET): $(TEST_SRCS) $(CUDA_OBJ)
-	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) $(CUDA_LIB) -o $(TEST_TARGET)
+$(TEST_TARGET): $(TEST_SRCS) $(CUDA_DLL)
+	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) -o $(TEST_TARGET)
 
 # ─── Clean ───────────────────────────────────────────────────────────────────
 clean:
