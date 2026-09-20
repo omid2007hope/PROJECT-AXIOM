@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -std=c++17 -Ilearning/deepLearning/include
+CXXFLAGS = -Wall -std=c++23 -Ilearning/deepLearning/include
 
 # Directories
 SRC_DIR = learning/deepLearning/src

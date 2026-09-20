@@ -7,8 +7,7 @@ void Optimizer::disk_to_ram(Portion &portion) {
   // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
   // Verify buffer state locks before touching memory to prevent corruption!
   // =========================================================================
-  if (portion.buffer_in_use == false && portion.context_in_use == false &&
-      portion.ram_buffer_tokens.empty()) {
+  if (portion.buffer_in_use == false && portion.context_in_use == false) {
     portion.buffer_in_use = true;
 
     // Open the binary file stream once; keep it open across chunks to minimize
@@ -34,6 +33,8 @@ void Optimizer::disk_to_ram(Portion &portion) {
     // Carry-Forward: Copy the last context_window_size tokens from the
     // previous chunk to the front of the new buffer.
     // This prevents "amnesia" at the seam between two chunks.
+    // disk_to_ram owns this: it reads carry BEFORE clearing, so the
+    // tail of the old 100k window seeds the front of the new 100k window.
     // RAM cost: a few KB. CPU cost: negligible. Disk reads stay sequential.
     // ----------------------------------------------------------------
     std::vector<std::bfloat16_t> carry = {};
@@ -87,16 +88,11 @@ void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
        i + window_elements + target_elements <= portion.ram_buffer_tokens.size();
        i += token_dim) {
 
-    // =========================================================================
-    // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
-    // Pause if the neural network is currently using the data, or if the
-    // context window hasn't been emptied yet by the consumer!
-    // =========================================================================
-    while (training_in_use == true || portion.context_in_use == true ||
-           !portion.context_window_tokens.empty()) {
-      // Yield or wait for the neural network to finish its pass
-      // In a real threaded environment we would sleep or yield here.
-    }
+    // NOTE: No spin barrier here — execution is single-threaded.
+    // The caller (training loop) is the synchronization: it calls
+    // disk_to_ram → ram_to_contextWindow → train sequentially.
+    // A spin on training_in_use would freeze forever in single-threaded mode
+    // because nothing can ever set it back to false while we are spinning.
 
     // Lock the context window and buffer
     portion.context_in_use = true;
@@ -117,14 +113,12 @@ void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
         portion.ram_buffer_tokens.begin() + i + window_elements +
             target_elements);
 
-    // Release locks so the neural network can start learning on the new data
+    // Release locks — caller trains on context_window_tokens / target_tokens
     portion.buffer_in_use = false;
     portion.context_in_use = false;
   }
 
-  // All 100,000-token windows have been served to the AI.
-  // Clear the RAM buffer so disk_to_ram detects it is empty and
-  // refills from disk on the next call — completing the cycle:
-  //   disk → ram (100k) → context window (128) → AI → repeat
-  portion.ram_buffer_tokens.clear();
+  // All windows have been served from this 100k-token chunk.
+  // disk_to_ram owns clearing: it extracts the carry-forward tail
+  // from ram_buffer_tokens BEFORE wiping, so do NOT clear here.
 }
