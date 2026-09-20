@@ -121,4 +121,10 @@ void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
     portion.buffer_in_use = false;
     portion.context_in_use = false;
   }
+
+  // All 100,000-token windows have been served to the AI.
+  // Clear the RAM buffer so disk_to_ram detects it is empty and
+  // refills from disk on the next call — completing the cycle:
+  //   disk → ram (100k) → context window (128) → AI → repeat
+  portion.ram_buffer_tokens.clear();
 }
