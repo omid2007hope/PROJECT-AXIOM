@@ -17,15 +17,20 @@ void test_tokenization() {
   std::cout << "\n";
 
   // Vocabulary summary: count and ID range per modality
-  auto summary = [](const char* name, auto& dict) {
-    if (dict.empty()) { std::cout << "  " << name << ": 0 unique tokens\n"; return; }
-    uint32_t lo = UINT32_MAX, hi = 0;
-    for (const auto& [key, id] : dict) {
-      if (id < lo) lo = id;
-      if (id > hi) hi = id;
+  auto summary = [](const char *name, auto &dict) {
+    if (dict.empty()) {
+      std::cout << "  " << name << ": 0 unique tokens\n";
+      return;
     }
-    std::cout << "  " << name << ": " << dict.size()
-              << " unique tokens  [" << lo << " .. " << hi << "]\n";
+    uint32_t lo = UINT32_MAX, hi = 0;
+    for (const auto &[key, id] : dict) {
+      if (id < lo)
+        lo = id;
+      if (id > hi)
+        hi = id;
+    }
+    std::cout << "  " << name << ": " << dict.size() << " unique tokens  ["
+              << lo << " .. " << hi << "]\n";
   };
 
   std::cout << "\n--- Vocabulary Summary ---\n";
@@ -36,10 +41,11 @@ void test_tokenization() {
   summary("Voice ", input.voice_dictionary);
   std::cout << "--------------------------\n";
 
-  // Run embedding
-  std::vector<double> embedded = parser.embedding(input, test);
+  // Run embedding // bfloat16_t
+  std::vector<std::bfloat16_t> embedded = parser.embedding(input, test);
 
   std::cout << "\n--- Embedding Summary ---\n";
+  std::cout << "\n--- Type:  bfloat16_t ---\n";
   std::cout << "  Tokens       : " << tokenized.size() << "\n";
   std::cout << "  Dim per token: " << input.embedding_dim << "\n";
   std::cout << "  Total floats : " << embedded.size() << "\n";
@@ -47,7 +53,8 @@ void test_tokenization() {
   std::cout << "  First token [" << tokenized[0] << "] -> [";
   for (uint32_t d = 0; d < input.embedding_dim; ++d) {
     std::cout << embedded[d];
-    if (d + 1 < input.embedding_dim) std::cout << ", ";
+    if (d + 1 < input.embedding_dim)
+      std::cout << ", ";
   }
   std::cout << "]\n";
   std::cout << "-------------------------\n";

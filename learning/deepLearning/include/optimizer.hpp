@@ -34,7 +34,7 @@ struct Portion {
   size_t ram_buffer_size = 100000;
 
   // Holds: ram_buffer_size * embedding_dim (e.g., 400,000 doubles)
-  std::vector<double> ram_buffer_tokens = {};
+  std::vector<std::bfloat16_t> ram_buffer_tokens = {};
 
   // ---------------------------------------------------------
   // Tier 2: The AI's Field of View (RAM -> Perceptron)
@@ -43,10 +43,10 @@ struct Portion {
   size_t context_window_size = 128;
 
   // The Input (X): What the AI sees (128 tokens * 4 dim = 512 doubles)
-  std::vector<double> context_window_tokens = {};
+  std::vector<std::bfloat16_t> context_window_tokens = {};
 
   // The Target (Y): The prediction ground-truth (1 token * 4 dim = 4 doubles)
-  std::vector<double> target_tokens = {};
+  std::vector<std::bfloat16_t> target_tokens = {};
 };
 
 class Optimizer {
