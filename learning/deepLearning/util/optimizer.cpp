@@ -7,8 +7,8 @@ void Optimizer::disk_to_ram(Portion &portion) {
   // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
   // Verify buffer state locks before touching memory to prevent corruption!
   // =========================================================================
-  while (portion.buffer_in_use == false && portion.context_in_use == false &&
-         portion.ram_buffer_tokens.empty()) {
+  if (portion.buffer_in_use == false && portion.context_in_use == false &&
+      portion.ram_buffer_tokens.empty()) {
     portion.buffer_in_use = true;
 
     // Open the binary file stream once; keep it open across chunks to minimize
@@ -17,17 +17,13 @@ void Optimizer::disk_to_ram(Portion &portion) {
       file_stream.open("database/embedded_data.bin", std::ios::binary);
       if (!file_stream) {
         std::cerr << "Failed to open database/embedded_data.bin\n";
-        portion.buffer_in_use = true; // stop immediately
-                                      ///
-        /// IMPORTANT add : and preserve everything that is in the buffer
-        ///
+        portion.buffer_in_use = false; // release lock so callers can retry
         return;
       }
     }
 
     // Reset stream position if EOF was reached on a previous pass (start a new
     // training epoch)
-
     if (file_stream.eof()) {
       file_stream.clear();
       file_stream.seekg(0, std::ios::beg);
@@ -40,31 +36,20 @@ void Optimizer::disk_to_ram(Portion &portion) {
     // This prevents "amnesia" at the seam between two chunks.
     // RAM cost: a few KB. CPU cost: negligible. Disk reads stay sequential.
     // ----------------------------------------------------------------
+    std::vector<std::bfloat16_t> carry = {};
+    size_t token_dim = 4; // 1 token = 4 bfloat16_t values
+    size_t carry_elements = portion.context_window_size * token_dim;
+    if (portion.ram_buffer_tokens.size() >= carry_elements) {
+      auto it = portion.ram_buffer_tokens.end() -
+                static_cast<std::ptrdiff_t>(carry_elements);
+      carry.assign(it, portion.ram_buffer_tokens.end());
+    }
 
     // Clear old buffer and prepend the carry-forward tokens
-    if ((!portion.ram_buffer_tokens.empty() &&
-         portion.ram_buffer_tokens.size() < portion.ram_buffer_size) ||
-        portion.ram_buffer_tokens.empty() &&
-            portion.ram_buffer_tokens.size() == 0) {
+    portion.ram_buffer_tokens.clear();
+    portion.ram_buffer_tokens = carry;
 
-      portion.ram_buffer_tokens.clear();
-
-      // 100 000 >= 512
-      if (file_stream.size() >= portion.ram_buffer_size) {
-
-        // Grab 512 tokens from ram_buffer_tokens
-        auto grabbed = file_stream.end() -
-                       static_cast<std::ptrdiff_t>(portion.ram_buffer_size);
-
-        portion.ram_buffer_tokens.assign(grabbed,
-                                         portion.ram_buffer_tokens.end());
-      }
-
-    } else {
-      std::cerr << "Ram Buffer has unused data, clear is not allowed";
-    };
-
-    // Determine remaining doubles needed to fill the RAM buffer
+    // Determine remaining elements needed to fill the RAM buffer
     size_t brain_floats_needed =
         portion.ram_buffer_size - portion.ram_buffer_tokens.size();
 
@@ -72,7 +57,7 @@ void Optimizer::disk_to_ram(Portion &portion) {
 
     portion.ram_buffer_tokens.resize(prev_size + brain_floats_needed);
 
-    // Read raw binary doubles sequentially from disk
+    // Read raw binary bfloat16_t values sequentially from disk
     file_stream.read(
         reinterpret_cast<char *>(portion.ram_buffer_tokens.data() + prev_size),
         brain_floats_needed * sizeof(std::bfloat16_t));
@@ -81,7 +66,7 @@ void Optimizer::disk_to_ram(Portion &portion) {
 
     size_t brain_floats_read = bytes_read / sizeof(std::bfloat16_t);
 
-    // Truncate to actual doubles read (handles partial read at EOF)
+    // Truncate to actual elements read (handles partial read at EOF)
     portion.ram_buffer_tokens.resize(prev_size + brain_floats_read);
 
     // Release RAM buffer lock
@@ -92,44 +77,48 @@ void Optimizer::disk_to_ram(Portion &portion) {
 // Tier 2: Extract sliding context windows from RAM buffer to feed neural
 // network
 void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
+  size_t token_dim = 4; // 1 token = 4 bfloat16_t values
+  size_t window_elements = portion.context_window_size * token_dim;
+  size_t target_elements = 1 * token_dim;
 
-  while (portion.context_in_use == false &&
-         portion.context_window_tokens.empty() && training_in_use == false) {
+  // Slide through the RAM buffer one token at a time until the end
+  // (Stop when there isn't enough data for a full context window + target)
+  for (size_t i = 0;
+       i + window_elements + target_elements <= portion.ram_buffer_tokens.size();
+       i += token_dim) {
 
+    // =========================================================================
+    // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
+    // Pause if the neural network is currently using the data, or if the
+    // context window hasn't been emptied yet by the consumer!
+    // =========================================================================
+    while (training_in_use == true || portion.context_in_use == true ||
+           !portion.context_window_tokens.empty()) {
+      // Yield or wait for the neural network to finish its pass
+      // In a real threaded environment we would sleep or yield here.
+    }
+
+    // Lock the context window and buffer
+    portion.context_in_use = true;
     portion.buffer_in_use = true;
-    portion.context_window_tokens = true;
 
-    if ((!portion.context_window_tokens.empty() &&
-         portion.context_window_tokens.size() < portion.context_window_size) ||
-        portion.context_window_tokens.empty() &&
-            portion.context_window_tokens.size() == 0) {
+    // Clear previous tokens
+    portion.context_window_tokens.clear();
+    portion.target_tokens.clear();
 
-      portion.context_window_tokens.clear();
+    // Extract Context Window (X)
+    portion.context_window_tokens.assign(
+        portion.ram_buffer_tokens.begin() + i,
+        portion.ram_buffer_tokens.begin() + i + window_elements);
 
-      // 100 000 >= 128
-      if (portion.ram_buffer_tokens.size() >= portion.context_window_size) {
+    // Extract Target (Y)
+    portion.target_tokens.assign(
+        portion.ram_buffer_tokens.begin() + i + window_elements,
+        portion.ram_buffer_tokens.begin() + i + window_elements +
+            target_elements);
 
-        // Grab 512 tokens from.context_window_tokens
-        auto grabbed = portion.ram_buffer_tokens.end() -
-                       static_cast<std::ptrdiff_t>(portion.context_window_size);
-
-        portion.context_window_tokens.assign(
-            grabbed, portion.context_window_tokens.end());
-      }
-
-    } else {
-      std::cerr << "Context Window has unused data, clear is not allowed";
-    };
-
-    // Determine remaining doubles needed to fill the RAM buffer
-    size_t brain_floats_needed =
-        portion.context_window_size - portion.context_window_tokens.size();
-
-    size_t prev_size = portion.context_window_tokens.size();
-
-    portion.context_window_tokens.resize(prev_size + brain_floats_needed);
-
+    // Release locks so the neural network can start learning on the new data
     portion.buffer_in_use = false;
-    portion.context_window_tokens = false;
+    portion.context_in_use = false;
   }
 }

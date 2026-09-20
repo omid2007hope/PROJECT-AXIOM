@@ -7,6 +7,7 @@
 #include <fstream>
 #include <ios>
 #include <iostream>
+#include <stdfloat>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -47,14 +48,14 @@ struct Input {
   std::vector<uint32_t> tokenized_data = {};
 
   // bfloat16_t
-  static_cast std::vector<bfloat16_t> embedded_data = {};
+  std::vector<std::bfloat16_t> embedded_data = {};
 
-  // Embedding lookup table: token_id -> dense vector of size emabedding_dim
+  // Embedding lookup table: token_id -> dense vector of size embedding_dim
   // bfloat16_t
   size_t embedding_dim = 4;
 
   // bfloat16_t
-  static_cast std::unordered_map<bfloat16_t, std::vector<bfloat16_t>>
+  std::unordered_map<uint32_t, std::vector<std::bfloat16_t>>
       embedding_table = {};
 };
 
@@ -152,7 +153,7 @@ public:
   std::vector<uint32_t> tokenization(Input &input, Test &test);
 
   // Standalone parser, isolated from Perceptron!
-  std::vector<double> embedding(Input &input, Test &test);
+  std::vector<std::bfloat16_t> embedding(Input &input, Test &test);
 };
 
 #endif

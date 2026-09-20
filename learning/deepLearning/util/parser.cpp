@@ -72,7 +72,7 @@ std::vector<uint32_t> Parser::tokenization(Input &input, Test &test) {
 // Each unique token ID gets a fixed embedding vector (seeded by ID for
 // stability). Layout: [emb(token_0)..., emb(token_1)..., ...] size =
 // tokenized_data.size() * embedding_dim
-std::vector<double> Parser::embedding(Input &input, Test &test) {
+std::vector<std::bfloat16_t> Parser::embedding(Input &input, Test &test) {
   input.embedded_data.clear();
   input.embedded_data.reserve(input.tokenized_data.size() *
                               input.embedding_dim);
@@ -80,11 +80,12 @@ std::vector<double> Parser::embedding(Input &input, Test &test) {
   for (uint32_t id : input.tokenized_data) {
     // Create entry on first encounter, seeded by the token ID for determinism
     if (input.embedding_table.find(id) == input.embedding_table.end()) {
-      std::vector<double> vec(input.embedding_dim);
+      std::vector<std::bfloat16_t> vec(input.embedding_dim);
       // Simple deterministic init: sin/cos of (id * dim_index) — no random
       // needed
       for (uint32_t d = 0; d < input.embedding_dim; ++d) {
-        vec[d] = std::sin(static_cast<double>(id) * (d + 1.0));
+        vec[d] = static_cast<std::bfloat16_t>(
+            std::sin(static_cast<double>(id) * (d + 1.0)));
       }
       input.embedding_table[id] = std::move(vec);
     }
