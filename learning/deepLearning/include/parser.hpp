@@ -149,10 +149,10 @@ public:
   // Mode
   bool developer_mode = true;
 
-  // Standalone parser, isolated from Perceptron!
+  // Standalone parser, isolated from AI!
   std::vector<uint32_t> tokenization(Input &input, Test &test);
 
-  // Standalone parser, isolated from Perceptron!
+  // Standalone parser, isolated from AI!
   std::vector<std::bfloat16_t> embedding(Input &input, Test &test);
 };
 

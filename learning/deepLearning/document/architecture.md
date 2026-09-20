@@ -1,10 +1,11 @@
 # AI Core: Multimodal Early-Fusion Architecture Specification
 
 ```
-Document Version : 2.0.0
-Standard         : ISO/IEC 14882:2017 (C++17)
-Classification   : Technical Design Specification
-Architecture     : Early-Fusion Multimodal Discrete Tokenizer & Dense Embedding Engine
+Document Version : 3.0.0
+Standard         : ISO/IEC 14882:2023 (C++23)
+Classification   : Technical Design Specification & Systems Architecture
+Architecture     : Early-Fusion Multimodal Tokenizer, BF16 Latent Manifold & CUDA Bridge
+Target Hardware  : NVIDIA GeForce RTX 4080 (Ada Lovelace, sm_89) / Host CPU
 ```
 
 ---
@@ -33,50 +34,119 @@ Artificial intelligence architectures face a fundamental design decision when in
    Numbers    ---> [ Scalar Binning  ]    |---> [ Unified Sequence ] ---> [ Shared ]
    Image      ---> [ Byte VQ Quant   ]    |     (tokenized_data)          [ Neural ]
    Video      ---> [ Temporal Quant  ]    |     8,289,605 tokens          [ Core   ]
-   Voice      ---> [ Audio Quant     ]  --+
+   Voice      ---> [ Audio Quant     ]  --+                               [ (AI)   ]
    * Advantages: Single sequence buffer, uniform self-attention, modality agnosticism,
      and maximum architectural simplicity.
 +---------------------------------------------------------------------------------------+
 ```
 
-**AI Core** implements the **Early Fusion** paradigm. At the earliest perceptual interface, all incoming signals are converted into a single unified stream of discrete categorical identifiers (`std::vector<uint32_t> tokenized_data`), which are subsequently projected into a shared continuous embedding space (`std::vector<float> embedded_data`).
+**AI Core** implements the **Early Fusion** paradigm. At the earliest perceptual interface, all incoming signals are converted into a single unified stream of discrete categorical identifiers (`std::vector<uint32_t> tokenized_data`), which are subsequently projected into a shared continuous embedding space (`std::vector<std::bfloat16_t> embedded_data`).
 
 ---
 
-## 2. The Producer-Consumer Architecture & Conductor Orchestration
+## 2. Visualized System Architecture & Data Flow
+
+The end-to-end architecture connects raw sensory ingestion on disk to hardware-accelerated tensor computation in GPU VRAM:
+
+```mermaid
+flowchart TD
+    subgraph SENSORY["Multimodal Sensory Ingestion"]
+        T["Text: Words ('The', 'quick', ...)"] --> P["Parser::tokenization()"]
+        N["Numbers: Scalars (5.1, 3.5, ...)"] --> P
+        I["Image: Photo.jpeg (130 KB)"] --> P
+        V["Video: Video.mp4 (8.1 MB)"] --> P
+        A["Voice: Voice.ogg (62 KB)"] --> P
+    end
+
+    subgraph DISCRETE["Discrete Categorical Space"]
+        P -->|"Monotonic Modality IDs<br/>(10M Disjoint Partitions)"| TOK["input.tokenized_data<br/>8,289,605 uint32_t tokens"]
+    end
+
+    subgraph EMBEDDING["Continuous Latent Manifold"]
+        TOK -->|"Parser::embedding()<br/>Harmonic Projection (d_model=4)"| EMB["database/embedded_data.bin<br/>33,158,420 bfloat16_t values (66.3 MB)"]
+    end
+
+    subgraph OPTIMIZER["Optimizer Memory Logistics (Producer)"]
+        EMB -->|"Tier 0: Disk Stream<br/>Optimizer::disk_to_ram()"| RAM["Tier 1: RAM Buffer<br/>100,000 tokens (800 KB BF16)<br/>+ Carry-Forward Seam"]
+        RAM -->|"Tier 2: Sliding Extraction<br/>Optimizer::ram_to_contextWindow()"| CTX["Context Window (X): 128 tokens (1 KB)<br/>Target (Y): 1 token (8 Bytes)"]
+    end
+
+    subgraph CUDA_BRIDGE["Hardware Bridge (cuda_transfer.dll)"]
+        CTX -->|"upload_to_gpu()<br/>PCIe DMA Transfer"| GPU_MEM["Tier 3: GPU Device VRAM (GpuPortion)<br/>d_context_window (1024 B)<br/>d_target (8 B)"]
+    end
+
+    subgraph NEURAL_AI["Neural Core Execution (Consumer)"]
+        GPU_MEM -->|"Tensor Cores (sm_89)<br/>GEMM & Activation"| AI_CORE["AI Neural Engine<br/>Forward Pass: y = ReLU(W*x + b)<br/>Loss & Backpropagation"]
+    end
+
+    style SENSORY fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#f8fafc
+    style DISCRETE fill:#1e293b,stroke:#8b5cf6,stroke-width:2px,color:#f8fafc
+    style EMBEDDING fill:#1e293b,stroke:#ec4899,stroke-width:2px,color:#f8fafc
+    style OPTIMIZER fill:#1e293b,stroke:#10b981,stroke-width:2px,color:#f8fafc
+    style CUDA_BRIDGE fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#f8fafc
+    style NEURAL_AI fill:#1e293b,stroke:#ef4444,stroke-width:2px,color:#f8fafc
+```
+
+---
+
+## 3. The Producer-Consumer Architecture & Conductor Orchestration
 
 The deep learning data pipeline is a textbook implementation of the **Producer-Consumer Problem**:
-- **Producer:** The `Optimizer` DataLoader (reads chunks from disk, extracts tokens, structures context windows).
-- **Consumer:** The `Perceptron` (ingests the context window, multiplies against weights, updates gradients).
+- **Producer:** The `Optimizer` DataLoader (reads chunks from disk, extracts tokens, structures sliding context windows).
+- **Consumer:** The `AI` Neural Core (ingests the context window, multiplies against weights, updates gradients).
 
-### 2.1 The Two Paths of Execution
-When engineering the flow of data between the Producer and Consumer, there are two distinct paths:
+### 3.1 The Conductor Model (Single-Threaded Deterministic Execution)
 
-1. **Path 1: The Single-Threaded "Conductor" (Sequential Execution)**
-   The training loop acts as a strict orchestra conductor. The Conductor tells the Optimizer to carve out a 128-token window and wait. The Optimizer returns control. The Conductor then tells the Perceptron to consume the data. No concurrent tasks run; everything is predictable, guaranteeing absolute synchronization without deadlocks.
-2. **Path 2: The Multi-Threaded "Conveyor Belt" (Concurrent Execution)**
-   Thread A (DataLoader) reads from disk constantly. Thread B (Perceptron) does matrix math. To prevent spinning CPU locks, OS-level **Condition Variables** and **Mutexes** put threads to sleep and wake them only when data is ready. This provides massive speedups but introduces severe race condition risks.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Conductor as Training Conductor
+    participant Disk as Tier 0: Disk Storage
+    participant Optimizer as Tier 1 & 2: Optimizer
+    participant Bridge as CUDA Bridge (DLL)
+    participant GPU as Tier 3: GPU VRAM (AI)
 
-### 2.2 The Current Implementation
-**AI Core** currently implements **Path 1: The Single-Threaded Conductor**. The CPU operates as the sole logistics engine, meticulously organizing memory buffers sequentially to ensure mathematical stability and enforce the Life and Death Data Synchronization Guarantee before introducing complex threading.
+    Note over Conductor,GPU: Epoch Initialization
+    Conductor->>Optimizer: disk_to_ram(portion)
+    Optimizer->>Disk: Sequential read 100,000 tokens (BF16)
+    Disk-->>Optimizer: Populate portion.ram_buffer_tokens (800 KB)
+    Optimizer-->>Conductor: Buffer ready (buffer_in_use = false)
+
+    loop Slide 128-token Windows across RAM Buffer
+        Conductor->>Optimizer: ram_to_contextWindow(portion, training_in_use)
+        Optimizer->>Optimizer: Extract X (128 tokens) & Y (1 token)
+        Optimizer-->>Conductor: Context ready (context_in_use = false)
+
+        Conductor->>Bridge: upload_to_gpu(h_context, h_target, &gpu)
+        Bridge->>GPU: cudaMemcpyAsync Host-to-Device (1 KB)
+        GPU-->>Bridge: Transfer complete (d_context_window populated)
+        Bridge-->>Conductor: Upload verified
+
+        Conductor->>GPU: Execute AI Forward Pass & Backpropagation
+        GPU->>GPU: Tensor Core GEMM: y = ReLU(W * x + b)
+        GPU-->>Conductor: Weights updated
+    end
+
+    Note over Conductor,Disk: Seam Preservation at Chunk Boundary
+    Optimizer->>Optimizer: Preserve last 128 tokens as Carry-Forward
+    Optimizer->>Disk: Stream next 100k chunk & prepend carry
+```
+
+The training loop acts as a strict orchestra conductor. The Conductor tells the Optimizer to carve out a 128-token window and wait. The Optimizer returns control. The Conductor then transfers tensors over PCIe to GPU VRAM and commands the AI to consume the data. No concurrent tasks run uncoordinated; everything is predictable, guaranteeing absolute synchronization without race conditions or deadlocks.
 
 ---
 
-## 2. Universal Discrete Token Space & Namespace Partitioning
+## 4. Universal Discrete Token Space & Namespace Partitioning
 
-### 2.1 The Cross-Modal Semantic Collision Problem
+### 4.1 The Cross-Modal Semantic Collision Problem
 
 When multiple sensory streams are flattened into a single sequence, catastrophic semantic collision occurs if identical integer identifiers are assigned to different concepts across modalities:
 
 $$\text{Let } \text{ID}(w) \in \mathbb{Z}^+ \text{ be the token mapping function.}$$
 
-If $\text{ID}(\text{"The"}) = 1$ and $\text{ID}(\text{Pixel}_{0}) = 1$, the downstream embedding lookup table:
+If $\text{ID}(\text{"The"}) = 1$ and $\text{ID}(\text{Pixel}_{0}) = 1$, the downstream embedding lookup table assigns the exact same geometric vector to an English grammatical article and an absolute-black image pixel.
 
-$$\mathbf{E}[\text{ID}] \in \mathbb{R}^{d_{\text{model}}}$$
-
-assigns the exact same geometric vector to an English grammatical article and an absolute-black image pixel. The neural network's self-attention matrix cannot differentiate language from vision without external metadata tags.
-
-### 2.2 The 10,000,000-Slot Disjoint Allocation
+### 4.2 The 10,000,000-Slot Disjoint Allocation
 
 To guarantee zero mathematical overlap while maintaining complete modality agnosticism in downstream layers, **AI Core** establishes fixed 10-million integer intervals for each sensory domain:
 
@@ -91,45 +161,39 @@ To guarantee zero mathematical overlap while maintaining complete modality agnos
 | Sensory Domain | Active ID Counter | Counter Init | Theoretical Capacity | Active Dictionary Key Type | Dictionary Storage Container |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Natural Language** | `next_text_id` | `1` | 9,999,999 tokens | `std::string` | `std::unordered_map<std::string, uint32_t>` |
-| **Tabular Numbers** | `next_number_id` | `10,000,000` | 10,000,000 tokens | `float` | `std::unordered_map<float, uint32_t>` |
+| **Tabular Numbers** | `next_number_id` | `10,000,000` | 10,000,000 tokens | `double` | `std::unordered_map<double, uint32_t>` |
 | **Visual Imagery** | `next_image_id` | `20,000,000` | 10,000,000 tokens | `uint8_t` | `std::unordered_map<uint8_t, uint32_t>` |
 | **Temporal Video** | `next_video_id` | `30,000,000` | 10,000,000 tokens | `uint8_t` | `std::unordered_map<uint8_t, uint32_t>` |
 | **Acoustic Audio** | `next_voice_id` | `40,000,000` | 10,000,000 tokens | `uint8_t` | `std::unordered_map<uint8_t, uint32_t>` |
 
-### 2.3 Mathematical Proof of Disjoint Invariant
-
-Let $S_{\text{text}}, S_{\text{num}}, S_{\text{img}}, S_{\text{vid}}, S_{\text{voice}} \subset \mathbb{N}$ represent the set of emitted token IDs for each modality:
-
-$$\forall a \in S_i, \forall b \in S_j \text{ where } i \neq j \implies a \neq b$$
-
-$$\bigcap_{m \in \{\text{text, num, img, vid, voice}\}} S_m = \emptyset$$
-
-Because the intersection of all vocabulary subsets is strictly empty, the unified downstream embedding layer can map any token ID directly to its unique latent manifold row without requiring modality tagging or conditional branching.
-
 ---
 
-## 3. Subsystem Topology & Decoupling
+## 5. Subsystem Topology & Decoupling
 
 Following the Single Responsibility Principle and modern systems-engineering guidelines, **AI Core** isolates perceptual transformation from neural processing:
 
-```
-+---------------------------------------------------------------------------------------+
-|                                    AI CORE TOPOLOGY                                   |
-+---------------------------------------------------------------------------------------+
+```mermaid
+graph LR
+    subgraph FRONTEND["Perceptual Frontend"]
+        P_IN["struct Input & Test<br/>(State Containers)"] --> PARSER["class Parser<br/>(Tokenization & Embeddings)"]
+    end
 
-       [ Test / Input Structs ]   <--- Plain Data Carriers (State & Configuration)
-                  |
-                  v
-          [ Parser Engine ]        <--- Perceptual Frontend (Tokenization & Embeddings)
-                   |
-                   v
-        [ Unified Tensor Stream ]  <--- Pure Numerical Vectors (std::vector<float>)
-                   |
-                   v
-     [ PCIe Bus / CUDA Memory Map] <--- Hand-off from CPU Host to GPU Device
-                   |
-                   v
-        [ GPU Tensor Cores ]       <--- Cognitive Execution (Forward Pass & Activation)
+    subgraph LOGISTICS["Memory Logistics"]
+        PARSER -->|"database/embedded_data.bin"| OPT["class Optimizer<br/>(3-Tier Streaming & Seams)"]
+    end
+
+    subgraph HARDWARE_BRIDGE["Hardware Transfer Bridge"]
+        OPT -->|"GpuPortion & upload_to_gpu()"| DLL["cuda_transfer.dll<br/>(MSVC C ABI Export)"]
+    end
+
+    subgraph NEURAL_BACKEND["Cognitive Execution"]
+        DLL -->|"Device Pointers (VRAM)"| AI_CLASS["class AI<br/>(Tensor Cores & Forward Pass)"]
+    end
+
+    style FRONTEND fill:#0f172a,stroke:#38bdf8,stroke-width:1px,color:#fff
+    style LOGISTICS fill:#0f172a,stroke:#34d399,stroke-width:1px,color:#fff
+    style HARDWARE_BRIDGE fill:#0f172a,stroke:#fbbf24,stroke-width:1px,color:#fff
+    style NEURAL_BACKEND fill:#0f172a,stroke:#f87171,stroke-width:1px,color:#fff
 ```
 
 ### Component Responsibilities:
@@ -146,16 +210,24 @@ Following the Single Responsibility Principle and modern systems-engineering gui
    - Executes discrete tokenization across all five sensory modalities.
    - Manages disk streaming and path resolution (`tokenize_from_disk`).
    - Implements the generic insertion routine `add_assign_increase<T>()`.
-   - Synthesizes dense continuous embedding tensors (`Parser::embedding()`).
+   - Synthesizes dense continuous BF16 embedding tensors (`Parser::embedding()`).
    - **Strict Constraint:** Possesses zero dependencies on neural weights, gradients, or loss functions.
-4. **`class Perceptron` (`include/perceptron.hpp`, `src/perceptron.cpp`)**:
-   - Represents the atomic artificial neuron nucleus.
+4. **`class Optimizer` (`include/optimizer.hpp`, `util/optimizer.cpp`)**:
+   - Manages 3-tier memory streaming: Disk $\rightarrow$ RAM Buffer $\rightarrow$ Context Window.
+   - Enforces the Life and Death Data Synchronization Guarantee via `buffer_in_use` and `context_in_use` state locks.
+   - Implements Carry-Forward seam preservation to eliminate chunk boundary amnesia.
+5. **`cuda_transfer.dll` (`src/CUDA/transfer.cu`, `src/CUDA/transfer.cuh`)**:
+   - Inter-compiler ABI bridge: Compiled by MSVC `cl.exe` + `nvcc`, consumed by MinGW `g++`.
+   - Manages GPU device allocations (`cudaMalloc`, `cudaMemcpy`, `cudaFree`) inside `GpuPortion`.
+   - Features intelligent buffer reuse to avoid per-window reallocation overhead.
+6. **`class AI` (`include/ai.hpp`, `src/ai.cpp`)**:
+   - Represents the core cognitive nucleus.
    - Accepts raw numerical inputs (`Key_Concepts`), weights, biases, and computes forward projections.
    - **Strict Constraint:** Possesses zero awareness of string tokens, file paths, or perceptual dictionaries.
 
 ---
 
-## 4. End-to-End Pipeline Execution Flow
+## 6. End-to-End Pipeline Execution Flow
 
 ```
 +---------------------------------------------------------------------------------------+
@@ -182,35 +254,46 @@ Following the Single Responsibility Principle and modern systems-engineering gui
   1. For each token ID in input.tokenized_data:
      - Check if token ID exists in input.embedding_table.
      - If absent: generate deterministic d_model vector (d = 4) via:
-       v[d] = sinf(token_id * (d + 1.0f))
+       v[d] = static_cast<std::bfloat16_t>(sin(id * (d + 1.0)))
      - Insert dense vector into input.embedding_table[token_id].
      - Append dense slice to input.embedded_data.
-  -> Result: 33,158,420 continuous 32-bit floating-point values (8.289M tokens * 4 dimensions).
+  2. Save entire contiguous sequence to database/embedded_data.bin (66,316,840 bytes).
+  -> Result: 33,158,420 continuous bfloat16_t values (8.289M tokens * 4 dimensions).
 
                                           |
                                           v
 
 +---------------------------------------------------------------------------------------+
-| STAGE 3: HOST TO DEVICE TRANSFER & NEURAL EXECUTION (CUDA / Tensor Cores)             |
+| STAGE 3: THREE-TIER OPTIMIZER STREAMING (Optimizer::disk_to_ram, ram_to_contextWindow)|
 +---------------------------------------------------------------------------------------+
-  1. Host CPU issues cudaMemcpy to push 512-float buffer over PCIe to GPU VRAM.
+  1. Optimizer streams 100,000 tokens (400,000 BF16 values = 800 KB) into RAM buffer.
+  2. Extracts sliding 128-token context window (512 BF16 values = 1,024 bytes) and target.
+  3. Preserves seam tokens as carry-forward before replenishing RAM buffer from disk.
+
+                                          |
+                                          v
+
++---------------------------------------------------------------------------------------+
+| STAGE 4: HOST-TO-DEVICE TRANSFER & NEURAL EXECUTION (cuda_transfer.dll / Tensor Cores)|
++---------------------------------------------------------------------------------------+
+  1. Host CPU calls upload_to_gpu() to push 1 KB context window over PCIe to GPU VRAM.
   2. GPU Tensor Cores execute massive parallel dot-product kernels:
      y = dot_product(X, W) + b
   3. Non-linear activation evaluation (ReLU, GELU, SwiGLU).
-  4. Scalar error computation against ground truth.
+  4. Scalar error computation against ground truth target Y.
 ```
 
 ---
 
-## 5. Architectural Trajectory Toward LLaMA Primitives
+## 7. Architectural Trajectory Toward Foundation Attention Models
 
 The current architecture establishes the exact sequence formatting required for modern Transformer and LLaMA foundation models:
 
 1. **RMSNorm (Root Mean Square Normalization):**
    $$\bar{x}_i = \frac{x_i}{\sqrt{\frac{1}{d} \sum_{j=1}^d x_j^2 + \epsilon}} \cdot \gamma_i$$
 2. **Rotary Positional Embeddings (RoPE):**
-   Encodes sequence order directly onto the projected Q and K vectors without requiring additive absolute positional embeddings.
+   Encodes sequence order directly onto the projected $Q$ and $K$ vectors without requiring additive absolute positional embeddings.
 3. **SwiGLU Gated Feed-Forward Networks:**
    $$\text{SwiGLU}(x) = \left( x \mathbf{W}_1 \cdot \text{sigmoid}(x \mathbf{W}_1) \right) \cdot (x \mathbf{W}_2)$$
 4. **Autoregressive KV Cache:**
-   Persisting key and value projection tensors across generative steps to prevent redundant matrix multiplications.
+   Persisting key and value projection tensors across generative steps in GPU VRAM to prevent redundant matrix multiplications.

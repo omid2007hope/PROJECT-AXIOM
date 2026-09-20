@@ -1,5 +1,5 @@
-#ifndef include_perceptron
-#define include_perceptron
+#ifndef include_ai
+#define include_ai
 
 /*
 1. The Context Window (How the AI "reads")
@@ -16,14 +16,14 @@ You try to guess word 129 (your target, $y$).
 Then, you slide the magnifying glass over by one word. You look at words 2
 through 129, and try to guess word 130. Because each of your tokens is
 represented by 4 floats (your embedding_dim), a context window of 128 tokens
-means the Perceptron is looking at $128 \times 4 = 512$ floats at any given
+means the AI is looking at $128 \times 4 = 512$ floats at any given
 time.
 
 So, our data loader's job is simply to march down your massive array, slicing it
-into chunks of 512 floats, and feeding them to the Perceptron one by one.
+into chunks of 512 floats, and feeding them to the AI one by one.
 
 2. The Forward Pass (How the AI "thinks")
-Once the Perceptron receives those 512 floats, it has to make a prediction. This
+Once the AI receives those 512 floats, it has to make a prediction. This
 is where the linear algebra comes in. The "Forward Pass" is the core equation of
 all deep learning:
 
@@ -33,7 +33,7 @@ Let's demystify what these letters mean:
 
 $x$ (The Input): The 512 floats from your context window.
 $W$ (The Weights): These are the "synapses" of the brain. For every single one
-of the 512 inputs, the Perceptron has a specific multiplier (a weight) that
+of the 512 inputs, the AI has a specific multiplier (a weight) that
 determines how important that input is. If the network needs to output 4 floats
 (predicting the next token's embedding), the weight matrix $W$ will have $4
 \times 512 = 2,048$ individual weights. The network multiplies the inputs by the
@@ -62,14 +62,14 @@ struct Key_Concepts {
   double loss_function = 0.0; // Calculate how wrong the guess was
 };
 
-class Perceptron {
+class AI {
 public:
   double weight;
   double biases;
   double forward_pass;
   double loss_function;
 
-  Perceptron(Key_Concepts &keys);
+  AI(Key_Concepts &keys);
 };
 
-#endif // include_perceptron
+#endif // include_ai

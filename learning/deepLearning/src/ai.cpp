@@ -1,6 +1,6 @@
-#include "../include/perceptron.hpp"
+#include "../include/ai.hpp"
 
-Perceptron::Perceptron(Key_Concepts &keys) {
+AI::AI(Key_Concepts &keys) {
   // Just a prototype now!
   weight = keys.weight;
   biases = keys.biases;

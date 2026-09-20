@@ -33,19 +33,19 @@ struct Portion {
   // ---------------------------------------------------------
   size_t ram_buffer_size = 100000;
 
-  // Holds: ram_buffer_size * embedding_dim (e.g., 400,000 doubles)
+  // Holds: ram_buffer_size * embedding_dim (e.g., 400,000 bfloat16_t values)
   std::vector<std::bfloat16_t> ram_buffer_tokens = {};
 
   // ---------------------------------------------------------
-  // Tier 2: The AI's Field of View (RAM -> Perceptron)
-  // Optimal for basic CPU Perceptron: 64 or 128 tokens.
+  // Tier 2: The AI's Field of View (RAM -> AI)
+  // Optimal for basic AI: 64 or 128 tokens.
   // ---------------------------------------------------------
   size_t context_window_size = 128;
 
-  // The Input (X): What the AI sees (128 tokens * 4 dim = 512 doubles)
+  // The Input (X): What the AI sees (128 tokens * 4 dim = 512 bfloat16_t values)
   std::vector<std::bfloat16_t> context_window_tokens = {};
 
-  // The Target (Y): The prediction ground-truth (1 token * 4 dim = 4 doubles)
+  // The Target (Y): The prediction ground-truth (1 token * 4 dim = 4 bfloat16_t values)
   std::vector<std::bfloat16_t> target_tokens = {};
 };
 
