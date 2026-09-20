@@ -34,16 +34,21 @@ TEST_TARGET = learning/deepLearning/test.exe
 all: $(APP_TARGET) $(TEST_TARGET)
 
 # ─── Compile CUDA sources into a single relocatable object ───────────────────
+# If nvcc fails (e.g., MSVC cl.exe not yet installed), skip and build CPU only.
 $(CUDA_OBJ): $(CUDA_SRCS)
-	$(NVCC) $(NVCCFLAGS) -c $(CUDA_SRCS) -o $(CUDA_OBJ)
+	-$(NVCC) $(NVCCFLAGS) -c $(CUDA_SRCS) -o $(CUDA_OBJ)
+
+# Helper: return the CUDA obj only if it was successfully built
+CUDA_LINK = $(if $(wildcard $(CUDA_OBJ)),$(CUDA_OBJ),)
+CUDA_LIB  = $(if $(wildcard $(CUDA_OBJ)),$(CUDA_LIBS),)
 
 # ─── Link CPU + GPU into the app ─────────────────────────────────────────────
 $(APP_TARGET): $(APP_SRCS) $(CUDA_OBJ)
-	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_OBJ) $(CUDA_LIBS) -o $(APP_TARGET)
+	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_LINK) $(CUDA_LIB) -o $(APP_TARGET)
 
 # ─── Link CPU + GPU into the test binary ─────────────────────────────────────
 $(TEST_TARGET): $(TEST_SRCS) $(CUDA_OBJ)
-	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_OBJ) $(CUDA_LIBS) -o $(TEST_TARGET)
+	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) $(CUDA_LIB) -o $(TEST_TARGET)
 
 # ─── Clean ───────────────────────────────────────────────────────────────────
 clean:
