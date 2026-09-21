@@ -1,261 +1,272 @@
-Listed directory Brain
-Listed directory database
-Listed directory learning
-Listed directory deepLearning
-Listed directory include
-Listed directory src
-Listed directory CUDA
-Listed directory util
-Listed directory test
-Listed directory document
-Listed directory ref
-Listed directory asset_sample
-Viewed Makefile:1-56
-Viewed README.md:1-224
-Viewed .gitignore:1-19
-Viewed ai.hpp:1-76
-Viewed optimizer.hpp:1-63
-Viewed parser.hpp:1-159
-Viewed training.hpp:1-28
-Viewed ai.cpp:1-16
-Viewed training.cpp:1-13
-Viewed main.cpp:1-32
-Viewed transfer.cuh:1-46
-Viewed transfer.cu:1-106
-Viewed parser.cpp:1-104
-Viewed optimizer.cpp:1-124
-Viewed test_header.hpp:1-12
-Viewed test_path.cpp:1-3
-Viewed test_ifstream.cpp:1-15
-Viewed test_tokenization.cpp:1-61
-Viewed test_embeddings.cpp:1-136
-Viewed test_optimizer.cpp:1-154
-Viewed test_cuda_transfer.cpp:1-225
-Viewed run_test.ps1:1-10
-Viewed architecture.md:1-300
-Viewed build_and_toolchain.md:1-350
-Viewed data_structures_and_cpp_design.md:1-178
-Viewed life_and_death_guarantee.md:1-167
-Viewed memory_hierarchy_and_hardware.md:1-148
-Viewed tokenization_and_embeddings.md:1-151
-Viewed .gitattributes:1-4
+# AI Core: Production Systems Audit & SaaS Engineering Roadmap
 
-I have performed a complete, file-by-file and line-by-line inspection across the entire project repository.
+> **Audit Status:** Comprehensive Line-by-Line Inspection Complete  
+> **Standard:** ISO/IEC 14882:2023 (C++23) | NVIDIA CUDA (sm_89)  
+> **Total Action Items:** 25 Tasks Across 5 Priority Tiers  
 
 ---
 
-### Project Map & Structural Overview
+## Executive Priority Matrix
+
+| Priority | Focus Area | Impact Level | Items | Status |
+| :--- | :--- | :--- | :---: | :---: |
+| **P1** | Critical Architecture, Data Integrity & Security | High Risk / Data Loss / Crashes | 6 | `0 / 6` |
+| **P2** | Neural Nucleus, GPU Compute & Multimodal Logic | Core Model Capabilities | 6 | `0 / 6` |
+| **P3** | Reliability, Checkpointing & Systems Safeguards | Persistence & Portability | 4 | `0 / 4` |
+| **P4** | Cloud Architecture, Ingestion APIs & SaaS Services | Production SaaS Infrastructure | 6 | `0 / 6` |
+| **P5** | DevOps, Packaging, Decoupling & CI/CD | Automation & Distribution | 3 | `0 / 3` |
+
+---
+
+## Architectural Repository Layout
 
 ```
 c:/Users/Omid/X/Code/Brain/
-├── Makefile                               # Unified build file (MinGW g++ + MSVC nvcc)
-├── README.md                              # Comprehensive architectural & roadmap documentation
-├── .gitignore / .gitattributes            # Repository ignore rules and LF line ending policies
+├── Makefile                               # Dual-compiler build configuration (MinGW g++ + MSVC nvcc)
+├── README.md                              # Systems documentation and technical overview
 ├── database/
-│   └── embedded_data.bin                  # Generated binary latent stream (66.32 MB BF16 values)
+│   └── embedded_data.bin                  # Binary latent stream (66.32 MB BF16 values)
 └── learning/
     └── deepLearning/
-        ├── cuda_transfer.dll / .lib / .exp# Built CUDA bridge shared library
-        ├── test.exe                       # Compiled test harness executable
-        ├── asset_sample/                  # Raw multimodal test media
-        │   ├── Photo.jpeg                 # Image asset (130,513 B)
-        │   ├── Video.mp4                  # Video asset (8,096,817 B)
-        │   └── Voice.ogg                  # Audio asset (62,254 B)
-        ├── document/                      # Technical specifications
-        │   ├── architecture.md
-        │   ├── build_and_toolchain.md
-        │   ├── data_structures_and_cpp_design.md
-        │   ├── life_and_death_guarantee.md
-        │   ├── memory_hierarchy_and_hardware.md
-        │   └── tokenization_and_embeddings.md
+        ├── cuda_transfer.dll              # Dynamic CUDA PCIe transfer bridge
+        ├── asset_sample/                  # Multimodal binary media assets
+        │   ├── Photo.jpeg                 # Visual sample (130 KB)
+        │   ├── Video.mp4                  # Temporal video sample (8.1 MB)
+        │   └── Voice.ogg                  # Acoustic audio sample (62 KB)
+        ├── document/                      # Architectural & memory specifications
         ├── include/                       # Core header declarations
         │   ├── ai.hpp                     # AI class & Key_Concepts definitions
-        │   ├── optimizer.hpp              # Portion struct & Optimizer data loader
+        │   ├── optimizer.hpp              # Portion struct & Optimizer loader
         │   ├── parser.hpp                 # Input, Test, and Parser declarations
         │   └── training.hpp               # Train struct & Training interface
-        ├── ref/                           # Architectural diagram assets
-        ├── src/                           # Core source files
-        │   ├── ai.cpp                     # AI nucleus prototype
+        ├── src/                           # Implementation sources
+        │   ├── ai.cpp                     # AI nucleus implementation
         │   ├── main.cpp                   # Test suite orchestration entry point
         │   ├── training.cpp               # Training execution prototype
         │   └── CUDA/
         │       ├── transfer.cu            # GPU allocation and PCIe DMA transfer implementation
         │       └── transfer.cuh           # C ABI bridge interface and GpuPortion struct
-        ├── test/                          # Verification test suites
-        │   ├── run_test.ps1               # Scratch test runner script
+        ├── test/                          # Unit and integration test suites
         │   ├── test_cuda_transfer.cpp     # 32 GPU & BF16 transfer unit tests
         │   ├── test_embeddings.cpp        # 16 BF16 embedding verification tests
-        │   ├── test_header.hpp            # Test path helper
-        │   ├── test_ifstream.cpp          # Stream validation test
         │   ├── test_optimizer.cpp         # 30 Optimizer & Portion state tests
-        │   ├── test_path.cpp              # Path resolution test
         │   └── test_tokenization.cpp      # Multimodal tokenization verification
         └── util/                          # Systems utilities & data parsers
             ├── optimizer.cpp              # 3-tier streaming & carry-forward implementation
-            └── parser.cpp                 # Multimodal tokenizer & BF16 embedding generation
+            └── parser.cpp                 # Multimodal tokenizer & BF16 embedding logic
 ```
 
 ---
 
-## Prioritized Gap & Vulnerability Audit (Highest to Lowest)
+## Priority 1: Critical Architecture, Data Integrity & Security
+
+> [!CAUTION]
+> These issues cause active runtime bugs, silent data drops, memory corruption, or security vulnerabilities under real workloads.
+
+- [ ] **P1.01 — Fix Context Window Overwrite & Immediate Eviction in DataLoader**
+  - **Location:** [`optimizer.cpp:L87-119`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L87-L119)
+  - **Classification:** `Architecture` / `Data Loss Bug`
+  - **Defect:** `Optimizer::ram_to_contextWindow` runs an internal `for` loop slicing through all windows in the 100k-token buffer. It overwrites `portion.context_window_tokens` and `portion.target_tokens` on each step without yielding or invoking training. On return, only the final window remains; all preceding windows (24,000+) are lost.
+  - **Action Required:** Redesign into a sequential window iterator `bool get_next_context_window(Portion&, size_t& offset)` or accept a training callback:
+    ```cpp
+    template <typename Callback>
+    void ram_to_contextWindow(Portion &portion, Callback &&train_step);
+    ```
+
+- [ ] **P1.02 — Add Boundary & Null Pointer Validation to CUDA Bridge**
+  - **Location:** [`transfer.cu:L22-63`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/CUDA/transfer.cu#L22-L63)
+  - **Classification:** `Security` / `Memory Safety`
+  - **Defect:** `upload_to_gpu()` verifies `if (!gpu) return false;` but executes raw `cudaMemcpy` on `h_context` and `h_target` without validating that pointers are non-null and point to valid, allocated memory of size `context_elements * sizeof(__nv_bfloat16)`.
+  - **Action Required:** Enforce rigorous input validation before DMA calls:
+    ```cpp
+    if (!gpu || !h_context || !h_target || context_elements == 0 || target_elements == 0) {
+        fprintf(stderr, "Invalid memory parameters in upload_to_gpu\n");
+        return false;
+    }
+    ```
+
+- [ ] **P1.03 — Prevent Arbitrary File Ingestion & Path Traversal**
+  - **Location:** [`parser.cpp:L54-65`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L54-L65) and [`parser.hpp:L107-146`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L107-L146)
+  - **Classification:** `Security` / `Path Traversal`
+  - **Defect:** In production mode (`developer_mode = false`), user-supplied paths (`user_image_paths`, `user_video_paths`, `user_voice_paths`) are forwarded to `tokenize_from_disk()` without sandboxing, permitting arbitrary system file reads.
+  - **Action Required:** Implement path canonicalization via `std::filesystem::canonical` and enforce a whitelist or root sandbox directory check before opening any file stream.
+
+- [ ] **P1.04 — Enforce File Size Caps & Ingestion Streaming Quotas**
+  - **Location:** [`parser.cpp:L141-145`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L141-L145)
+  - **Classification:** `Security` / `Denial of Service (DoS)`
+  - **Defect:** `tokenize_from_disk()` iterates with `while (parsed_data.get(byte))` appending to `input.tokenized_data` with no token quota or file size limit. Ingesting multi-gigabyte files exhausts physical host RAM.
+  - **Action Required:** Check `std::filesystem::file_size()` against a strict maximum quota (e.g., 50 MB per file) and cap token emission per call.
+
+- [ ] **P1.05 — Resolve Buffer Unit Mismatch (Tokens vs Brain Floats)**
+  - **Location:** [`optimizer.hpp:L34-37`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/optimizer.hpp#L34-L37) vs [`optimizer.cpp:L54-59`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L54-L59)
+  - **Classification:** `Logic Flaw` / `Resource Underallocation`
+  - **Defect:** `ram_buffer_size = 100000` is documented as tokens ($100{,}000 \times 4 = 400{,}000$ floats). However, `disk_to_ram()` evaluates:
+    ```cpp
+    size_t brain_floats_needed = portion.ram_buffer_size - portion.ram_buffer_tokens.size();
+    ```
+    This allocates only 100,000 floats (25,000 tokens), starving the pipeline by 75%.
+  - **Action Required:** Standardize units: define `ram_buffer_token_capacity = 100000` and compute `ram_buffer_float_capacity = ram_buffer_token_capacity * embedding_dim`.
+
+- [ ] **P1.06 — Upgrade State Flags to Atomic Concurrency Primitives**
+  - **Location:** [`optimizer.hpp:L26-27`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/optimizer.hpp#L26-L27) and [`training.hpp:L15`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/training.hpp#L15)
+  - **Classification:** `Concurrency` / `Race Conditions`
+  - **Defect:** `buffer_in_use`, `context_in_use`, and `training_in_use` are primitive non-volatile `bool` types without memory barriers. When decoupling disk streaming from GPU training across threads, this leads to torn reads, race conditions, and undefined behavior.
+  - **Action Required:** Upgrade state locks to `std::atomic<bool>` or implement a synchronized channel with `std::mutex` and `std::condition_variable`.
 
 ---
 
-### Priority 1: Critical Architectural Defects, Data Integrity & Security Flaws
+## Priority 2: Missing Core Neural Components & Algorithmic Stubs
 
-#### 1. Context Window Overwrite / Window Eviction Bug
-- **Location:** [`optimizer.cpp:L87-119`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L87-L119)
-- **Defect:** In `Optimizer::ram_to_contextWindow`, the loop iterates over all sliding windows in the RAM buffer, continuously writing to `portion.context_window_tokens` and `portion.target_tokens` without ever yielding, calling a callback, or invoking training.
-- **Impact:** When the function returns, only the **very last window** remains in memory. Tens of thousands of intermediate context windows are overwritten and discarded without being trained.
-- **Requirement:** Refactor to either a single-window extraction iterator (`bool get_next_window(Portion&, ...)`) or accept a training callback/lambda per window.
+> [!IMPORTANT]
+> The architectural documentation specifies an end-to-end cognitive runtime; currently, the core AI math, GPU compute kernels, and training loops exist only as stubs.
 
-#### 2. Unchecked Pointers & Host Memory Over-Read in CUDA Bridge
-- **Location:** [`transfer.cu:L22-63`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/CUDA/transfer.cu#L22-L63)
-- **Defect:** `upload_to_gpu()` checks `if (!gpu) return false;`, but fails to validate `h_context` or `h_target`. If a caller passes `nullptr` or an incorrect element count, `cudaMemcpy` attempts to read invalid host memory.
-- **Impact:** Segmentation faults, memory access violations, or reading unmapped pages.
-- **Requirement:** Add assertions and null checks for `h_context` and `h_target`, plus bounds verification before DMA transfers.
+- [ ] **P2.01 — Implement the AI Neural Nucleus & Forward Pass**
+  - **Location:** [`ai.cpp:L3-15`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/ai.cpp#L3-L15) and [`ai.hpp:L58-73`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/ai.hpp#L58-L73)
+  - **Classification:** `Core Feature` / `Machine Learning`
+  - **Current State:** `AI::AI` sets weights, biases, and forward pass to `0.0`. `Key_Concepts` uses scalar `double` instead of tensor representations.
+  - **Action Required:** Implement weight matrix storage ($W \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$), bias vectors ($b$), dot-product matrix multiplication, activation functions (ReLU, GELU, SwiGLU), and loss calculation (MSE/Cross-Entropy).
 
-#### 3. Arbitrary File Access / Path Traversal
-- **Location:** [`parser.cpp:L54-65`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L54-L65) and [`parser.hpp:L107-146`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L107-L146)
-- **Defect:** In production mode (`developer_mode = false`), `user_image_paths`, `user_video_paths`, and `user_voice_paths` are passed directly to `tokenize_from_disk()`.
-- **Impact:** An unauthorized caller or tenant can supply paths like `../../../../etc/passwd` or sensitive system files, which the engine reads into the token stream.
-- **Requirement:** Path canonicalization (`std::filesystem::canonical`), sandboxing to a configured asset directory, and path traversal rejection.
+- [ ] **P2.02 — Develop GPU Compute Kernels (Tensor Core GEMM on sm_89)**
+  - **Location:** [`transfer.cu`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/CUDA/transfer.cu)
+  - **Classification:** `CUDA` / `GPU Acceleration`
+  - **Current State:** The CUDA library only performs DMA memory transfers (`cudaMemcpy`). No device kernels exist for mathematical computation.
+  - **Action Required:** Author CUDA kernels for:
+    - Matrix multiplication (`forward_gemm_kernel` using WMMA/MMA instructions or cuBLASLt)
+    - Vectorized activation evaluation (`relu_forward_kernel`)
+    - Mean Squared Error / Cross-Entropy loss computation kernel.
 
-#### 4. Unbounded Ingestion / Denial of Service (DoS)
-- **Location:** [`parser.cpp:L141-145`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L141-L145)
-- **Defect:** `tokenize_from_disk()` reads files byte-by-byte into `input.tokenized_data` with no file size check, token cap, or rate limit.
-- **Impact:** Uploading a large file or streaming from a virtual device exhausts system RAM and triggers the OS OOM killer.
-- **Requirement:** Enforce maximum file size checks, token streaming limits, and quota enforcement.
+- [ ] **P2.03 — Build Training Orchestration & Backpropagation Loop**
+  - **Location:** [`training.cpp:L5-12`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/training.cpp#L5-L12)
+  - **Classification:** `Core Feature` / `Training Engine`
+  - **Current State:** `Training::training()` instantiates a local empty `Portion` and invokes `ram_to_contextWindow()` once with zero feedback.
+  - **Action Required:** Implement an end-to-end training loop:
+    1. Read buffer from disk (`disk_to_ram`)
+    2. Extract context window + target (`ram_to_contextWindow`)
+    3. Upload to device VRAM (`upload_to_gpu`)
+    4. Compute forward pass and loss
+    5. Compute gradients and update weights (`optimizer_step` / AdamW)
+    6. Advance sliding window.
 
-#### 5. Dimension / Unit Mismatch in RAM Buffer Sizing
-- **Location:** [`optimizer.hpp:L34-37`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/optimizer.hpp#L34-L37) vs [`optimizer.cpp:L54-59`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L54-L59)
-- **Defect:** `ram_buffer_size = 100000` is documented as tokens (which should hold $100{,}000 \times 4 = 400{,}000$ floats). However, `disk_to_ram()` computes:
-  ```cpp
-  size_t brain_floats_needed = portion.ram_buffer_size - portion.ram_buffer_tokens.size();
-  ```
-- **Impact:** The buffer only loads 100,000 `bfloat16_t` floats (25,000 tokens), 75% smaller than the documented 100,000-token capacity.
-- **Requirement:** Clarify unit semantics: maintain `ram_buffer_tokens_count` and multiply by `token_dim` when allocating floats.
+- [ ] **P2.04 — Replace Container Byte Parsing with Modality Preprocessing**
+  - **Location:** [`parser.cpp:L33-42`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L33-L42)
+  - **Classification:** `Algorithm` / `Multimodal Semantics`
+  - **Defect:** Reading raw container bytes from `Photo.jpeg`, `Video.mp4`, and `Voice.ogg` causes the network to train on compressed container metadata (EXIF, Huffman trees, atom headers) rather than actual visual/acoustic features.
+  - **Action Required:** Integrate proper media decoders:
+    - Images: Raw RGB/grayscale pixel patch extraction
+    - Audio: Mel-frequency spectrogram extraction
+    - Video: Decoded frame sampling and patch projection.
 
-#### 6. Race Conditions on State Locks (Non-Atomic Flags)
-- **Location:** [`optimizer.hpp:L26-27`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/optimizer.hpp#L26-L27) and [`training.hpp:L15`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/training.hpp#L15)
-- **Defect:** `buffer_in_use`, `context_in_use`, and `training_in_use` are primitive `bool` values with no memory barriers, atomic operations, or synchronization primitives.
-- **Impact:** If the project moves to asynchronous background streaming (Tier 0 $\rightarrow$ Tier 1 while GPU trains Tier 3), raw boolean flags cause data races and undefined behavior.
-- **Requirement:** Replace with `std::atomic<bool>` or thread-safe synchronization (mutex/condition variable).
+- [ ] **P2.05 — Add Modality ID Bounds Checking & Collision Prevention**
+  - **Location:** [`parser.hpp:L40-46`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L40-L46)
+  - **Classification:** `Algorithm` / `Namespace Safety`
+  - **Defect:** If text vocabulary exceeds 9,999,999 entries, `next_text_id` increments directly into the number modality space (`10,000,000+`), corrupting categorical isolation.
+  - **Action Required:** Enforce upper-bound assertions in `add_assign_increase`:
+    ```cpp
+    if (next_id >= MODALITY_UPPER_BOUND) {
+        throw std::overflow_error("Exceeded modality ID partition capacity");
+    }
+    ```
 
----
-
-### Priority 2: Missing Core Neural Components & Algorithmic Stubs
-
-#### 7. Missing Neural Engine Implementation (`class AI` is a Stub)
-- **Location:** [`ai.cpp:L3-15`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/ai.cpp#L3-L15) and [`ai.hpp:L58-73`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/ai.hpp#L58-L73)
-- **Defect:** `ai.cpp` resets all keys to `0.0`. There is no forward pass implementation, no weight matrix ($W \in \mathbb{R}^{d \times 512}$), no bias vector, no activation function (ReLU/GELU/SwiGLU), and no loss calculation.
-- **Requirement:** Implement tensor weights, bias accumulation, activation functions, loss evaluation (MSE/Cross-Entropy), and backpropagation routines.
-
-#### 8. Missing GPU Compute Kernels (GEMM & Training on Tensor Cores)
-- **Location:** [`transfer.cu`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/CUDA/transfer.cu)
-- **Defect:** `transfer.cu` only handles host-device memory movement (`upload_to_gpu`, `download_from_gpu`). There are no CUDA computation kernels for matrix multiplication (GEMM), forward passes, or gradient calculations.
-- **Requirement:** Implement CUDA kernels for forward propagation, activations, and backward gradient descent on device memory.
-
-#### 9. Missing Training Orchestration Loop
-- **Location:** [`training.cpp:L5-12`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/training.cpp#L5-L12)
-- **Defect:** `Training::training()` instantiates a local empty `Portion`, sets `training_in_use = true`, and calls `optimizer.ram_to_contextWindow()`. No training occurs.
-- **Requirement:** Implement an epoch/step training loop coordinating `disk_to_ram` $\rightarrow$ `ram_to_contextWindow` $\rightarrow$ `upload_to_gpu` $\rightarrow$ `forward` $\rightarrow$ `backward` $\rightarrow$ `optimizer_step`.
-
-#### 10. Semantic Validity of Multimodal Ingestion
-- **Location:** [`parser.cpp:L33-42`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L33-L42)
-- **Defect:** Media files (`Photo.jpeg`, `Video.mp4`, `Voice.ogg`) are read as raw compressed container bytes.
-- **Impact:** Byte tokenization trains the network on JPEG Huffman headers, MP4 atom containers, and Ogg packet framing rather than visual patches, audio spectrograms, or decoded frames.
-- **Requirement:** Integrate proper modality decoders (e.g., image decoding to pixel patches/spectrogram frames) before discrete quantization.
-
-#### 11. Modality ID Range Overflow & Collision Vulnerability
-- **Location:** [`parser.hpp:L40-46`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L40-L46)
-- **Defect:** Modality counters (`next_text_id`, `next_number_id`, etc.) have no upper-bound validation.
-- **Impact:** If text vocabulary exceeds 10,000,000 tokens, `next_text_id` rolls into the number modality space, creating cross-modal semantic collisions.
-- **Requirement:** Add boundary checks asserting `next_id < UPPER_BOUND` before incrementing.
-
-#### 12. Potential OOM in Embedding Matrix Generation
-- **Location:** [`parser.cpp:L75-103`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L75-L103)
-- **Defect:** `Parser::embedding()` reserves and populates the entire dataset's embeddings in `input.embedded_data` in RAM before saving.
-- **Impact:** At scale (gigabytes of input data), storing 4 floats per token in RAM all at once causes memory exhaustion.
-- **Requirement:** Chunked streaming from tokenizer to embedding disk file.
+- [ ] **P2.06 — Implement Chunked Streaming for Embedding Generation**
+  - **Location:** [`parser.cpp:L75-103`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L75-L103)
+  - **Classification:** `Memory Optimization` / `Scalability`
+  - **Defect:** `Parser::embedding()` accumulates all 33.15M `bfloat16_t` floats in `input.embedded_data` in host RAM before calling `save_data`.
+  - **Action Required:** Stream dense vectors to disk in fixed batches (e.g., 64k tokens per flush) to keep RAM usage bounded regardless of dataset scale.
 
 ---
 
-### Priority 3: Reliability, Persistence & Systems Safeguards
+## Priority 3: Reliability, Persistence & Systems Safeguards
 
-#### 13. Model Checkpointing & Serialization
-- **Missing Component:** No mechanism to save, serialize, or restore neural network weights ($W, b$), optimizer state, learning rates, or epoch progress to disk.
-- **Requirement:** Binary checkpoint saver/loader with atomic writes (`.tmp` + rename).
+- [ ] **P3.01 — Model Checkpointing & Parameter Serialization**
+  - **Classification:** `Persistence` / `Enterprise Reliability`
+  - **Defect:** No mechanism exists to save, serialize, or restore neural weights ($W, b$), optimizer momentum, learning rates, or epoch counters.
+  - **Action Required:** Build an atomic binary checkpoint engine (`save_checkpoint` / `load_checkpoint`) writing to a temporary file before atomic rename (`.tmp` $\rightarrow$ `.ckpt`).
 
-#### 14. Dataset File Schema & Integrity Validation
-- **Location:** [`parser.hpp:L82-102`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L82-L102) and [`optimizer.cpp:L16-22`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L16-L22)
-- **Defect:** `database/embedded_data.bin` contains raw floating-point data with no magic header, schema version, dimension metadata, or checksum (CRC32/SHA256).
-- **Requirement:** Add a standard binary header:
-  ```cpp
-  struct DatasetHeader {
-      char magic[4] = {'A', 'I', 'C', 'R'};
-      uint32_t version;
-      uint32_t embedding_dim;
-      uint64_t total_tokens;
-      uint32_t checksum;
-  };
-  ```
+- [ ] **P3.02 — Dataset Schema Versioning & Header Verification**
+  - **Location:** [`parser.hpp:L82-102`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L82-L102) and [`optimizer.cpp:L16-22`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L16-L22)
+  - **Classification:** `Data Integrity` / `Validation`
+  - **Defect:** `embedded_data.bin` contains raw floating-point bytes with no header, versioning, dimension attributes, or checksum. Corrupted or mismatched files cause undefined training behavior.
+  - **Action Required:** Prepend a validated binary header struct:
+    ```cpp
+    struct alignas(64) DatasetHeader {
+        char magic[4] = {'A', 'I', 'C', 'R'};
+        uint32_t version = 1;
+        uint32_t embedding_dim = 4;
+        uint64_t total_tokens = 0;
+        uint32_t crc32_checksum = 0;
+        char reserved[40] = {0};
+    };
+    ```
 
-#### 15. Silent Failures & Error Handling
-- **Location:** [`optimizer.cpp:L10`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L10) and [`parser.hpp:L94-96`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L94-L96)
-- **Defect:** When buffer locks are active or files fail to open, methods log to `std::cerr` and return `void`.
-- **Requirement:** Return explicit `std::expected<void, ErrorCode>` or status codes to allow callers to handle backpressure and failures gracefully.
+- [ ] **P3.03 — Replace Silent Returns with Robust Error Handling**
+  - **Location:** [`optimizer.cpp:L10`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L10) and [`parser.hpp:L94-96`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L94-L96)
+  - **Classification:** `Error Handling` / `Observability`
+  - **Defect:** When file opens fail or buffer locks are active, methods print to `std::cerr` and return `void`. Callers cannot detect whether operations succeeded or were skipped.
+  - **Action Required:** Return explicit `std::expected<void, SystemError>` or `bool` status codes.
 
-#### 16. Portability of Toolchain & Build Configuration
-- **Location:** [`Makefile:L5-10`](file:///c:/Users/Omid/X/Code/Brain/Makefile#L5-L10)
-- **Defect:** `Makefile` contains hardcoded paths to a specific user's MSVC build tools (`14.44.35207`) and CUDA toolkit (`v13.3`).
-- **Requirement:** Dynamically query `CUDA_PATH` and Visual Studio installation paths using `vswhere.exe` or environment variables.
-
----
-
-### Priority 4: Production SaaS & Enterprise Architecture
-
-#### 17. API & Service Ingestion Layer (REST / gRPC / WebSocket)
-- **Missing Component:** The project is a console binary without network interfaces.
-- **SaaS Requirement:** A lightweight API server (e.g., C++ oat++/Crow or Python/FastAPI bindings) to expose endpoints:
-  - `POST /v1/ingest`: Submit raw multimodal payloads.
-  - `POST /v1/train/jobs`: Trigger asynchronous training runs.
-  - `GET /v1/train/jobs/{id}/status`: Query training progress and loss telemetry.
-  - `POST /v1/inference`: Predict next tokens given a context window.
-
-#### 18. Asynchronous Task Queue & Job Management
-- **Missing Component:** Training and embedding generation are blocking operations.
-- **SaaS Requirement:** Background job worker model (e.g., Redis/RabbitMQ queue) to handle job scheduling, cancellation, retry policies, and timeouts.
-
-#### 19. Multi-Tenancy, Authentication & Access Control (RBAC)
-- **Missing Component:** Single-user local runtime.
-- **SaaS Requirement:** Tenant isolation (separate storage directories and namespaces per organization), API key authentication, and rate limiting.
-
-#### 20. Structured Logging, Telemetry & Observability
-- **Missing Component:** Unstructured `std::cout` statements.
-- **SaaS Requirement:** Structured JSON logging, OpenTelemetry metrics (training loss, tokens/sec, GPU VRAM utilization, DMA transfer latency), and `/healthz` / `/readyz` probes.
-
-#### 21. Cloud Object Storage Integration
-- **Missing Component:** Local filesystem storage only (`database/`, `asset_sample/`).
-- **SaaS Requirement:** S3/GCS-compatible connectors to stream datasets and write checkpoints to cloud storage.
-
-#### 22. Configuration Management
-- **Missing Component:** Hardcoded hyperparameters (`ram_buffer_size = 100000`, `context_window_size = 128`, `embedding_dim = 4`).
-- **SaaS Requirement:** Configuration loading via YAML, JSON, or environment variables.
+- [ ] **P3.04 — Modernize Build Portability (Remove Hardcoded Workstation Paths)**
+  - **Location:** [`Makefile:L5-10`](file:///c:/Users/Omid/X/Code/Brain/Makefile#L5-L10)
+  - **Classification:** `Toolchain` / `Portability`
+  - **Defect:** MSVC path (`14.44.35207`) and CUDA directory (`v13.3`) are hardcoded to a specific Windows workstation, failing builds on any other machine or CI runner.
+  - **Action Required:** Read paths dynamically from environment variables (`CUDA_PATH`, `VCToolsInstallDir`) or resolve via `vswhere.exe`.
 
 ---
 
-### Priority 5: DevOps, Packaging & Deployment Standards
+## Priority 4: Production SaaS & Enterprise Architecture
 
-#### 23. Containerization
-- **Missing Component:** No `Dockerfile` or container setup.
-- **SaaS Requirement:** Multi-stage Dockerfile containing NVIDIA CUDA runtime, C++23 build environment, and minimal deployment container.
+- [ ] **P4.01 — Implement HTTP / gRPC Service Ingestion & Inference Layer**
+  - **Classification:** `SaaS Infrastructure` / `API Layer`
+  - **Defect:** Engine operates solely as a local console executable (`main.cpp`).
+  - **Action Required:** Expose high-throughput REST / gRPC service endpoints:
+    - `POST /v1/datasets/ingest` — Stream and tokenize multimodal inputs
+    - `POST /v1/training/jobs` — Initiate background training runs
+    - `GET  /v1/training/jobs/{id}` — Query training progress, step metrics, and loss
+    - `POST /v1/inference/predict` — Execute forward prediction on context windows.
 
-#### 24. Decoupled Build Targets
-- **Location:** [`Makefile:L21-24`](file:///c:/Users/Omid/X/Code/Brain/Makefile#L21-L24)
-- **Defect:** `APP_SRCS` and `TEST_SRCS` both compile all files in `src/`, `test/`, and `util/` simultaneously. `app.exe` and `test.exe` cannot be compiled independently.
-- **Requirement:** Separate application sources (`main.cpp` + `src/` + `util/`) from test sources (`test/*.cpp` + `util/`).
+- [ ] **P4.02 — Asynchronous Task Queue & Job Management**
+  - **Classification:** `SaaS Infrastructure` / `Task Scheduling`
+  - **Action Required:** Integrate a job queue (Redis / RabbitMQ / internal threadpool) to handle long-running training and embedding jobs asynchronously with support for cancellation, retries, and job status tracking.
 
-#### 25. CI/CD Pipelines
-- **Missing Component:** No automated test or build verification pipeline.
-- **SaaS Requirement:** GitHub Actions / GitLab CI pipeline to run automated builds, unit tests, memory leak checks (AddressSanitizer/Valgrind), and static analysis on every pull request.
+- [ ] **P4.03 — Multi-Tenancy & Role-Based Access Control (RBAC)**
+  - **Classification:** `SaaS Security` / `Multi-Tenancy`
+  - **Action Required:** Enforce tenant namespace isolation for datasets, checkpoints, and dictionary tables; implement API key authentication and token rate limiting per tenant.
+
+- [ ] **P4.04 — Structured Logging, Metrics & Telemetry (OpenTelemetry / Prometheus)**
+  - **Classification:** `Observability` / `SRE`
+  - **Action Required:** Replace unstructured `std::cout` calls with structured JSON logging; emit real-time Prometheus metrics:
+    - Training loss per step
+    - Tokens processed per second
+    - PCIe DMA transfer latency
+    - GPU VRAM consumption & temperature
+    - Health check endpoints (`/healthz`, `/readyz`).
+
+- [ ] **P4.05 — Cloud Object Storage Integration (S3 / GCS / Azure Blob)**
+  - **Classification:** `Storage Infrastructure` / `Cloud Native`
+  - **Action Required:** Implement cloud storage connectors for streaming raw media assets and persisting checkpoint weights directly to AWS S3 or Google Cloud Storage.
+
+- [ ] **P4.06 — Dynamic Configuration Management**
+  - **Classification:** `Configuration` / `Config-as-Code`
+  - **Action Required:** Externalize hardcoded hyperparameters (`ram_buffer_size`, `context_window_size`, `embedding_dim`, learning rate) to YAML/JSON configuration files and environment variables.
+
+---
+
+## Priority 5: DevOps, Packaging & Deployment Standards
+
+- [ ] **P5.01 — Multi-Stage Containerization (Docker / OCI)**
+  - **Classification:** `DevOps` / `Containerization`
+  - **Action Required:** Create a multi-stage `Dockerfile`:
+    - **Stage 1 (Builder):** NVIDIA CUDA 12.x/13.x devel image with C++23 compiler and build tools.
+    - **Stage 2 (Runtime):** Lightweight CUDA runtime image containing only compiled binaries and shared libraries.
+
+- [ ] **P5.02 — Decouple Application and Test Build Targets in Makefile**
+  - **Location:** [`Makefile:L21-24`](file:///c:/Users/Omid/X/Code/Brain/Makefile#L21-L24)
+  - **Classification:** `Build Optimization` / `Modularity`
+  - **Defect:** `APP_SRCS` and `TEST_SRCS` both compile all files in `src/`, `test/`, and `util/` together.
+  - **Action Required:** Separate application sources (`main.cpp` + `src/` + `util/`) from test harnesses (`test/*.cpp` + `util/`) so production binaries do not package unit test code.
+
+- [ ] **P5.03 — Automated CI/CD Pipelines**
+  - **Classification:** `DevOps` / `Continuous Integration`
+  - **Action Required:** Configure GitHub Actions / GitLab CI workflow:
+    - Automated compilation on pull requests
+    - Execution of the 62-test verification harness
+    - Static analysis (clang-tidy, cppcheck) and memory sanitation (ASan / LSan).
