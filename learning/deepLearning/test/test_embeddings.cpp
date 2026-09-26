@@ -46,7 +46,7 @@ void test_embeddings() {
 
   std::cout << "All: ";
 
-  for (size_t i = 0; input.embedded_data.size() <= 1000; ++i) {
+  for (size_t i = 0; i < input.embedded_data.size() && i < 1000; ++i) {
     std::cout << input.embedded_data[i] << " ";
   }
 
