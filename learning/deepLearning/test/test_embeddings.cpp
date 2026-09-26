@@ -39,18 +39,7 @@ void test_embeddings() {
   Test test;
   Parser parser;
 
-  std::cout << "\n=== Embedded Data Test Result ===\n";
 
-  std::cout << "Successfully generated " << input.embedded_data.size()
-            << " tokens!\n";
-
-  std::cout << "All: ";
-
-  for (size_t i = 0; i < input.embedded_data.size() && i < 1000; ++i) {
-    std::cout << input.embedded_data[i] << " ";
-  }
-
-  std::cout << "\n";
 
   // ── [1] Tokenization produces non-zero output ────────────────────────────
   std::cout << "\n[1] Tokenization\n";
@@ -80,6 +69,15 @@ void test_embeddings() {
            "embedded.size == tokens * embedding_dim");
   check_eq(input.embedded_data.size(), expected_size,
            "input.embedded_data synced");
+
+  std::cout << "\n=== Embedded Data Test Result ===\n";
+  std::cout << "Successfully generated " << input.embedded_data.size()
+            << " elements!\n";
+  std::cout << "First 1000: ";
+  for (size_t i = 0; i < input.embedded_data.size() && i < 1000; ++i) {
+    std::cout << input.embedded_data[i] << " ";
+  }
+  std::cout << "\n";
 
   // ── [3] Embedding table has one entry per unique token ───────────────────
   std::cout << "\n[3] Embedding table\n";
