@@ -64,7 +64,7 @@ c:/Users/Omid/X/Code/Brain/
 > These issues cause active runtime bugs, silent data drops, memory corruption, or security vulnerabilities under real workloads.
 
 - [ ] **P1.01 — Fix Context Window Overwrite & Immediate Eviction in DataLoader**
-  - **Location:** [`optimizer.cpp:L87-119`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L87-L119)
+  - **Location:** [`optimizer.cpp:L87-119`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/optimizer.cpp#L87-L119) 
   - **Classification:** `Architecture` / `Data Loss Bug`
   - **Defect:** `Optimizer::ram_to_contextWindow` runs an internal `for` loop slicing through all windows in the 100k-token buffer. It overwrites `portion.context_window_tokens` and `portion.target_tokens` on each step without yielding or invoking training. On return, only the final window remains; all preceding windows (24,000+) are lost.
   - **Action Required:** Redesign into a sequential window iterator `bool get_next_context_window(Portion&, size_t& offset)` or accept a training callback:

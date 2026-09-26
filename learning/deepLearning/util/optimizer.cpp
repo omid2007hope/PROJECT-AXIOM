@@ -78,15 +78,18 @@ void Optimizer::disk_to_ram(Portion &portion) {
 // Tier 2: Extract sliding context windows from RAM buffer to feed neural
 // network
 void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
-  size_t token_dim = 4; // 1 token = 4 bfloat16_t values
-  size_t window_elements = portion.context_window_size * token_dim;
-  size_t target_elements = 1 * token_dim;
+  // 128 * 4 = 512
+  size_t window_elements = portion.context_window_size * portion.token_dim;
+  // 1 * 4 = 4
+  size_t target_elements = 1 * portion.token_dim;
 
   // Slide through the RAM buffer one token at a time until the end
   // (Stop when there isn't enough data for a full context window + target)
-  for (size_t i = 0;
-       i + window_elements + target_elements <= portion.ram_buffer_tokens.size();
-       i += token_dim) {
+
+  // 0 + 512 + 4 = 516 <= portion.ram_buffer_tokens.size(); i = i + 4
+  for (size_t i = 0; i + window_elements + target_elements <=
+                     portion.ram_buffer_tokens.size();
+       i += portion.token_dim) {
 
     // NOTE: No spin barrier here — execution is single-threaded.
     // The caller (training loop) is the synchronization: it calls
@@ -103,15 +106,15 @@ void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
     portion.target_tokens.clear();
 
     // Extract Context Window (X)
-    portion.context_window_tokens.assign(
-        portion.ram_buffer_tokens.begin() + i,
-        portion.ram_buffer_tokens.begin() + i + window_elements);
+    portion.context_window_tokens.assign(portion.ram_buffer_tokens.begin() + i,
+                                         portion.ram_buffer_tokens.begin() + i +
+                                             window_elements);
 
     // Extract Target (Y)
-    portion.target_tokens.assign(
-        portion.ram_buffer_tokens.begin() + i + window_elements,
-        portion.ram_buffer_tokens.begin() + i + window_elements +
-            target_elements);
+    portion.target_tokens.assign(portion.ram_buffer_tokens.begin() + i +
+                                     window_elements,
+                                 portion.ram_buffer_tokens.begin() + i +
+                                     window_elements + target_elements);
 
     // Release locks — caller trains on context_window_tokens / target_tokens
     portion.buffer_in_use = false;

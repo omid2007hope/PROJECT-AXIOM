@@ -42,11 +42,16 @@ struct Portion {
   // ---------------------------------------------------------
   size_t context_window_size = 128;
 
-  // The Input (X): What the AI sees (128 tokens * 4 dim = 512 bfloat16_t values)
+  // The Input (X): What the AI sees (128 tokens * 4 dim = 512 bfloat16_t
+  // values)
   std::vector<std::bfloat16_t> context_window_tokens = {};
 
-  // The Target (Y): The prediction ground-truth (1 token * 4 dim = 4 bfloat16_t values)
+  // The Target (Y): The prediction ground-truth (1 token * 4 dim = 4 bfloat16_t
+  // values)
   std::vector<std::bfloat16_t> target_tokens = {};
+
+  // 1 token = 4 bfloat16_t values
+  size_t token_dim = 4;
 };
 
 class Optimizer {

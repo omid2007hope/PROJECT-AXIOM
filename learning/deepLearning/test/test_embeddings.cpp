@@ -1,6 +1,7 @@
 #include "../include/parser.hpp"
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -38,6 +39,19 @@ void test_embeddings() {
   Test test;
   Parser parser;
 
+  std::cout << "\n=== Embedded Data Test Result ===\n";
+
+  std::cout << "Successfully generated " << input.embedded_data.size()
+            << " tokens!\n";
+
+  std::cout << "All: ";
+
+  for (size_t i = 0; input.embedded_data.size() <= 1000; ++i) {
+    std::cout << input.embedded_data[i] << " ";
+  }
+
+  std::cout << "\n";
+
   // ── [1] Tokenization produces non-zero output ────────────────────────────
   std::cout << "\n[1] Tokenization\n";
   std::vector<uint32_t> tokens = parser.tokenization(input, test);
@@ -62,17 +76,17 @@ void test_embeddings() {
   std::cout << "\n[2] Embedding size\n";
   std::vector<std::bfloat16_t> emb = parser.embedding(input, test);
   size_t expected_size = input.tokenized_data.size() * input.embedding_dim;
-  check_eq(emb.size(), expected_size, "embedded.size == tokens * embedding_dim");
+  check_eq(emb.size(), expected_size,
+           "embedded.size == tokens * embedding_dim");
   check_eq(input.embedded_data.size(), expected_size,
            "input.embedded_data synced");
 
   // ── [3] Embedding table has one entry per unique token ───────────────────
   std::cout << "\n[3] Embedding table\n";
-  size_t unique_tokens = input.text_dictionary.size() +
-                         input.number_dictionary.size() +
-                         input.image_dictionary.size() +
-                         input.video_dictionary.size() +
-                         input.voice_dictionary.size();
+  size_t unique_tokens =
+      input.text_dictionary.size() + input.number_dictionary.size() +
+      input.image_dictionary.size() + input.video_dictionary.size() +
+      input.voice_dictionary.size();
   // embedding_table must be <= unique_tokens (only seen tokens get an entry)
   check(input.embedding_table.size() <= unique_tokens,
         "embedding_table entries <= unique token count");
@@ -93,16 +107,19 @@ void test_embeddings() {
   bool all_bounded = true, any_nonzero = false;
   for (auto v : emb) {
     double d = static_cast<double>(v);
-    if (d < -1.5 || d > 1.5) { all_bounded = false; }
-    if (d != 0.0) { any_nonzero = true; }
+    if (d < -1.5 || d > 1.5) {
+      all_bounded = false;
+    }
+    if (d != 0.0) {
+      any_nonzero = true;
+    }
   }
   check(all_bounded, "all BF16 values in [-1.5, 1.5] (sin-based init)");
   check(any_nonzero, "at least one non-zero embedding value");
 
   // ── [5] BF16 type size ───────────────────────────────────────────────────
   std::cout << "\n[5] BF16 type size\n";
-  check_eq(sizeof(std::bfloat16_t), size_t{2},
-           "sizeof(bfloat16_t) == 2 bytes");
+  check_eq(sizeof(std::bfloat16_t), size_t{2}, "sizeof(bfloat16_t) == 2 bytes");
 
   // ── [6] embedded_data.bin written to disk ───────────────────────────────
   std::cout << "\n[6] Disk output\n";
@@ -125,11 +142,14 @@ void test_embeddings() {
   check_eq(emb2.size(), emb.size(), "second run produces same size");
   bool same_values = (emb.size() == emb2.size());
   for (size_t i = 0; i < std::min(emb.size(), emb2.size()); ++i) {
-    if (emb[i] != emb2[i]) { same_values = false; break; }
+    if (emb[i] != emb2[i]) {
+      same_values = false;
+      break;
+    }
   }
   check(same_values, "deterministic: same embedding values on re-run");
 
-  std::cout << "\n=== Embedding Test Suite: " << s_pass << " passed, "
-            << s_fail << " failed ===\n";
+  std::cout << "\n=== Embedding Test Suite: " << s_pass << " passed, " << s_fail
+            << " failed ===\n";
   s_pass = s_fail = 0; // reset for next suite
 }
