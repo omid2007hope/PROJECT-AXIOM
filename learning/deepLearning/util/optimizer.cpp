@@ -90,36 +90,43 @@ bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
     if (portion.offset + portion.all_elements + portion.target_elements <=
         portion.ram_buffer_tokens.size()) {
 
-      // If not empty clear
-      if (!portion.context_window_tokens.empty() &&
-          !portion.target_tokens.empty()) {
-        // Clear previous tokens
-        portion.context_window_tokens.clear();
-        portion.target_tokens.clear();
-      };
+      // Clear previous tokens
+      portion.context_window_tokens.clear();
+      portion.target_tokens.clear();
 
       // Extract Context Window (X)
       portion.context_window_tokens.assign(
-          // Element 1, Element 2, ....
           portion.ram_buffer_tokens.begin() + portion.offset,
-          // Element 513, element 1026, ....
           portion.ram_buffer_tokens.begin() + portion.offset +
               portion.all_elements);
 
       // Extract Target (Y)
-      portion.target_tokens.assign(portion.ram_buffer_tokens.begin() +
-                                       portion.offset + portion.all_elements,
-                                   portion.ram_buffer_tokens.begin() +
-                                       portion.offset + portion.all_elements +
-                                       portion.target_elements);
+      portion.target_tokens.assign(
+          portion.ram_buffer_tokens.begin() + portion.offset + portion.all_elements,
+          portion.ram_buffer_tokens.begin() + portion.offset + portion.all_elements +
+              portion.target_elements);
 
+      // Move the bookmark forward
       portion.offset += portion.token_dim;
 
-      // Release locks — caller trains on context_window_tokens /
-      // target_tokens
+      // Release locks — caller trains on context_window_tokens / target_tokens
       portion.buffer_in_use = false;
       portion.context_in_use = false;
-    };
-  };
-  return 0;
-};
+
+      return true; // Successfully loaded a window
+    } else {
+      // Reached the end of the RAM buffer.
+      // Reset the offset for the next disk load
+      portion.offset = 0;
+
+      // Release locks so disk_to_ram can run!
+      portion.buffer_in_use = false;
+      portion.context_in_use = false;
+
+      return false; // Out of data
+    }
+  }
+
+  // Locks were busy
+  return false;
+}
