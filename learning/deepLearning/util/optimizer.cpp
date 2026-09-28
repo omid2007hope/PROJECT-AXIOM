@@ -77,51 +77,49 @@ void Optimizer::disk_to_ram(Portion &portion) {
 
 // Tier 2: Extract sliding context windows from RAM buffer to feed neural
 // network
-void Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
-  // 128 * 4 = 512
-  size_t window_elements = portion.context_window_size * portion.token_dim;
-  // 1 * 4 = 4
-  size_t target_elements = 1 * portion.token_dim;
 
-  // Slide through the RAM buffer one token at a time until the end
-  // (Stop when there isn't enough data for a full context window + target)
+bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
 
-  // 0 + 512 + 4 = 516 <= portion.ram_buffer_tokens.size(); i = i + 4
-  for (size_t i = 0; i + window_elements + target_elements <=
-                     portion.ram_buffer_tokens.size();
-       i += portion.token_dim) {
-
-    // NOTE: No spin barrier here — execution is single-threaded.
-    // The caller (training loop) is the synchronization: it calls
-    // disk_to_ram → ram_to_contextWindow → train sequentially.
-    // A spin on training_in_use would freeze forever in single-threaded mode
-    // because nothing can ever set it back to false while we are spinning.
+  if (portion.context_in_use == false && portion.buffer_in_use == false &&
+      training_in_use == false) {
 
     // Lock the context window and buffer
     portion.context_in_use = true;
     portion.buffer_in_use = true;
 
-    // Clear previous tokens
-    portion.context_window_tokens.clear();
-    portion.target_tokens.clear();
+    if (portion.offset + portion.all_elements + portion.target_elements <=
+        portion.ram_buffer_tokens.size()) {
 
-    // Extract Context Window (X)
-    portion.context_window_tokens.assign(portion.ram_buffer_tokens.begin() + i,
-                                         portion.ram_buffer_tokens.begin() + i +
-                                             window_elements);
+      // If not empty clear
+      if (!portion.context_window_tokens.empty() &&
+          !portion.target_tokens.empty()) {
+        // Clear previous tokens
+        portion.context_window_tokens.clear();
+        portion.target_tokens.clear();
+      };
 
-    // Extract Target (Y)
-    portion.target_tokens.assign(portion.ram_buffer_tokens.begin() + i +
-                                     window_elements,
-                                 portion.ram_buffer_tokens.begin() + i +
-                                     window_elements + target_elements);
+      // Extract Context Window (X)
+      portion.context_window_tokens.assign(
+          // Element 1, Element 2, ....
+          portion.ram_buffer_tokens.begin() + portion.offset,
+          // Element 513, element 1026, ....
+          portion.ram_buffer_tokens.begin() + portion.offset +
+              portion.all_elements);
 
-    // Release locks — caller trains on context_window_tokens / target_tokens
-    portion.buffer_in_use = false;
-    portion.context_in_use = false;
-  }
+      // Extract Target (Y)
+      portion.target_tokens.assign(portion.ram_buffer_tokens.begin() +
+                                       portion.offset + portion.all_elements,
+                                   portion.ram_buffer_tokens.begin() +
+                                       portion.offset + portion.all_elements +
+                                       portion.target_elements);
 
-  // All windows have been served from this 100k-token chunk.
-  // disk_to_ram owns clearing: it extracts the carry-forward tail
-  // from ram_buffer_tokens BEFORE wiping, so do NOT clear here.
-}
+      portion.offset += portion.token_dim;
+
+      // Release locks — caller trains on context_window_tokens /
+      // target_tokens
+      portion.buffer_in_use = false;
+      portion.context_in_use = false;
+    };
+  };
+  return 0;
+};

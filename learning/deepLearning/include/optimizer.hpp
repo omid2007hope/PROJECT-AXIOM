@@ -40,7 +40,18 @@ struct Portion {
   // Tier 2: The AI's Field of View (RAM -> AI)
   // Optimal for basic AI: 64 or 128 tokens.
   // ---------------------------------------------------------
+  // 1 token = 4 bfloat16_t values
+  size_t token_dim = 4;
+
   size_t context_window_size = 128;
+
+  // 128 * 4 = 512
+  size_t all_elements = context_window_size * token_dim;
+
+  // 1 * 4 = 4
+  size_t target_elements = 1 * token_dim;
+
+  size_t offset = 0;
 
   // The Input (X): What the AI sees (128 tokens * 4 dim = 512 bfloat16_t
   // values)
@@ -49,9 +60,6 @@ struct Portion {
   // The Target (Y): The prediction ground-truth (1 token * 4 dim = 4 bfloat16_t
   // values)
   std::vector<std::bfloat16_t> target_tokens = {};
-
-  // 1 token = 4 bfloat16_t values
-  size_t token_dim = 4;
 };
 
 class Optimizer {
@@ -62,7 +70,8 @@ private:
 
 public:
   void disk_to_ram(Portion &portion);
-  void ram_to_contextWindow(Portion &portion, bool &training_in_use);
+
+  bool ram_to_contextWindow(Portion &portion, bool &training_in_use);
 };
 
 #endif
