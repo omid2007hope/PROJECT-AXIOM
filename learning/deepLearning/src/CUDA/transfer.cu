@@ -30,9 +30,13 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
   // ── Context Window (X) ────────────────────────────────────────────────────
   if (gpu->context_elements != context_elements) {
     if (gpu->d_context_window) {
-      if (!CUDA_CHECK(cudaFree(gpu->d_context_window))) return false;
+      // Free the memory if an error accrued.
+      if (!CUDA_CHECK(cudaFree(gpu->d_context_window)))
+        return false;
+      
       gpu->d_context_window = nullptr;
     }
+    
     if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window,
                                context_elements * sizeof(__nv_bfloat16))))
       return false;

@@ -73,7 +73,7 @@ c:/Users/Omid/X/Code/Brain/
     void ram_to_contextWindow(Portion &portion, Callback &&train_step);
     ```
 
-- [ ] **P1.02 — Add Boundary & Null Pointer Validation to CUDA Bridge**
+- [x] **P1.02 — Add Boundary & Null Pointer Validation to CUDA Bridge**
   - **Location:** [`transfer.cu:L22-63`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/src/CUDA/transfer.cu#L22-L63)
   - **Classification:** `Security` / `Memory Safety`
   - **Defect:** `upload_to_gpu()` verifies `if (!gpu) return false;` but executes raw `cudaMemcpy` on `h_context` and `h_target` without validating that pointers are non-null and point to valid, allocated memory of size `context_elements * sizeof(__nv_bfloat16)`.
