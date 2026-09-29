@@ -81,8 +81,8 @@ private:
   template <typename T>
   void save_data(const std::vector<T> &data, const std::string &filename) {
     // Automatically prepend the "database/" folder to all files
-    std::filesystem::canonical full_path =
-        std::filesystem::canonical("database") / filename;
+    std::filesystem::path full_path =
+        std::filesystem::path("database") / filename;
 
     // Create the "database/" folder (and any subfolders) if they don't exist
     std::filesystem::create_directories(full_path.parent_path());
@@ -114,9 +114,9 @@ private:
       std::filesystem::path absolute_path(__FILE__);
       std::vector<std::filesystem::path> possible_paths = {
           absolute_path.parent_path().parent_path() / "asset_sample" / fileName,
-          std::filesystem::path("Brain/learning/deepLearning/asset_sample") /
+          std::filesystem::path("Brain/asset_sample") /
               fileName,
-          std::filesystem::path("learning/deepLearning/asset_sample") /
+          std::filesystem::path("asset_sample") /
               fileName,
           std::filesystem::path("deepLearning/asset_sample") / fileName,
           std::filesystem::path("asset_sample") / fileName};

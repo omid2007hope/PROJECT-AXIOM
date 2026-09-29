@@ -1,5 +1,5 @@
 CXX      = g++
-CXXFLAGS = -Wall -std=c++23 -Ilearning/deepLearning/include
+CXXFLAGS = -Wall -std=c++23 -Iinclude
 
 # ─── CUDA ────────────────────────────────────────────────────────────────────
 CUDA_DIR  = C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3
@@ -9,13 +9,13 @@ NVCC      = "$(CUDA_DIR)/bin/nvcc.exe"
 NVCCFLAGS = -arch=sm_89 --std=c++17 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64" \
             -I"$(CUDA_DIR)/include"
 
-CUDA_SRC_DIR = learning/deepLearning/src/CUDA
+CUDA_SRC_DIR = src/CUDA
 CUDA_SRCS    = $(wildcard $(CUDA_SRC_DIR)/*.cu)
 
 # ─── CPU sources ─────────────────────────────────────────────────────────────
-SRC_DIR  = learning/deepLearning/src
-TEST_DIR = learning/deepLearning/test
-UTIL_DIR = learning/deepLearning/util
+SRC_DIR  = src
+TEST_DIR = test
+UTIL_DIR = util
 
 UTIL_SRCS = $(wildcard $(UTIL_DIR)/*.cpp)
 ALL_SRCS  = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(TEST_DIR)/*.cpp) $(UTIL_SRCS)
@@ -23,15 +23,15 @@ APP_SRCS  = $(ALL_SRCS)
 TEST_SRCS = $(ALL_SRCS)
 
 # ─── Output targets ──────────────────────────────────────────────────────────
-APP_TARGET  = learning/deepLearning/app.exe
-TEST_TARGET = learning/deepLearning/test.exe
+APP_TARGET  = app.exe
+TEST_TARGET = test.exe
 
 # ─── Default: compile everything ─────────────────────────────────────────────
 all: $(APP_TARGET) $(TEST_TARGET)
 
 # ─── Compile CUDA sources into a single DLL ──────────────────────────────────
 # Build a shared library so MSVC's linker handles all MSVC-specific symbols.
-CUDA_DLL = learning/deepLearning/cuda_transfer.dll
+CUDA_DLL = cuda_transfer.dll
 $(CUDA_DLL): $(CUDA_SRCS)
 	-$(NVCC) $(NVCCFLAGS) -DBUILDING_CUDA_DLL -shared $(CUDA_SRCS) -o $(CUDA_DLL)
 

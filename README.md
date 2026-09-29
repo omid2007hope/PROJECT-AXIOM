@@ -121,12 +121,12 @@ All architectural specifications, memory models, algorithms, and engineering gui
 
 | Specification Document | Focus Area |
 | :--- | :--- |
-| **[Multimodal Architecture Specification](learning/deepLearning/document/architecture.md)** | Early-fusion discrete tokenization, universal sequence design, 10M ID offset spacing, Conductor orchestration, and subsystem isolation. |
-| **[Tokenization & Embeddings](learning/deepLearning/document/tokenization_and_embeddings.md)** | Binary streaming, byte-level quantization, exact token census (8.28M tokens), and dense `bfloat16_t` vector projection. |
-| **[The "Life and Death" Guarantee](learning/deepLearning/document/life_and_death_guarantee.md)** | Multi-tier buffer state locks (`buffer_in_use`, `context_in_use`), Carry-Forward seam preservation, and weight-poisoning prevention. |
-| **[Memory Hierarchy & Hardware](learning/deepLearning/document/memory_hierarchy_and_hardware.md)** | 4-tier memory model (NVMe $\rightarrow$ Host RAM $\rightarrow$ Context Window $\rightarrow$ GPU VRAM), footprint analysis, and PCIe latency benchmarks. |
-| **[C++ Design Patterns & Data Structures](learning/deepLearning/document/data_structures_and_cpp_design.md)** | C++23 systems programming, `add_assign_increase<T>`, type safety (`uint8_t`/`uint32_t`/`bfloat16_t`), and C ABI dynamic library isolation. |
-| **[Build & Toolchain Guide](learning/deepLearning/document/build_and_toolchain.md)** | Dual-compiler toolchain (MinGW + MSVC nvcc), Makefile targets, `cuda_transfer.dll`, test harnesses, and live verification logs. |
+| **[Multimodal Architecture Specification](document/architecture.md)** | Early-fusion discrete tokenization, universal sequence design, 10M ID offset spacing, Conductor orchestration, and subsystem isolation. |
+| **[Tokenization & Embeddings](document/tokenization_and_embeddings.md)** | Binary streaming, byte-level quantization, exact token census (8.28M tokens), and dense `bfloat16_t` vector projection. |
+| **[The "Life and Death" Guarantee](document/life_and_death_guarantee.md)** | Multi-tier buffer state locks (`buffer_in_use`, `context_in_use`), Carry-Forward seam preservation, and weight-poisoning prevention. |
+| **[Memory Hierarchy & Hardware](document/memory_hierarchy_and_hardware.md)** | 4-tier memory model (NVMe $\rightarrow$ Host RAM $\rightarrow$ Context Window $\rightarrow$ GPU VRAM), footprint analysis, and PCIe latency benchmarks. |
+| **[C++ Design Patterns & Data Structures](document/data_structures_and_cpp_design.md)** | C++23 systems programming, `add_assign_increase<T>`, type safety (`uint8_t`/`uint32_t`/`bfloat16_t`), and C ABI dynamic library isolation. |
+| **[Build & Toolchain Guide](document/build_and_toolchain.md)** | Dual-compiler toolchain (MinGW + MSVC nvcc), Makefile targets, `cuda_transfer.dll`, test harnesses, and live verification logs. |
 
 ---
 
@@ -148,7 +148,7 @@ The complete verification harness executes natively against active media samples
 ## 5. Repository Directory Layout
 
 ```
-learning/deepLearning/
+
 ├── Makefile                          # Unified build rules (all, test, clean, cuda_transfer.dll)
 ├── cuda_transfer.dll                 # Compiled GPU transfer bridge (MSVC C ABI)
 ├── asset_sample/                     # Real multimodal binary media test files
