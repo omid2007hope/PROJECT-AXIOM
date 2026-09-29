@@ -3,6 +3,7 @@ CXXFLAGS = -Wall -std=c++23 -Iinclude
 
 # ─── CUDA ────────────────────────────────────────────────────────────────────
 CUDA_DIR  = C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3
+CUDA_LIB_DIR = $(CUDA_DIR)/lib/x64
 NVCC      = "$(CUDA_DIR)/bin/nvcc.exe"
 # sm_89 = RTX 4080 Laptop (Ada Lovelace, compute capability 8.9)
 # -ccbin points to MSVC compiler (cl.exe) which is strictly required by nvcc on Windows

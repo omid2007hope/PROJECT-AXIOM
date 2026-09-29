@@ -1,4 +1,5 @@
 #include "../include/optimizer.hpp"
+#include <cstring> // std::memcpy
 
 // Tier 1: Stream chunks from disk into the RAM buffer
 void Optimizer::disk_to_ram(Portion &portion) {
@@ -7,8 +8,11 @@ void Optimizer::disk_to_ram(Portion &portion) {
   // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
   // Verify buffer state locks before touching memory to prevent corruption!
   // =========================================================================
-  if (portion.buffer_in_use == false && portion.context_in_use == false) {
-    portion.buffer_in_use = true;
+  // Atomic acquire: ensures we see all prior writes from other threads
+  // before we decide to proceed.
+  if (portion.buffer_in_use.load(std::memory_order_acquire) == false &&
+      portion.context_in_use.load(std::memory_order_acquire) == false) {
+    portion.buffer_in_use.store(true, std::memory_order_release);
 
     // Open the binary file stream once; keep it open across chunks to minimize
     // syscalls
@@ -70,8 +74,9 @@ void Optimizer::disk_to_ram(Portion &portion) {
     // Truncate to actual elements read (handles partial read at EOF)
     portion.ram_buffer_tokens.resize(prev_size + brain_floats_read);
 
-    // Release RAM buffer lock
-    portion.buffer_in_use = false;
+    // Atomic release: all prior writes are visible to any thread that
+    // subsequently acquires this flag.
+    portion.buffer_in_use.store(false, std::memory_order_release);
   }
 }
 
@@ -80,38 +85,45 @@ void Optimizer::disk_to_ram(Portion &portion) {
 
 bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
 
-  if (portion.context_in_use == false && portion.buffer_in_use == false &&
+  if (portion.context_in_use.load(std::memory_order_acquire) == false &&
+      portion.buffer_in_use.load(std::memory_order_acquire)  == false &&
       training_in_use == false) {
 
-    // Lock the context window and buffer
-    portion.context_in_use = true;
-    portion.buffer_in_use = true;
+    // Lock with release semantics so the GPU thread sees the full buffer
+    portion.context_in_use.store(true, std::memory_order_release);
+    portion.buffer_in_use.store(true,  std::memory_order_release);
 
     if (portion.offset + portion.all_elements + portion.target_elements <=
         portion.ram_buffer_tokens.size()) {
 
-      // Clear previous tokens
-      portion.context_window_tokens.clear();
-      portion.target_tokens.clear();
+      // Guard: pinned buffers must be allocated before we write to them.
+      if (!portion.context_window_tokens || !portion.target_tokens) {
+        std::cerr << "[Optimizer] Pinned memory not allocated. Call portion.allocate_pinned() first.\n";
+        portion.buffer_in_use.store(false, std::memory_order_release);
+        portion.context_in_use.store(false, std::memory_order_release);
+        return false;
+      }
 
-      // Extract Context Window (X)
-      portion.context_window_tokens.assign(
-          portion.ram_buffer_tokens.begin() + portion.offset,
-          portion.ram_buffer_tokens.begin() + portion.offset +
-              portion.all_elements);
+      // Write X into the pinned context window buffer via memcpy.
+      // The write-combining hardware coalesces these writes and pushes them
+      // directly to the PCIe bus interface — no L1/L2 cache pollution.
+      std::memcpy(
+          portion.context_window_tokens,
+          portion.ram_buffer_tokens.data() + portion.offset,
+          portion.all_elements * sizeof(std::bfloat16_t));
 
-      // Extract Target (Y)
-      portion.target_tokens.assign(
-          portion.ram_buffer_tokens.begin() + portion.offset + portion.all_elements,
-          portion.ram_buffer_tokens.begin() + portion.offset + portion.all_elements +
-              portion.target_elements);
+      // Write Y into the pinned target buffer.
+      std::memcpy(
+          portion.target_tokens,
+          portion.ram_buffer_tokens.data() + portion.offset + portion.all_elements,
+          portion.target_elements * sizeof(std::bfloat16_t));
 
       // Move the bookmark forward
       portion.offset += portion.token_dim;
 
       // Release locks — caller trains on context_window_tokens / target_tokens
-      portion.buffer_in_use = false;
-      portion.context_in_use = false;
+      portion.buffer_in_use.store(false,  std::memory_order_release);
+      portion.context_in_use.store(false, std::memory_order_release);
 
       return true; // Successfully loaded a window
     } else {
@@ -120,8 +132,8 @@ bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
       portion.offset = 0;
 
       // Release locks so disk_to_ram can run!
-      portion.buffer_in_use = false;
-      portion.context_in_use = false;
+      portion.buffer_in_use.store(false,  std::memory_order_release);
+      portion.context_in_use.store(false, std::memory_order_release);
 
       return false; // Out of data
     }

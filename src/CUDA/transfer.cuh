@@ -17,6 +17,20 @@ struct GpuPortion {
   size_t target_elements          = 0;       // total bfloat16 elements in Y
 };
 
+// GPU-side mirror of the AI weights and biases.
+struct GpuWeights {
+  void* d_weights = nullptr; // device ptr to __nv_bfloat16
+  void* d_bias    = nullptr; // device ptr to __nv_bfloat16
+  size_t weight_elements = 0;
+  size_t bias_elements   = 0;
+};
+
+// GPU-side activations buffer
+struct GpuActivations {
+  void* d_output = nullptr;  // device ptr to __nv_bfloat16
+  size_t output_elements = 0;
+};
+
 #ifdef BUILDING_CUDA_DLL
   #define CUDA_API __declspec(dllexport)
 #else
@@ -30,13 +44,40 @@ CUDA_API bool upload_to_gpu(const void *h_context, size_t context_elements,
                             const void *h_target,  size_t target_elements,
                             GpuPortion *gpu);
 
-// Download context window (X) and target (Y) from GPU to CPU bfloat16 vectors for verification.
 CUDA_API bool download_from_gpu(void *h_context, size_t context_elements,
                                 void *h_target,  size_t target_elements,
                                 const GpuPortion *gpu);
 
-// Free all device allocations inside GpuPortion.
+// Upload weights and biases from CPU to GPU
+CUDA_API bool upload_ai_weights(const float* h_weights, size_t weight_elements,
+                                const float* h_bias,    size_t bias_elements,
+                                GpuWeights* gpu);
+
+// Execute the forward pass: y = ReLU(W*x + b)
+// x is gpu_portion->d_context_window
+// W and b are in gpu_weights
+// y is stored in gpu_activations->d_output
+CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
+                           const GpuWeights* gpu_weights,
+                           GpuActivations* gpu_activations,
+                           size_t input_dim, size_t output_dim);
+
+// Free all device allocations inside GpuPortion, GpuWeights, and GpuActivations.
 CUDA_API void free_gpu(GpuPortion *gpu);
+CUDA_API void free_gpu_weights(GpuWeights *gpu);
+CUDA_API void free_gpu_activations(GpuActivations *gpu);
+
+// ── Pinned (page-locked) host memory wrappers ────────────────────────────────
+// These exist so that g++ (MinGW) never needs to link against cudart.lib.
+// ALL cudaHostAlloc / cudaFreeHost calls live inside the MSVC-compiled DLL.
+//
+// pinned_alloc: allocates 'bytes' of cudaHostAllocWriteCombined memory.
+//   Returns a valid host pointer on success, nullptr on failure.
+CUDA_API void* pinned_alloc(size_t bytes);
+
+// pinned_free: releases a buffer previously returned by pinned_alloc.
+//   Safe to call with nullptr.
+CUDA_API void  pinned_free(void* ptr);
 
 #ifdef __cplusplus
 }

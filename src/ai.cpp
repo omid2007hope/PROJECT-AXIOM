@@ -2,10 +2,7 @@
 #include <random>
 #include <iostream>
 
-// External CUDA function (we will implement this in a .cu file soon)
-extern "C" bool upload_ai_weights(const float* h_weights, size_t weight_elements,
-                                  const float* h_bias, size_t bias_elements,
-                                  GpuWeights* gpu);
+
 
 AI::AI(size_t in_dim, size_t out_dim) : input_dim(in_dim), output_dim(out_dim) {
     size_t weight_elements = in_dim * out_dim;
@@ -35,6 +32,12 @@ AI::AI(size_t in_dim, size_t out_dim) : input_dim(in_dim), output_dim(out_dim) {
     std::cout << "[AI Brain] Initialized with " << weight_elements << " chaotic weights.\n";
 }
 
+AI::~AI() {
+    free_gpu(&gpu_portion);
+    free_gpu_weights(&gpu_weights);
+    free_gpu_activations(&gpu_activations);
+}
+
 bool AI::upload_weights_to_gpu() {
     // Pass the data down to the CUDA C-interface
     return upload_ai_weights(h_weights.data(), h_weights.size(),
@@ -43,14 +46,27 @@ bool AI::upload_weights_to_gpu() {
 }
 
 void AI::train(Optimizer &optimizer, Portion &portion) {
-    // Acquire the lock before requesting data
-    this->training_in_use = true;
+    // Signal: we are now consuming a context window.
+    this->training_in_use.store(true, std::memory_order_release);
 
-    // The Optimizer takes control, writes the context window, and then releases the lock!
-    bool has_data = optimizer.ram_to_contextWindow(portion, this->training_in_use);
-    
+    // Extract the value into a plain bool so we can pass it by reference
+    // to ram_to_contextWindow (which still takes bool& for its internal guard).
+    bool in_use = this->training_in_use.load(std::memory_order_acquire);
+    bool has_data = optimizer.ram_to_contextWindow(portion, in_use);
+    // Sync the atomic back from what the optimizer may have modified.
+    this->training_in_use.store(in_use, std::memory_order_release);
+
     if (has_data) {
-        // std::cout << "[AI] Context window loaded. Ready for Matrix Multiplication!\n";
-        // TODO: Launch CUDA kernels for Forward and Backward pass here!
+        // Transfer the pinned host memory to VRAM across the PCIe bus
+        if (upload_to_gpu(portion.context_window_tokens, portion.all_elements,
+                          portion.target_tokens, portion.target_elements,
+                          &gpu_portion)) {
+            // Launch CUDA kernel for Forward Pass
+            forward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_dim, output_dim);
+            
+            // TODO: Launch CUDA kernel for Backward pass here!
+        } else {
+            std::cerr << "[AI Brain] Failed to upload portion to GPU.\n";
+        }
     }
 }
