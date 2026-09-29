@@ -55,8 +55,8 @@ struct Input {
   size_t embedding_dim = 4;
 
   // bfloat16_t
-  std::unordered_map<uint32_t, std::vector<std::bfloat16_t>>
-      embedding_table = {};
+  std::unordered_map<uint32_t, std::vector<std::bfloat16_t>> embedding_table =
+      {};
 };
 
 class Parser {
@@ -81,8 +81,8 @@ private:
   template <typename T>
   void save_data(const std::vector<T> &data, const std::string &filename) {
     // Automatically prepend the "database/" folder to all files
-    std::filesystem::path full_path =
-        std::filesystem::path("database") / filename;
+    std::filesystem::canonical full_path =
+        std::filesystem::canonical("database") / filename;
 
     // Create the "database/" folder (and any subfolders) if they don't exist
     std::filesystem::create_directories(full_path.parent_path());
