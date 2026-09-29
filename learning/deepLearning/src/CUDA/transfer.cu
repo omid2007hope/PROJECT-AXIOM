@@ -23,7 +23,9 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
                    const void *h_target,  size_t target_elements,
                    GpuPortion *gpu) {
 
-  if (!gpu) return false;
+  if (!gpu || !h_context || !h_target || context_elements == 0 || target_elements == 0) {
+    fprintf(stderr, "Invalid memory parameters in upload_to_gpu\n");
+    return false;};
 
   // ── Context Window (X) ────────────────────────────────────────────────────
   if (gpu->context_elements != context_elements) {
