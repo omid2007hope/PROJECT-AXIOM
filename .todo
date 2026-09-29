@@ -85,12 +85,6 @@ c:/Users/Omid/X/Code/Brain/
     }
     ```
 
-- [ ] **P1.03 — Prevent Arbitrary File Ingestion & Path Traversal**
-  - **Location:** [`parser.cpp:L54-65`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L54-L65) and [`parser.hpp:L107-146`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/include/parser.hpp#L107-L146)
-  - **Classification:** `Security` / `Path Traversal`
-  - **Defect:** In production mode (`developer_mode = false`), user-supplied paths (`user_image_paths`, `user_video_paths`, `user_voice_paths`) are forwarded to `tokenize_from_disk()` without sandboxing, permitting arbitrary system file reads.
-  - **Action Required:** Implement path canonicalization via `std::filesystem::canonical` and enforce a whitelist or root sandbox directory check before opening any file stream.
-
 - [ ] **P1.04 — Enforce File Size Caps & Ingestion Streaming Quotas**
   - **Location:** [`parser.cpp:L141-145`](file:///c:/Users/Omid/X/Code/Brain/learning/deepLearning/util/parser.cpp#L141-L145)
   - **Classification:** `Security` / `Denial of Service (DoS)`
