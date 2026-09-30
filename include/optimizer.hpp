@@ -91,40 +91,33 @@ struct Portion {
   // Returns false if the CUDA DLL reports an allocation failure.
   bool allocate_pinned() {
     if (context_window_tokens || target_tokens) {
+      return true; // already allocated
+    }
 
-      context_window_tokens = static_cast<std::bfloat16_t *>(
-          pinned_alloc(all_elements * sizeof(std::bfloat16_t)));
+    context_window_tokens = static_cast<std::bfloat16_t *>(
+        pinned_alloc(all_elements * sizeof(std::bfloat16_t)));
 
-      target_tokens = static_cast<std::bfloat16_t *>(
-          pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
+    target_tokens = static_cast<std::bfloat16_t *>(
+        pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
 
-      return true;
-      // already allocated
-    } else {
-      if (!context_window_tokens) {
-        std::cerr
-            << "[Portion] pinned_alloc failed for context_window_tokens\n";
-      };
-
-      if (!target_tokens) {
-        std::cerr << "[Portion] pinned_alloc failed for target_tokens\n";
-      };
-
-      pinned_free(context_window_tokens);
-      context_window_tokens = nullptr;
-
+    if (!context_window_tokens || !target_tokens) {
+      std::cerr << "[Portion] pinned_alloc failed\n";
+      free_pinned();
       return false;
     }
 
-    // Release pinned host memory. Safe to call even if allocate_pinned() was
-    // never called (pinned_free checks for nullptr internally).
-    void free_pinned() {
-      pinned_free(context_window_tokens);
-      context_window_tokens = nullptr;
-      pinned_free(target_tokens);
-      target_tokens = nullptr;
-    }
-  };
+    return true;
+  }
+
+  // Release pinned host memory. Safe to call even if allocate_pinned() was
+  // never called (pinned_free checks for nullptr internally).
+  void free_pinned() {
+    pinned_free(context_window_tokens);
+    context_window_tokens = nullptr;
+    pinned_free(target_tokens);
+    target_tokens = nullptr;
+  }
+};
 
   class Optimizer {
   private:
