@@ -112,23 +112,28 @@ struct Portion {
   // Release pinned host memory. Safe to call even if allocate_pinned() was
   // never called (pinned_free checks for nullptr internally).
   void free_pinned() {
+    //
     pinned_free(context_window_tokens);
+    // free context
     context_window_tokens = nullptr;
+
+    //
     pinned_free(target_tokens);
+    // free target
     target_tokens = nullptr;
   }
 };
 
-  class Optimizer {
-  private:
-    // Kept permanently open: ~8KB OS buffer cost, zero syscall overhead per
-    // chunk.
-    std::ifstream file_stream;
+class Optimizer {
+private:
+  // Kept permanently open: ~8KB OS buffer cost, zero syscall overhead per
+  // chunk.
+  std::ifstream file_stream;
 
-  public:
-    void disk_to_ram(Portion &portion);
+public:
+  void disk_to_ram(Portion &portion);
 
-    bool ram_to_contextWindow(Portion &portion, bool &training_in_use);
-  };
+  bool ram_to_contextWindow(Portion &portion, bool &training_in_use);
+};
 
 #endif

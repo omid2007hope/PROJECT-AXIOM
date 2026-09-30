@@ -53,4 +53,4 @@ clean:
 
 # ─── Run tests ───────────────────────────────────────────────────────────────
 test: $(TEST_TARGET)
-	$(TEST_TARGET)
+	./$(TEST_TARGET)
