@@ -11,8 +11,9 @@ extern "C" {
 // All pointers are device memory — do NOT dereference on the CPU.
 // Uses void* to hide __nv_bfloat16 from the CPU compiler.
 struct GpuPortion {
-  void *d_context_window = nullptr; // device ptr: X  (128 tokens * 4 dim)
-  void *d_target         = nullptr; // device ptr: Y  (1  token  * 4 dim)
+  void *d_context_window[2] = (nullptr, nullptr); // device ptr: X  (128 tokens * 4 dim)
+  void *d_target[2] = (nullptr, nullptr); // device ptr: Y  (1  token  * 4 dim)
+
   size_t context_elements         = 0;       // total bfloat16 elements in X
   size_t target_elements          = 0;       // total bfloat16 elements in Y
 };
