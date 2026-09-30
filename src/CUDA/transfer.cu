@@ -29,38 +29,38 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
 
   // ── Context Window (X) ────────────────────────────────────────────────────
   if (gpu->context_elements != context_elements) {
-    if (gpu->d_context_window) {
+    if (gpu->d_context_window_perv) {
       // Free the memory if an error accrued.
-      if (!CUDA_CHECK(cudaFree(gpu->d_context_window)))
+      if (!CUDA_CHECK(cudaFree(gpu->d_context_window_perv)))
         return false;
       
-      gpu->d_context_window = nullptr;
+      gpu->d_context_window_perv = nullptr;
     }
     
-    if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window,
+    if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window_perv,
                                context_elements * sizeof(__nv_bfloat16))))
       return false;
     gpu->context_elements = context_elements;
   }
 
-  if (!CUDA_CHECK(cudaMemcpy(gpu->d_context_window, h_context,
+  if (!CUDA_CHECK(cudaMemcpy(gpu->d_context_window_perv, h_context,
                              context_elements * sizeof(__nv_bfloat16),
                              cudaMemcpyHostToDevice)))
     return false;
 
   // ── Target (Y) ────────────────────────────────────────────────────────────
   if (gpu->target_elements != target_elements) {
-    if (gpu->d_target) {
-      if (!CUDA_CHECK(cudaFree(gpu->d_target))) return false;
-      gpu->d_target = nullptr;
+    if (gpu->d_target_perv) {
+      if (!CUDA_CHECK(cudaFree(gpu->d_target_perv))) return false;
+      gpu->d_target_perv = nullptr;
     }
-    if (!CUDA_CHECK(cudaMalloc(&gpu->d_target,
+    if (!CUDA_CHECK(cudaMalloc(&gpu->d_target_perv,
                                target_elements * sizeof(__nv_bfloat16))))
       return false;
     gpu->target_elements = target_elements;
   }
 
-  if (!CUDA_CHECK(cudaMemcpy(gpu->d_target, h_target,
+  if (!CUDA_CHECK(cudaMemcpy(gpu->d_target_perv, h_target,
                              target_elements * sizeof(__nv_bfloat16),
                              cudaMemcpyHostToDevice)))
     return false;
@@ -76,15 +76,15 @@ extern "C" __declspec(dllexport) bool download_from_gpu(void *h_context, size_t 
                        const GpuPortion *gpu) {
   if (!gpu) return false;
 
-  if (h_context && gpu->d_context_window && context_elements == gpu->context_elements) {
-    if (!CUDA_CHECK(cudaMemcpy(h_context, gpu->d_context_window,
+  if (h_context && gpu->d_context_window_perv && context_elements == gpu->context_elements) {
+    if (!CUDA_CHECK(cudaMemcpy(h_context, gpu->d_context_window_perv,
                                context_elements * sizeof(__nv_bfloat16),
                                cudaMemcpyDeviceToHost)))
       return false;
   }
 
-  if (h_target && gpu->d_target && target_elements == gpu->target_elements) {
-    if (!CUDA_CHECK(cudaMemcpy(h_target, gpu->d_target,
+  if (h_target && gpu->d_target_perv && target_elements == gpu->target_elements) {
+    if (!CUDA_CHECK(cudaMemcpy(h_target, gpu->d_target_perv,
                                target_elements * sizeof(__nv_bfloat16),
                                cudaMemcpyDeviceToHost)))
       return false;
@@ -98,14 +98,14 @@ extern "C" __declspec(dllexport) bool download_from_gpu(void *h_context, size_t 
 // ─────────────────────────────────────────────────────────────────────────────
 extern "C" __declspec(dllexport) void free_gpu(GpuPortion *gpu) {
   if (!gpu) return;
-  if (gpu->d_context_window) {
-    cudaFree(gpu->d_context_window);
-    gpu->d_context_window = nullptr;
+  if (gpu->d_context_window_perv) {
+    cudaFree(gpu->d_context_window_perv);
+    gpu->d_context_window_perv = nullptr;
     gpu->context_elements = 0;
   }
-  if (gpu->d_target) {
-    cudaFree(gpu->d_target);
-    gpu->d_target = nullptr;
+  if (gpu->d_target_perv) {
+    cudaFree(gpu->d_target_perv);
+    gpu->d_target_perv = nullptr;
     gpu->target_elements = 0;
   }
 }
@@ -241,7 +241,7 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
                                                    GpuActivations* gpu_activations,
                                                    size_t input_dim, size_t output_dim) {
   if (!gpu_portion || !gpu_weights || !gpu_activations) return false;
-  if (!gpu_portion->d_context_window || !gpu_weights->d_weights || !gpu_weights->d_bias) return false;
+  if (!gpu_portion->d_context_window_perv || !gpu_weights->d_weights || !gpu_weights->d_bias) return false;
 
   // Allocate output buffer if needed
   if (gpu_activations->output_elements != output_dim) {
@@ -258,7 +258,7 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
   
   forward_pass_kernel<<<blocks, threads>>>(
       static_cast<const __nv_bfloat16*>(gpu_weights->d_weights),
-      static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window),
+      static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window_perv),
       static_cast<const __nv_bfloat16*>(gpu_weights->d_bias),
       static_cast<__nv_bfloat16*>(gpu_activations->d_output),
       input_dim, output_dim
