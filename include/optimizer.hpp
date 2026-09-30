@@ -15,10 +15,10 @@
 // (compiled by nvcc/MSVC). The g++ side only calls these two thin wrappers,
 // so it never needs to link against cudart.lib or any CUDA import library.
 #ifndef CUDA_API
-  #define CUDA_API __declspec(dllimport)
+#define CUDA_API __declspec(dllimport)
 #endif
-extern "C" CUDA_API void* pinned_alloc(size_t bytes);
-extern "C" CUDA_API void  pinned_free(void* ptr);
+extern "C" CUDA_API void *pinned_alloc(size_t bytes);
+extern "C" CUDA_API void pinned_free(void *ptr);
 
 // Architecture principle: Storage drives are hyper-optimized for sequential
 // forward reads.
@@ -82,50 +82,60 @@ struct Portion {
   // =========================================================================
 
   // The Input (X): pinned host buffer — 128 tokens * 4 dim = 512 bfloat16_t
-  std::bfloat16_t* context_window_tokens = nullptr;
+  std::bfloat16_t *context_window_tokens = nullptr;
 
   // The Target (Y): pinned host buffer — 1 token * 4 dim = 4 bfloat16_t
-  std::bfloat16_t* target_tokens = nullptr;
+  std::bfloat16_t *target_tokens = nullptr;
 
   // Allocate the pinned buffers. Must be called once before the training loop.
   // Returns false if the CUDA DLL reports an allocation failure.
   bool allocate_pinned() {
-    if (context_window_tokens || target_tokens) return true; // already allocated
-    context_window_tokens = static_cast<std::bfloat16_t*>(
-        pinned_alloc(all_elements * sizeof(std::bfloat16_t)));
-    if (!context_window_tokens) {
-      std::cerr << "[Portion] pinned_alloc failed for context_window_tokens\n";
-      return false;
-    }
-    target_tokens = static_cast<std::bfloat16_t*>(
-        pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
-    if (!target_tokens) {
-      std::cerr << "[Portion] pinned_alloc failed for target_tokens\n";
+    if (context_window_tokens || target_tokens) {
+
+      context_window_tokens = static_cast<std::bfloat16_t *>(
+          pinned_alloc(all_elements * sizeof(std::bfloat16_t)));
+
+      target_tokens = static_cast<std::bfloat16_t *>(
+          pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
+
+      return true;
+      // already allocated
+    } else {
+      if (!context_window_tokens) {
+        std::cerr
+            << "[Portion] pinned_alloc failed for context_window_tokens\n";
+      };
+
+      if (!target_tokens) {
+        std::cerr << "[Portion] pinned_alloc failed for target_tokens\n";
+      };
+
       pinned_free(context_window_tokens);
       context_window_tokens = nullptr;
+
       return false;
     }
-    return true;
-  }
 
-  // Release pinned host memory. Safe to call even if allocate_pinned() was
-  // never called (pinned_free checks for nullptr internally).
-  void free_pinned() {
-    pinned_free(context_window_tokens); context_window_tokens = nullptr;
-    pinned_free(target_tokens);         target_tokens         = nullptr;
-  }
-};
+    // Release pinned host memory. Safe to call even if allocate_pinned() was
+    // never called (pinned_free checks for nullptr internally).
+    void free_pinned() {
+      pinned_free(context_window_tokens);
+      context_window_tokens = nullptr;
+      pinned_free(target_tokens);
+      target_tokens = nullptr;
+    }
+  };
 
-class Optimizer {
-private:
-  // Kept permanently open: ~8KB OS buffer cost, zero syscall overhead per
-  // chunk.
-  std::ifstream file_stream;
+  class Optimizer {
+  private:
+    // Kept permanently open: ~8KB OS buffer cost, zero syscall overhead per
+    // chunk.
+    std::ifstream file_stream;
 
-public:
-  void disk_to_ram(Portion &portion);
+  public:
+    void disk_to_ram(Portion &portion);
 
-  bool ram_to_contextWindow(Portion &portion, bool &training_in_use);
-};
+    bool ram_to_contextWindow(Portion &portion, bool &training_in_use);
+  };
 
 #endif
