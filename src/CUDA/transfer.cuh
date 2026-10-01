@@ -14,6 +14,9 @@ struct GpuPortion {
   void *d_context_window[2] = {nullptr, nullptr}; // device ptr: X  (128 tokens * 4 dim)
   void *d_target[2] = {nullptr, nullptr}; // device ptr: Y  (1  token  * 4 dim)
 
+  size_t context_ptr = sizeof(d_context_window) / sizeof(d_context_window[0]);
+  size_t target_ptr = sizeof(d_target) / sizeof(d_target[0]);
+
   size_t context_elements         = 0;       // total bfloat16 elements in X
   size_t target_elements          = 0;       // total bfloat16 elements in Y
 };

@@ -27,46 +27,58 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
     fprintf(stderr, "Invalid memory parameters in upload_to_gpu\n");
     return false;};
 
-  // ── Context Window (X) ────────────────────────────────────────────────────
-  if (gpu->context_elements != context_elements) {
-    if (gpu->d_context_window) {
-      // Free the memory if an error accrued.
-      if (!CUDA_CHECK(cudaFree(gpu->d_context_window)))
-        return false;
-      
-      gpu->d_context_window = nullptr;
-    }
+    for (size_t each_context_ptr = 0; each_context_ptr <= gpu->context_ptr ; ++each_context_ptr) {
     
-    if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window,
-                               context_elements * sizeof(__nv_bfloat16))))
-      return false;
-    gpu->context_elements = context_elements;
-  }
+    // ── Context Window (X) ────────────────────────────────────────────────────
+    if (gpu->context_elements != context_elements) {
 
-  if (!CUDA_CHECK(cudaMemcpy(gpu->d_context_window, h_context,
+        if (gpu->d_context_window[each_context_ptr]) {
+          
+          // Free the memory if an error accrued.
+          if (!CUDA_CHECK(cudaFree(gpu->d_context_window[each_context_ptr]))) return false;
+          gpu->d_context_window[each_context_ptr] = nullptr;
+          
+        }
+        
+        if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window[each_context_ptr],
+                                   context_elements * sizeof(__nv_bfloat16)))) return false;
+        gpu->context_elements = context_elements;
+      
+  } // end
+
+  if (!CUDA_CHECK(cudaMemcpy(gpu->d_context_window[each_context_ptr], h_context,
                              context_elements * sizeof(__nv_bfloat16),
                              cudaMemcpyHostToDevice)))
     return false;
+  
+  };
 
-  // ── Target (Y) ────────────────────────────────────────────────────────────
-  if (gpu->target_elements != target_elements) {
-    if (gpu->d_target) {
-      if (!CUDA_CHECK(cudaFree(gpu->d_target))) return false;
-      gpu->d_target = nullptr;
-    }
-    if (!CUDA_CHECK(cudaMalloc(&gpu->d_target,
-                               target_elements * sizeof(__nv_bfloat16))))
-      return false;
-    gpu->target_elements = target_elements;
-  }
+  for (size_t each_target_ptr = 0; each_target_ptr <= gpu->target_ptr;
+       ++each_target_ptr) {
+    
+        // ── Target (Y) ────────────────────────────────────────────────────────────
+        if (gpu->target_elements != target_elements) {
 
-  if (!CUDA_CHECK(cudaMemcpy(gpu->d_target, h_target,
-                             target_elements * sizeof(__nv_bfloat16),
-                             cudaMemcpyHostToDevice)))
-    return false;
+          if (gpu->d_target[each_target_ptr]) {
 
-  return true;
-}
+            if (!CUDA_CHECK(cudaFree(gpu->d_target[each_target_ptr]))) return false;
+            gpu->d_target[each_target_ptr] = nullptr;
+          }
+          
+          if (!CUDA_CHECK(cudaMalloc(&gpu->d_target[each_target_ptr],
+                                     target_elements * sizeof(__nv_bfloat16))))  return false;
+          gpu->target_elements = target_elements;
+
+        }
+      
+        if (!CUDA_CHECK(cudaMemcpy(gpu->d_target[each_target_ptr], h_target,
+                                   target_elements * sizeof(__nv_bfloat16),
+                                   cudaMemcpyHostToDevice))) return false;
+
+        return true;
+      }
+  };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // download_from_gpu
