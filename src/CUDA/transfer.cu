@@ -21,63 +21,52 @@ static bool cuda_check(cudaError_t err, const char *file, int line) {
 // ─────────────────────────────────────────────────────────────────────────────
 extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_t context_elements,
                    const void *h_target,  size_t target_elements,
-                   GpuPortion *gpu) {
+                   GpuPortion *gpu, int buffer_index) {
 
   if (!gpu || !h_context || !h_target || context_elements == 0 || target_elements == 0) {
     fprintf(stderr, "Invalid memory parameters in upload_to_gpu\n");
     return false;};
 
-    for (size_t each_context_ptr = 0; each_context_ptr <= gpu->context_ptr ; ++each_context_ptr) {
-    
-    // ── Context Window (X) ────────────────────────────────────────────────────
+  // ── Context Window (X) — Allocate both buffers if size changed ──────────────
+  for (size_t i = 0; i < gpu->context_ptr; ++i) {
     if (gpu->context_elements != context_elements) {
+      if (gpu->d_context_window[i]) {
+        // Free the memory if an error accrued.
+        if (!CUDA_CHECK(cudaFree(gpu->d_context_window[i]))) return false;
+        gpu->d_context_window[i] = nullptr;
+      }
+      if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window[i],
+                                 context_elements * sizeof(__nv_bfloat16)))) return false;
+    }
+  }
+  gpu->context_elements = context_elements;
 
-        if (gpu->d_context_window[each_context_ptr]) {
-          
-          // Free the memory if an error accrued.
-          if (!CUDA_CHECK(cudaFree(gpu->d_context_window[each_context_ptr]))) return false;
-          gpu->d_context_window[each_context_ptr] = nullptr;
-          
-        }
-        
-        if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window[each_context_ptr],
-                                   context_elements * sizeof(__nv_bfloat16)))) return false;
-        gpu->context_elements = context_elements;
-      
-  } // end
-
-  if (!CUDA_CHECK(cudaMemcpy(gpu->d_context_window[each_context_ptr], h_context,
+  // Transfer data only into the active buffer
+  if (!CUDA_CHECK(cudaMemcpy(gpu->d_context_window[buffer_index], h_context,
                              context_elements * sizeof(__nv_bfloat16),
                              cudaMemcpyHostToDevice)))
     return false;
-  
-  };
 
-  for (size_t each_target_ptr = 0; each_target_ptr <= gpu->target_ptr;
-       ++each_target_ptr) {
-    
-        // ── Target (Y) ────────────────────────────────────────────────────────────
-        if (gpu->target_elements != target_elements) {
-
-          if (gpu->d_target[each_target_ptr]) {
-
-            if (!CUDA_CHECK(cudaFree(gpu->d_target[each_target_ptr]))) return false;
-            gpu->d_target[each_target_ptr] = nullptr;
-          }
-          
-          if (!CUDA_CHECK(cudaMalloc(&gpu->d_target[each_target_ptr],
-                                     target_elements * sizeof(__nv_bfloat16))))  return false;
-          gpu->target_elements = target_elements;
-
-        }
-      
-        if (!CUDA_CHECK(cudaMemcpy(gpu->d_target[each_target_ptr], h_target,
-                                   target_elements * sizeof(__nv_bfloat16),
-                                   cudaMemcpyHostToDevice))) return false;
-
-        return true;
+  // ── Target (Y) — Allocate both buffers if size changed ────────────────────
+  for (size_t i = 0; i < gpu->target_ptr; ++i) {
+    if (gpu->target_elements != target_elements) {
+      if (gpu->d_target[i]) {
+        if (!CUDA_CHECK(cudaFree(gpu->d_target[i]))) return false;
+        gpu->d_target[i] = nullptr;
       }
-  };
+      if (!CUDA_CHECK(cudaMalloc(&gpu->d_target[i],
+                                 target_elements * sizeof(__nv_bfloat16)))) return false;
+    }
+  }
+  gpu->target_elements = target_elements;
+
+  // Transfer data only into the active buffer
+  if (!CUDA_CHECK(cudaMemcpy(gpu->d_target[buffer_index], h_target,
+                             target_elements * sizeof(__nv_bfloat16),
+                             cudaMemcpyHostToDevice))) return false;
+
+  return true;
+}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
