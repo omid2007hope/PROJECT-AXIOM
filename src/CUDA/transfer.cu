@@ -74,7 +74,7 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
 // ─────────────────────────────────────────────────────────────────────────────
 extern "C" __declspec(dllexport) bool download_from_gpu(void *h_context, size_t context_elements,
                        void *h_target,  size_t target_elements,
-                       const GpuPortion *gpu) {
+                       const GpuPortion *gpu, int buffer_index) {
   if (!gpu) return false;
 
   if (h_context && gpu->d_context_window && context_elements == gpu->context_elements) {
@@ -240,7 +240,7 @@ __global__ static void forward_pass_kernel(
 extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion,
                                                    const GpuWeights* gpu_weights,
                                                    GpuActivations* gpu_activations,
-                                                   size_t input_dim, size_t output_dim) {
+                                                   size_t input_dim, size_t output_dim, int buffer_index) {
   if (!gpu_portion || !gpu_weights || !gpu_activations) return false;
   if (!gpu_portion->d_context_window || !gpu_weights->d_weights || !gpu_weights->d_bias) return false;
 

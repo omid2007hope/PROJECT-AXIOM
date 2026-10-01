@@ -46,11 +46,11 @@ struct GpuActivations {
 // Returns false and prints to stderr if any CUDA call fails.
 CUDA_API bool upload_to_gpu(const void *h_context, size_t context_elements,
                             const void *h_target,  size_t target_elements,
-                            GpuPortion *gpu);
+                            GpuPortion *gpu, int buffer_index);
 
 CUDA_API bool download_from_gpu(void *h_context, size_t context_elements,
                                 void *h_target,  size_t target_elements,
-                                const GpuPortion *gpu);
+                                const GpuPortion *gpu, int buffer_index);
 
 // Upload weights and biases from CPU to GPU
 CUDA_API bool upload_ai_weights(const float* h_weights, size_t weight_elements,
@@ -64,7 +64,7 @@ CUDA_API bool upload_ai_weights(const float* h_weights, size_t weight_elements,
 CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
                            const GpuWeights* gpu_weights,
                            GpuActivations* gpu_activations,
-                           size_t input_dim, size_t output_dim);
+                           size_t input_dim, size_t output_dim, int buffer_index);
 
 // Free all device allocations inside GpuPortion, GpuWeights, and GpuActivations.
 CUDA_API void free_gpu(GpuPortion *gpu);
