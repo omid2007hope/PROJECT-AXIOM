@@ -77,15 +77,15 @@ extern "C" __declspec(dllexport) bool download_from_gpu(void *h_context, size_t 
                        const GpuPortion *gpu, int buffer_index) {
   if (!gpu) return false;
 
-  if (h_context && gpu->d_context_window && context_elements == gpu->context_elements) {
-    if (!CUDA_CHECK(cudaMemcpy(h_context, gpu->d_context_window,
+  if (h_context && gpu->d_context_window[buffer_index] && context_elements == gpu->context_elements) {
+    if (!CUDA_CHECK(cudaMemcpy(h_context, gpu->d_context_window[buffer_index],
                                context_elements * sizeof(__nv_bfloat16),
                                cudaMemcpyDeviceToHost)))
       return false;
   }
 
-  if (h_target && gpu->d_target && target_elements == gpu->target_elements) {
-    if (!CUDA_CHECK(cudaMemcpy(h_target, gpu->d_target,
+  if (h_target && gpu->d_target[buffer_index] && target_elements == gpu->target_elements) {
+    if (!CUDA_CHECK(cudaMemcpy(h_target, gpu->d_target[buffer_index],
                                target_elements * sizeof(__nv_bfloat16),
                                cudaMemcpyDeviceToHost)))
       return false;
@@ -242,7 +242,7 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
                                                    GpuActivations* gpu_activations,
                                                    size_t input_dim, size_t output_dim, int buffer_index) {
   if (!gpu_portion || !gpu_weights || !gpu_activations) return false;
-  if (!gpu_portion->d_context_window || !gpu_weights->d_weights || !gpu_weights->d_bias) return false;
+  if (!gpu_portion->d_context_window[buffer_index] || !gpu_weights->d_weights || !gpu_weights->d_bias) return false;
 
   // Allocate output buffer if needed
   if (gpu_activations->output_elements != output_dim) {
@@ -259,7 +259,7 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
   
   forward_pass_kernel<<<blocks, threads>>>(
       static_cast<const __nv_bfloat16*>(gpu_weights->d_weights),
-      static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window),
+      static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
       static_cast<const __nv_bfloat16*>(gpu_weights->d_bias),
       static_cast<__nv_bfloat16*>(gpu_activations->d_output),
       input_dim, output_dim
