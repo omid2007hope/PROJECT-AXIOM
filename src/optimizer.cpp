@@ -69,8 +69,8 @@ void Optimizer::disk_to_ram(Portion &portion) {
     std::cout << "[Optimizer] EOF reached — rewinding to start of file.\n";
   }
 
-  // ── Reset offset: skip past the seam, it was already processed ───────────
-  portion.offset = prefix;
+  // ── Reset offset: start at 0 to INCLUDE the seam in the first window ──────
+  portion.offset = 0;
 
   std::cout << "[Optimizer] Loaded " << elements_read / portion.token_dim
             << " new tokens (" << elements_read << " elements).\n";
