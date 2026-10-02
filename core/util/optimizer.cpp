@@ -17,9 +17,11 @@ void Optimizer::disk_to_ram(Portion &portion) {
     // Open the binary file stream once; keep it open across chunks to minimize
     // syscalls
     if (!file_stream.is_open()) {
-      file_stream.open("database/embedded_data.bin", std::ios::binary);
+      std::filesystem::path absolute_path(__FILE__);
+      std::filesystem::path full_path = absolute_path.parent_path().parent_path() / "database" / "embedded_data.bin";
+      file_stream.open(full_path, std::ios::binary);
       if (!file_stream) {
-        std::cerr << "Failed to open database/embedded_data.bin\n";
+        std::cerr << "Failed to open " << full_path << "\n";
         portion.buffer_in_use = false; // release lock so callers can retry
         return;
       }

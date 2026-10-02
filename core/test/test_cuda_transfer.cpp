@@ -96,15 +96,15 @@ static void test_bf16_memory_layout() {
 static void test_gpu_portion_mock() {
   // CPU mock of GpuPortion — verifies default init (no CUDA needed).
   struct MockGpuPortion {
-    void  *d_context_window = nullptr;
-    void  *d_target         = nullptr;
+    void  *d_context_window[2] = {nullptr, nullptr};
+    void  *d_target[2]         = {nullptr, nullptr};
     size_t context_elements = 0;
     size_t target_elements  = 0;
   };
 
   MockGpuPortion g;
-  check(g.d_context_window == nullptr, "GpuPortion d_context_window init nullptr");
-  check(g.d_target         == nullptr, "GpuPortion d_target init nullptr");
+  check(g.d_context_window[0] == nullptr, "GpuPortion d_context_window init nullptr");
+  check(g.d_target[0]         == nullptr, "GpuPortion d_target init nullptr");
   check_eq(g.context_elements, size_t{0}, "GpuPortion context_elements init 0");
   check_eq(g.target_elements,  size_t{0}, "GpuPortion target_elements init 0");
 
@@ -143,28 +143,28 @@ static void test_gpu_roundtrip() {
   }
 
   // 1. First call: cudaMalloc + cudaMemcpy
-  bool up1 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu);
+  bool up1 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu, 0);
   check(up1, "upload_to_gpu() — first call allocates and copies");
-  check(gpu.d_context_window != nullptr, "gpu.d_context_window is not null");
-  check(gpu.d_target != nullptr, "gpu.d_target is not null");
+  check(gpu.d_context_window[0] != nullptr, "gpu.d_context_window is not null");
+  check(gpu.d_target[0] != nullptr, "gpu.d_target is not null");
   check_eq(gpu.context_elements, ctx_elems, "gpu.context_elements matches");
   check_eq(gpu.target_elements, tgt_elems, "gpu.target_elements matches");
 
   // Save pointers to check reuse
-  void* old_ctx_ptr = gpu.d_context_window;
-  void* old_tgt_ptr = gpu.d_target;
+  void* old_ctx_ptr = gpu.d_context_window[0];
+  void* old_tgt_ptr = gpu.d_target[0];
 
   // 2. Second call same size: reuse buffer
-  bool up2 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu);
+  bool up2 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu, 0);
   check(up2, "upload_to_gpu() — second call succeeds");
-  check(gpu.d_context_window == old_ctx_ptr, "d_context_window pointer reused (no realloc)");
-  check(gpu.d_target == old_tgt_ptr, "d_target pointer reused (no realloc)");
+  check(gpu.d_context_window[0] == old_ctx_ptr, "d_context_window pointer reused (no realloc)");
+  check(gpu.d_target[0] == old_tgt_ptr, "d_target pointer reused (no realloc)");
 
   // 3. Verify H→D values match by downloading back (D→H)
   std::vector<std::bfloat16_t> h_ctx_out(ctx_elems, static_cast<std::bfloat16_t>(0.0f));
   std::vector<std::bfloat16_t> h_tgt_out(tgt_elems, static_cast<std::bfloat16_t>(0.0f));
   
-  bool down = download_from_gpu(h_ctx_out.data(), ctx_elems, h_tgt_out.data(), tgt_elems, &gpu);
+  bool down = download_from_gpu(h_ctx_out.data(), ctx_elems, h_tgt_out.data(), tgt_elems, &gpu, 0);
   check(down, "download_from_gpu() succeeds");
 
   bool ctx_match = true;
@@ -182,15 +182,15 @@ static void test_gpu_roundtrip() {
   // 4. Size change: free + realloc
   const size_t new_ctx_elems = 1024;
   std::vector<std::bfloat16_t> new_h_ctx_in(new_ctx_elems, static_cast<std::bfloat16_t>(1.0f));
-  bool up3 = upload_to_gpu(new_h_ctx_in.data(), new_ctx_elems, h_tgt_in.data(), tgt_elems, &gpu);
+  bool up3 = upload_to_gpu(new_h_ctx_in.data(), new_ctx_elems, h_tgt_in.data(), tgt_elems, &gpu, 0);
   check(up3, "upload_to_gpu() — size change succeeds");
-  check(gpu.d_context_window != old_ctx_ptr, "d_context_window reallocated for new size");
+  check(gpu.d_context_window[0] != old_ctx_ptr, "d_context_window reallocated for new size");
   check_eq(gpu.context_elements, new_ctx_elems, "context_elements updated to new size");
 
   // 5. Free GPU
   free_gpu(&gpu);
-  check(gpu.d_context_window == nullptr, "free_gpu() releases d_context_window");
-  check(gpu.d_target == nullptr, "free_gpu() releases d_target");
+  check(gpu.d_context_window[0] == nullptr, "free_gpu() releases d_context_window");
+  check(gpu.d_target[0] == nullptr, "free_gpu() releases d_target");
   check_eq(gpu.context_elements, size_t{0}, "free_gpu() resets context_elements");
   check_eq(gpu.target_elements, size_t{0}, "free_gpu() resets target_elements");
 

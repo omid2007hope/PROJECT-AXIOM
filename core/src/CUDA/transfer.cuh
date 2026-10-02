@@ -17,7 +17,7 @@ struct GpuPortion {
   size_t context_ptr = sizeof(d_context_window) / sizeof(d_context_window[0]);
   size_t target_ptr = sizeof(d_target) / sizeof(d_target[0]);
 
-  cudaStream_t stream[2] = {nullptr, nullptr};
+  void* stream[2] = {nullptr, nullptr};
   
   size_t context_elements         = 0;       // total bfloat16 elements in X
   size_t target_elements          = 0;       // total bfloat16 elements in Y

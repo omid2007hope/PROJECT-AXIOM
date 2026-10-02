@@ -80,9 +80,10 @@ private:
   // ********************
   template <typename T>
   void save_data(const std::vector<T> &data, const std::string &filename) {
-    // Automatically prepend the "database/" folder to all files
+    // Automatically prepend the "database/" folder to all files using the source file location
+    std::filesystem::path absolute_path(__FILE__);
     std::filesystem::path full_path =
-        std::filesystem::path("database") / filename;
+        absolute_path.parent_path().parent_path() / "database" / filename;
 
     // Create the "database/" folder (and any subfolders) if they don't exist
     std::filesystem::create_directories(full_path.parent_path());

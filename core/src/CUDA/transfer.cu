@@ -44,17 +44,16 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
     // CUDA Stream 
     if (gpu->stream[i] == nullptr) {
       CUDA_CHECK(
-          cudaStreamCreateWithFlags(&gpu->stream[i], cudaStreamNonBlocking)); `
-      };
+          cudaStreamCreateWithFlags((cudaStream_t*)&gpu->stream[i], cudaStreamNonBlocking));
+    }
 
 
   }
   gpu->context_elements = context_elements;
 
-  // Transfer data only into the active buffer
   if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_context_window[buffer_index], h_context,
                              context_elements * sizeof(__nv_bfloat16),
-                             cudaMemcpyHostToDevice,  gpu->stream[buffer_index])))
+                             cudaMemcpyHostToDevice,  (cudaStream_t)gpu->stream[buffer_index])))
     return false;
 
   // ── Target (Y) — Allocate both buffers if size changed ────────────────────
@@ -73,7 +72,7 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
   // Transfer data only into the active buffer
   if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_target[buffer_index], h_target,
                              target_elements * sizeof(__nv_bfloat16),
-                             cudaMemcpyHostToDevice , gpu->stream[buffer_index]))) return false;
+                             cudaMemcpyHostToDevice , (cudaStream_t)gpu->stream[buffer_index]))) return false;
 
   return true;
 }
@@ -90,14 +89,14 @@ extern "C" __declspec(dllexport) bool download_from_gpu(void *h_context, size_t 
   if (h_context && gpu->d_context_window[buffer_index] && context_elements == gpu->context_elements) {
     if (!CUDA_CHECK(cudaMemcpyAsync(h_context, gpu->d_context_window[buffer_index],
                                context_elements * sizeof(__nv_bfloat16),
-                               cudaMemcpyDeviceToHost, gpu->stream[buffer_index])))
+                               cudaMemcpyDeviceToHost, (cudaStream_t)gpu->stream[buffer_index])))
       return false;
   }
 
   if (h_target && gpu->d_target[buffer_index] && target_elements == gpu->target_elements) {
     if (!CUDA_CHECK(cudaMemcpyAsync(h_target, gpu->d_target[buffer_index],
                                target_elements * sizeof(__nv_bfloat16),
-                               cudaMemcpyDeviceToHost, gpu->stream[buffer_index])))
+                               cudaMemcpyDeviceToHost, (cudaStream_t)gpu->stream[buffer_index])))
       return false;
   }
 
@@ -109,15 +108,27 @@ extern "C" __declspec(dllexport) bool download_from_gpu(void *h_context, size_t 
 // ─────────────────────────────────────────────────────────────────────────────
 extern "C" __declspec(dllexport) void free_gpu(GpuPortion *gpu) {
   if (!gpu) return;
-  if (gpu->d_context_window) {
-    cudaFree(gpu->d_context_window);
-    gpu->d_context_window = nullptr;
-    gpu->context_elements = 0;
+  for (size_t i = 0; i < gpu->context_ptr; ++i) {
+    if (gpu->d_context_window[i]) {
+      cudaFree(gpu->d_context_window[i]);
+      gpu->d_context_window[i] = nullptr;
+    }
   }
-  if (gpu->d_target) {
-    cudaFree(gpu->d_target);
-    gpu->d_target = nullptr;
-    gpu->target_elements = 0;
+  gpu->context_elements = 0;
+  
+  for (size_t i = 0; i < gpu->target_ptr; ++i) {
+    if (gpu->d_target[i]) {
+      cudaFree(gpu->d_target[i]);
+      gpu->d_target[i] = nullptr;
+    }
+  }
+  gpu->target_elements = 0;
+  
+  for (size_t i = 0; i < gpu->context_ptr; ++i) {
+    if (gpu->stream[i]) {
+      cudaStreamDestroy((cudaStream_t)gpu->stream[i]);
+      gpu->stream[i] = nullptr;
+    }
   }
 }
 
@@ -267,7 +278,7 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
   int threads = 256;
   int blocks = static_cast<int>((output_dim + threads - 1) / threads);
   
-  forward_pass_kernel<<<blocks, threads, 0, gpu_portion->stream[buffer_index]>>>(
+  forward_pass_kernel<<<blocks, threads, 0, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
       static_cast<const __nv_bfloat16*>(gpu_weights->d_weights),
       static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
       static_cast<const __nv_bfloat16*>(gpu_weights->d_bias),
@@ -331,7 +342,7 @@ extern "C" __declspec(dllexport) bool backward_pass(const GpuPortion* gpu_portio
   int threads = 256;
   int blocks = static_cast<int>((output_dim + threads - 1) / threads);
   
-  backward_pass_kernel<<<blocks, threads, 0, gpu_portion->stream[buffer_index]>>>(
+  backward_pass_kernel<<<blocks, threads, 0, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
       static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
       static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
       static_cast<__nv_bfloat16*>(gpu_weights->d_bias),
