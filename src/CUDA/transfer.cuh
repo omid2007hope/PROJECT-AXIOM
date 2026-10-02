@@ -68,6 +68,14 @@ CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
                            GpuActivations* gpu_activations,
                            size_t input_dim, size_t output_dim, int buffer_index);
 
+// Execute the backward pass and update weights/biases via Gradient Descent
+// Uses the target from gpu_portion and the predicted output from gpu_activations
+CUDA_API bool backward_pass(const GpuPortion* gpu_portion,
+                            GpuWeights* gpu_weights,
+                            const GpuActivations* gpu_activations,
+                            size_t input_dim, size_t output_dim, 
+                            float learning_rate, int buffer_index);
+
 // Free all device allocations inside GpuPortion, GpuWeights, and GpuActivations.
 CUDA_API void free_gpu(GpuPortion *gpu);
 CUDA_API void free_gpu_weights(GpuWeights *gpu);

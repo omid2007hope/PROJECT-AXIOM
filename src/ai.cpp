@@ -64,9 +64,13 @@ void AI::train(Optimizer &optimizer, Portion &portion) {
       forward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_dim,
                    output_dim, portion.buffer_index);
 
-      portion.buffer_index = 1 - Portion.buffer_index;
+      // Launch CUDA kernel for Backward pass (Gradient Descent)
+      float learning_rate = 0.001f;
+      backward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_dim,
+                    output_dim, learning_rate, portion.buffer_index);
 
-      // TODO: Launch CUDA kernel for Backward pass here!
+      // Slide to the next buffer for the next training step
+      portion.buffer_index = 1 - portion.buffer_index;
     } else {
       std::cerr << "[AI Brain] Failed to upload portion to GPU.\n";
     }

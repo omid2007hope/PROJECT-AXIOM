@@ -279,3 +279,68 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
   
   return true;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// backward_pass: calculate error, gradients, and perform Gradient Descent update
+// ─────────────────────────────────────────────────────────────────────────────
+__global__ static void backward_pass_kernel(
+    __nv_bfloat16* __restrict__ W, // [out_dim, in_dim]
+    const __nv_bfloat16* __restrict__ x, // [in_dim]
+    __nv_bfloat16* __restrict__ b, // [out_dim]
+    const __nv_bfloat16* __restrict__ y, // [out_dim]
+    const __nv_bfloat16* __restrict__ target, // [out_dim]
+    size_t in_dim, size_t out_dim, float learning_rate) {
+  
+  size_t row = blockIdx.x * blockDim.x + threadIdx.x;
+  if (row < out_dim) {
+    // 1. Loss function: Error = prediction(y) - actual(target)
+    float y_val = __bfloat162float(y[row]);
+    float t_val = __bfloat162float(target[row]);
+    float dy = y_val - t_val;
+    
+    // 2. Backward pass through ReLU activation
+    // If y > 0, gradient passes through (derivative = 1). If y <= 0, neuron is dead (derivative = 0).
+    float dz = (y_val > 0.0f) ? dy : 0.0f;
+    
+    // 3. Update bias (b_new = b_old - learning_rate * db)
+    // For a dense layer, db is simply dz.
+    float b_val = __bfloat162float(b[row]);
+    b[row] = __float2bfloat16(b_val - learning_rate * dz);
+    
+    // 4. Update Weights (W_new = W_old - learning_rate * dW)
+    // For a dense layer, dW = dz * input(x)
+    for (size_t col = 0; col < in_dim; ++col) {
+      float x_val = __bfloat162float(x[col]);
+      float dw = dz * x_val;
+      
+      float w_val = __bfloat162float(W[row * in_dim + col]);
+      W[row * in_dim + col] = __float2bfloat16(w_val - learning_rate * dw);
+    }
+  }
+}
+
+extern "C" __declspec(dllexport) bool backward_pass(const GpuPortion* gpu_portion,
+                                                    GpuWeights* gpu_weights,
+                                                    const GpuActivations* gpu_activations,
+                                                    size_t input_dim, size_t output_dim, 
+                                                    float learning_rate, int buffer_index) {
+  if (!gpu_portion || !gpu_weights || !gpu_activations) return false;
+  if (!gpu_portion->d_context_window[buffer_index] || !gpu_portion->d_target[buffer_index]) return false;
+  if (!gpu_weights->d_weights || !gpu_weights->d_bias || !gpu_activations->d_output) return false;
+
+  int threads = 256;
+  int blocks = static_cast<int>((output_dim + threads - 1) / threads);
+  
+  backward_pass_kernel<<<blocks, threads, 0, gpu_portion->stream[buffer_index]>>>(
+      static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
+      static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+      static_cast<__nv_bfloat16*>(gpu_weights->d_bias),
+      static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
+      static_cast<const __nv_bfloat16*>(gpu_portion->d_target[buffer_index]),
+      input_dim, output_dim, learning_rate
+  );
+  
+  if (!CUDA_CHECK(cudaGetLastError())) return false;
+  
+  return true;
+}
