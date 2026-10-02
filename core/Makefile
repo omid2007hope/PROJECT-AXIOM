@@ -11,7 +11,9 @@ NVCCFLAGS = -arch=sm_89 --std=c++17 -ccbin "C:\Program Files (x86)\Microsoft Vis
             -I"$(CUDA_DIR)/include"
 
 CUDA_SRC_DIR = src/CUDA
-CUDA_SRCS    = $(wildcard $(CUDA_SRC_DIR)/*.cu)
+CUDA_SRCS    = $(wildcard $(CUDA_SRC_DIR)/gpu/*.cu) \
+               $(wildcard $(CUDA_SRC_DIR)/kernel/*.cu) \
+               $(wildcard $(CUDA_SRC_DIR)/util/*.cu)
 
 # ─── CPU sources ─────────────────────────────────────────────────────────────
 SRC_DIR  = src
