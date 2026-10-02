@@ -14,6 +14,7 @@ static bool cuda_check(cudaError_t err, const char *file, int line) {
   }
   return true;
 }
+
 #define CUDA_CHECK(call) cuda_check((call), __FILE__, __LINE__)
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,16 +36,25 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
         if (!CUDA_CHECK(cudaFree(gpu->d_context_window[i]))) return false;
         gpu->d_context_window[i] = nullptr;
       }
+
       if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window[i],
                                  context_elements * sizeof(__nv_bfloat16)))) return false;
     }
+
+    // CUDA Stream 
+    if (gpu->stream[i] == nullptr) {
+      CUDA_CHECK(
+          cudaStreamCreateWithFlags(&gpu->stream[i], cudaStreamNonBlocking)); `
+      };
+
+
   }
   gpu->context_elements = context_elements;
 
   // Transfer data only into the active buffer
-  if (!CUDA_CHECK(cudaMemcpy(gpu->d_context_window[buffer_index], h_context,
+  if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_context_window[buffer_index], h_context,
                              context_elements * sizeof(__nv_bfloat16),
-                             cudaMemcpyHostToDevice)))
+                             cudaMemcpyHostToDevice,  gpu->stream[buffer_index])))
     return false;
 
   // ── Target (Y) — Allocate both buffers if size changed ────────────────────
@@ -61,9 +71,9 @@ extern "C" __declspec(dllexport) bool upload_to_gpu(const void *h_context, size_
   gpu->target_elements = target_elements;
 
   // Transfer data only into the active buffer
-  if (!CUDA_CHECK(cudaMemcpy(gpu->d_target[buffer_index], h_target,
+  if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_target[buffer_index], h_target,
                              target_elements * sizeof(__nv_bfloat16),
-                             cudaMemcpyHostToDevice))) return false;
+                             cudaMemcpyHostToDevice , gpu->stream[buffer_index]))) return false;
 
   return true;
 }
@@ -78,16 +88,16 @@ extern "C" __declspec(dllexport) bool download_from_gpu(void *h_context, size_t 
   if (!gpu) return false;
 
   if (h_context && gpu->d_context_window[buffer_index] && context_elements == gpu->context_elements) {
-    if (!CUDA_CHECK(cudaMemcpy(h_context, gpu->d_context_window[buffer_index],
+    if (!CUDA_CHECK(cudaMemcpyAsync(h_context, gpu->d_context_window[buffer_index],
                                context_elements * sizeof(__nv_bfloat16),
-                               cudaMemcpyDeviceToHost)))
+                               cudaMemcpyDeviceToHost, gpu->stream[buffer_index])))
       return false;
   }
 
   if (h_target && gpu->d_target[buffer_index] && target_elements == gpu->target_elements) {
-    if (!CUDA_CHECK(cudaMemcpy(h_target, gpu->d_target[buffer_index],
+    if (!CUDA_CHECK(cudaMemcpyAsync(h_target, gpu->d_target[buffer_index],
                                target_elements * sizeof(__nv_bfloat16),
-                               cudaMemcpyDeviceToHost)))
+                               cudaMemcpyDeviceToHost, gpu->stream[buffer_index])))
       return false;
   }
 
@@ -168,7 +178,7 @@ extern "C" __declspec(dllexport) bool upload_ai_weights(
   // Temporary float32 staging buffer on device
   float* d_tmp_w = nullptr;
   if (!CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_tmp_w), weight_elements * sizeof(float)))) return false;
-  if (!CUDA_CHECK(cudaMemcpy(d_tmp_w, h_weights, weight_elements * sizeof(float), cudaMemcpyHostToDevice))) {
+  if (!CUDA_CHECK(cudaMemcpyAsync(d_tmp_w, h_weights, weight_elements * sizeof(float), cudaMemcpyHostToDevice, gpu->stream[buffer_index]))) {
     cudaFree(d_tmp_w); return false;
   }
   int threads = 256;
@@ -186,7 +196,7 @@ extern "C" __declspec(dllexport) bool upload_ai_weights(
 
   float* d_tmp_b = nullptr;
   if (!CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_tmp_b), bias_elements * sizeof(float)))) return false;
-  if (!CUDA_CHECK(cudaMemcpy(d_tmp_b, h_bias, bias_elements * sizeof(float), cudaMemcpyHostToDevice))) {
+  if (!CUDA_CHECK(cudaMemcpyAsync(d_tmp_b, h_bias, bias_elements * sizeof(float), cudaMemcpyHostToDevice, gpu->stream[buffer_index]))) {
     cudaFree(d_tmp_b); return false;
   }
   blocks = static_cast<int>((bias_elements + threads - 1) / threads);
