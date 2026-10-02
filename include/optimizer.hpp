@@ -133,6 +133,10 @@ private:
   std::ifstream file_stream;
 
 public:
+  // Path to the binary embedded data file produced by Parser::embedding().
+  // Must be set before the first call to disk_to_ram().
+  std::string data_path = "database/embedded.bin";
+
   void disk_to_ram(Portion &portion);
 
   bool ram_to_contextWindow(Portion &portion, bool &training_in_use);
