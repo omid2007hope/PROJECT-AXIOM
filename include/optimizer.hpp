@@ -25,6 +25,8 @@ extern "C" CUDA_API void pinned_free(void *ptr);
 
 struct Portion {
 
+  int buffer_index = 0;
+
   // =========================================================================
   // CRITICAL SYNCHRONIZATION BARRIER — LIFE AND DEATH GUARANTEE
   // -------------------------------------------------------------------------
