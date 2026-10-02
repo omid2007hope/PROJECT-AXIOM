@@ -178,7 +178,7 @@ extern "C" __declspec(dllexport) bool upload_ai_weights(
   // Temporary float32 staging buffer on device
   float* d_tmp_w = nullptr;
   if (!CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_tmp_w), weight_elements * sizeof(float)))) return false;
-  if (!CUDA_CHECK(cudaMemcpyAsync(d_tmp_w, h_weights, weight_elements * sizeof(float), cudaMemcpyHostToDevice, gpu->stream[buffer_index]))) {
+  if (!CUDA_CHECK(cudaMemcpy(d_tmp_w, h_weights, weight_elements * sizeof(float), cudaMemcpyHostToDevice))) {
     cudaFree(d_tmp_w); return false;
   }
   int threads = 256;
@@ -196,7 +196,7 @@ extern "C" __declspec(dllexport) bool upload_ai_weights(
 
   float* d_tmp_b = nullptr;
   if (!CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_tmp_b), bias_elements * sizeof(float)))) return false;
-  if (!CUDA_CHECK(cudaMemcpyAsync(d_tmp_b, h_bias, bias_elements * sizeof(float), cudaMemcpyHostToDevice, gpu->stream[buffer_index]))) {
+  if (!CUDA_CHECK(cudaMemcpy(d_tmp_b, h_bias, bias_elements * sizeof(float), cudaMemcpyHostToDevice))) {
     cudaFree(d_tmp_b); return false;
   }
   blocks = static_cast<int>((bias_elements + threads - 1) / threads);
@@ -267,7 +267,7 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
   int threads = 256;
   int blocks = static_cast<int>((output_dim + threads - 1) / threads);
   
-  forward_pass_kernel<<<blocks, threads>>>(
+  forward_pass_kernel<<<blocks, threads, 0, gpu_portion->stream[buffer_index]>>>(
       static_cast<const __nv_bfloat16*>(gpu_weights->d_weights),
       static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
       static_cast<const __nv_bfloat16*>(gpu_weights->d_bias),
@@ -276,7 +276,6 @@ extern "C" __declspec(dllexport) bool forward_pass(const GpuPortion* gpu_portion
   );
   
   if (!CUDA_CHECK(cudaGetLastError())) return false;
-  if (!CUDA_CHECK(cudaDeviceSynchronize())) return false; // Synchronize for safety in this early phase
   
   return true;
 }
