@@ -4,8 +4,6 @@
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
 
-void AI::train(Optimizer &optimizer, Portion &portion);
-
 void test_path();
 void test_ifstream();
 void test_embeddings();
@@ -14,20 +12,26 @@ void test_optimizer();
 void test_cuda_transfer();
 
 std::string fetch_argument(int count, char *argument[]) {
-  for (int i = 0; i <= count; i++) {
+  for (int i = 1; i < count; i++) {
     return std::string(argument[i]);
-  };
-};
+  }
+  return "";
+}
 
 int main(int argc, char *argv[]) {
+  std::string arg = fetch_argument(argc, argv);
 
-  if (fetch_argument(argc, argv) == "app.exe --train" || "mingw32-make") {
+  if (arg == "--train") {
     std::cout << "--- Training AI ---\n";
-    train();
+    
+    // Instantiate the required objects for the AI to train
+    Portion portion;
+    Optimizer optimizer;
+    AI ai(128 * 4, 1 * 4);
+    
+    ai.train(optimizer, portion);
 
-  } else if (fetch_argument(argc, argv) == "app.exe --test" ||
-             "mingw32-make test ") {
-
+  } else if (arg == "--test") {
     std::cout << "--- test_path AI ---\n";
     test_path();
 
@@ -45,7 +49,9 @@ int main(int argc, char *argv[]) {
 
     std::cout << "--- test_cuda_transfer AI ---\n";
     test_cuda_transfer();
-  };
+  } else {
+    std::cout << "Please provide --train or --test\n";
+  }
 
   return 0;
-};
+}
