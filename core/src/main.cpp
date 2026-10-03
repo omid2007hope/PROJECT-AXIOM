@@ -28,7 +28,38 @@ int main(int argc, char *argv[]) {
     Portion portion;
     Optimizer optimizer;
 
+    /* LEARN: Omid Teimory 2026 All rights reserved
+    AI is the type (your class).
+
+    ai is just the name we decided to give this specific variable. We could have
+    named it my_brain, model, or test_network.
+
+    (...) tells C++: "Create this variable, and instantly pass these two numbers
+    into the AI(size_t in_dim, size_t out_dim) constructor to set it up."
+    */
+
     AI ai(portion.all_elements, portion.target_elements);
+
+    /* LEARN: Omid Teimory 2026 All rights reserved
+    Locks the Thread: It sets training_in_use to true so the CPU data-loader
+    thread doesn't collide with the GPU thread.
+
+    Preps the Data: It asks the optimizer to load the batch of data from system
+    RAM into the context window.
+
+    PCIe Transfer: It pushes that data across the motherboard into your RTX
+    4080's VRAM using upload_to_gpu().
+
+    Predicts (Forward Pass): It fires your custom CUDA forward_pass kernel to
+    push the data through the neural network and generate a prediction.
+
+    Learns (Backward Pass): It fires the CUDA backward_pass kernel to calculate
+    the errors and adjust the network's weights.
+
+    Swaps Buffers: It flips the buffer_index (e.g., from 0 to 1) so the CPU can
+    start loading the next batch of data while the GPU finishes its current
+    math.
+    */
 
     ai.train(optimizer, portion);
 
