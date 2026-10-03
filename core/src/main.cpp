@@ -11,24 +11,24 @@ void test_tokenization();
 void test_optimizer();
 void test_cuda_transfer();
 
-std::string fetch_argument(int count, char *argument[]) {
+auto fetch_argument(int count, char *argument[]) {
   for (int i = 1; i < count; i++) {
     return std::string(argument[i]);
   }
-  return "";
 }
 
 int main(int argc, char *argv[]) {
-  std::string arg = fetch_argument(argc, argv);
+  auto arg = fetch_argument(argc, argv);
 
   if (arg == "--train") {
     std::cout << "--- Training AI ---\n";
-    
+
     // Instantiate the required objects for the AI to train
     Portion portion;
     Optimizer optimizer;
-    AI ai(128 * 4, 1 * 4);
-    
+
+    AI ai(portion.all_elements, portion.target_elements);
+
     ai.train(optimizer, portion);
 
   } else if (arg == "--test") {

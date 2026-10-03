@@ -18,7 +18,9 @@ void Optimizer::disk_to_ram(Portion &portion) {
     // syscalls
     if (!file_stream.is_open()) {
       std::filesystem::path absolute_path(__FILE__);
-      std::filesystem::path full_path = absolute_path.parent_path().parent_path() / "database" / "embedded_data.bin";
+      std::filesystem::path full_path =
+          absolute_path.parent_path().parent_path() / "database" /
+          "embedded_data.bin";
       file_stream.open(full_path, std::ios::binary);
       if (!file_stream) {
         std::cerr << "Failed to open " << full_path << "\n";
@@ -44,8 +46,7 @@ void Optimizer::disk_to_ram(Portion &portion) {
     // RAM cost: a few KB. CPU cost: negligible. Disk reads stay sequential.
     // ----------------------------------------------------------------
     std::vector<std::bfloat16_t> carry = {};
-    size_t token_dim = 4; // 1 token = 4 bfloat16_t values
-    size_t carry_elements = portion.context_window_size * token_dim;
+    size_t carry_elements = portion.context_window_size * portion.token_dim;
     if (portion.ram_buffer_tokens.size() >= carry_elements) {
       auto it = portion.ram_buffer_tokens.end() -
                 static_cast<std::ptrdiff_t>(carry_elements);
@@ -88,19 +89,20 @@ void Optimizer::disk_to_ram(Portion &portion) {
 bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
 
   if (portion.context_in_use.load(std::memory_order_acquire) == false &&
-      portion.buffer_in_use.load(std::memory_order_acquire)  == false &&
+      portion.buffer_in_use.load(std::memory_order_acquire) == false &&
       training_in_use == false) {
 
     // Lock with release semantics so the GPU thread sees the full buffer
     portion.context_in_use.store(true, std::memory_order_release);
-    portion.buffer_in_use.store(true,  std::memory_order_release);
+    portion.buffer_in_use.store(true, std::memory_order_release);
 
     if (portion.offset + portion.all_elements + portion.target_elements <=
         portion.ram_buffer_tokens.size()) {
 
       // Guard: pinned buffers must be allocated before we write to them.
       if (!portion.context_window_tokens || !portion.target_tokens) {
-        std::cerr << "[Optimizer] Pinned memory not allocated. Call portion.allocate_pinned() first.\n";
+        std::cerr << "[Optimizer] Pinned memory not allocated. Call "
+                     "portion.allocate_pinned() first.\n";
         portion.buffer_in_use.store(false, std::memory_order_release);
         portion.context_in_use.store(false, std::memory_order_release);
         return false;
@@ -109,22 +111,21 @@ bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
       // Write X into the pinned context window buffer via memcpy.
       // The write-combining hardware coalesces these writes and pushes them
       // directly to the PCIe bus interface — no L1/L2 cache pollution.
-      std::memcpy(
-          portion.context_window_tokens,
-          portion.ram_buffer_tokens.data() + portion.offset,
-          portion.all_elements * sizeof(std::bfloat16_t));
+      std::memcpy(portion.context_window_tokens,
+                  portion.ram_buffer_tokens.data() + portion.offset,
+                  portion.all_elements * sizeof(std::bfloat16_t));
 
       // Write Y into the pinned target buffer.
-      std::memcpy(
-          portion.target_tokens,
-          portion.ram_buffer_tokens.data() + portion.offset + portion.all_elements,
-          portion.target_elements * sizeof(std::bfloat16_t));
+      std::memcpy(portion.target_tokens,
+                  portion.ram_buffer_tokens.data() + portion.offset +
+                      portion.all_elements,
+                  portion.target_elements * sizeof(std::bfloat16_t));
 
       // Move the bookmark forward
       portion.offset += portion.token_dim;
 
       // Release locks — caller trains on context_window_tokens / target_tokens
-      portion.buffer_in_use.store(false,  std::memory_order_release);
+      portion.buffer_in_use.store(false, std::memory_order_release);
       portion.context_in_use.store(false, std::memory_order_release);
 
       return true; // Successfully loaded a window
@@ -134,7 +135,7 @@ bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
       portion.offset = 0;
 
       // Release locks so disk_to_ram can run!
-      portion.buffer_in_use.store(false,  std::memory_order_release);
+      portion.buffer_in_use.store(false, std::memory_order_release);
       portion.context_in_use.store(false, std::memory_order_release);
 
       return false; // Out of data
