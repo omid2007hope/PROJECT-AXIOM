@@ -15,6 +15,7 @@ auto fetch_argument(int count, char *argument[]) {
   for (int i = 1; i < count; i++) {
     return std::string(argument[i]);
   }
+  return std::string("");
 }
 
 int main(int argc, char *argv[]) {
