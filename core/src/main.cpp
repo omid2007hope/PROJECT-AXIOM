@@ -130,7 +130,17 @@ int main(int argc, char *argv[]) {
       ai.upload_weights_to_gpu();
 
       // start training
-      ai.train(optimizer, portion);
+      std::cout << "Beginning continuous training loop...\n";
+      while (true) {
+        // Feed forward & backward pass
+        ai.train(optimizer, portion);
+        
+        // When the RAM buffer is exhausted, the offset resets to 0. 
+        // We must pull the next massive chunk from disk into RAM.
+        if (portion.offset == 0) {
+            optimizer.disk_to_ram(portion);
+        }
+      }
 
     } else if (arg == "--test") {
       std::cout << "--- test_path AI ---\n";
