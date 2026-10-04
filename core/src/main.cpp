@@ -57,21 +57,22 @@ auto fetch_argument(int count, char *argument[]) {
 int main(int argc, char *argv[]) {
   auto arg = fetch_argument(argc, argv);
 
-  std::cout << "Welcome to AXIOM" << "\n\n" << "Use it: 1" << "Train it: 2";
+  if (arg == "") {
+    std::cout << "Welcome to AXIOM\n\n" 
+              << "1: Use it\n" 
+              << "2: Train it\n"
+              << "> ";
+    int option = 1;
+    if (std::cin >> option) {
+      // For later on
+    }
+  } else if (arg == "--train") {
+    std::cout << "--- Training AI ---\n";
 
-  int option = 1;
-
-  if (std::cin >> option) {
-    // For later on
-
-  } else {
-    if (arg == "--train") {
-      std::cout << "--- Training AI ---\n";
-
-      // These are needed later on
-      Parser parser;
-      Input input;
-      Test test;
+    // These are needed later on
+    Parser parser;
+    Input input;
+    Test test;
 
       // Instantiate the required objects for the AI to train
       Portion portion;
@@ -149,10 +150,7 @@ int main(int argc, char *argv[]) {
 
       std::cout << "--- test_cuda_transfer AI ---\n";
       test_cuda_transfer();
-    } else {
-      std::cout << "Please provide --train or --test\n";
-    }
-  };
+  }
 
   return 0;
 }
