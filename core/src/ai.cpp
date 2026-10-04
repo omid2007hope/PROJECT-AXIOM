@@ -9,6 +9,13 @@ AI::AI(size_t in_dim, size_t out_dim) : input_dim(in_dim), output_dim(out_dim) {
   h_weights.resize(weight_elements);
   h_bias.resize(bias_elements);
 
+  reset_weights();
+}
+
+void AI::reset_weights() {
+  size_t weight_elements = input_dim * output_dim;
+  size_t bias_elements = output_dim;
+
   // Initialize with Chaos (Symmetry Breaking)
   // We use the Mersenne Twister engine for high-quality random numbers
   std::random_device rd;
@@ -27,8 +34,7 @@ AI::AI(size_t in_dim, size_t out_dim) : input_dim(in_dim), output_dim(out_dim) {
     h_bias[i] = 0.0f;
   }
 
-  std::cout << "[AI Brain] Initialized with " << weight_elements
-            << " chaotic weights.\n";
+  std::cout << "[AI Brain] Weights and Biases reset to chaotic state.\n";
 }
 
 AI::~AI() {

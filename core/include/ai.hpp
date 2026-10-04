@@ -35,6 +35,9 @@ public:
 
     // Method to move memory to GPU
     bool upload_weights_to_gpu();
+    
+    // Method to reset all parameters/weights back to chaotic state
+    void reset_weights();
 
     // The Training Loop Orchestrator
     void train(Optimizer &optimizer, Portion &portion);
