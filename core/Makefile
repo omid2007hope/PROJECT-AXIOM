@@ -7,7 +7,7 @@ CUDA_LIB_DIR = $(CUDA_DIR)/lib/x64
 NVCC      = "$(CUDA_DIR)/bin/nvcc.exe"
 # sm_89 = RTX 4080 Laptop (Ada Lovelace, compute capability 8.9)
 # -ccbin points to MSVC compiler (cl.exe) which is strictly required by nvcc on Windows
-NVCCFLAGS = -arch=sm_89 --std=c++17 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64" \
+NVCCFLAGS = -arch=sm_89 --std=c++23 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64" \
             -I"$(CUDA_DIR)/include"
 
 CUDA_SRC_DIR = src/CUDA
