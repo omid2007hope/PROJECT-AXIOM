@@ -82,11 +82,10 @@ void Optimizer::disk_to_ram(Portion &portion) {
 // Tier 2: Extract sliding context windows from RAM buffer to feed neural
 // network
 
-bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
+bool Optimizer::ram_to_contextWindow(Portion &portion) {
 
   if (portion.context_in_use.load(std::memory_order_acquire) == false &&
-      portion.buffer_in_use.load(std::memory_order_acquire) == false &&
-      training_in_use == false) {
+      portion.buffer_in_use.load(std::memory_order_acquire) == false) {
 
     // Lock with release semantics so the GPU thread sees the full buffer
     portion.context_in_use.store(true, std::memory_order_release);
@@ -95,8 +94,10 @@ bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
     if (portion.offset + portion.all_elements + portion.target_elements <=
         portion.ram_buffer_tokens.size()) {
 
+      int b_idx = portion.buffer_index;
+
       // Guard: pinned buffers must be allocated before we write to them.
-      if (!portion.context_window_tokens || !portion.target_tokens) {
+      if (!portion.context_window_tokens[b_idx] || !portion.target_tokens[b_idx]) {
         std::cerr << "[Optimizer] Pinned memory not allocated. Call "
                      "portion.allocate_pinned() first.\n";
         portion.buffer_in_use.store(false, std::memory_order_release);
@@ -107,12 +108,12 @@ bool Optimizer::ram_to_contextWindow(Portion &portion, bool &training_in_use) {
       // Write X into the pinned context window buffer via memcpy.
       // The write-combining hardware coalesces these writes and pushes them
       // directly to the PCIe bus interface — no L1/L2 cache pollution.
-      std::memcpy(portion.context_window_tokens,
+      std::memcpy(portion.context_window_tokens[b_idx],
                   portion.ram_buffer_tokens.data() + portion.offset,
                   portion.all_elements * sizeof(std::bfloat16_t));
 
       // Write Y into the pinned target buffer.
-      std::memcpy(portion.target_tokens,
+      std::memcpy(portion.target_tokens[b_idx],
                   portion.ram_buffer_tokens.data() + portion.offset +
                       portion.all_elements,
                   portion.target_elements * sizeof(std::bfloat16_t));

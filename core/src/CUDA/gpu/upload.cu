@@ -108,3 +108,9 @@ extern "C" CUDA_API bool upload_ai_weights(
 
   return true;
 }
+
+extern "C" CUDA_API void synchronize_stream(GpuPortion *gpu, int buffer_index) {
+  if (gpu && gpu->stream[buffer_index]) {
+    CUDA_CHECK(cudaStreamSynchronize((cudaStream_t)gpu->stream[buffer_index]));
+  }
+}

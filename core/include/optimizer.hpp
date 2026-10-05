@@ -93,28 +93,30 @@ struct Portion {
   // =========================================================================
 
   // The Input (X): pinned host buffer — 128 tokens * 4 dim = 512 bfloat16_t
-  std::bfloat16_t *context_window_tokens = nullptr;
+  std::bfloat16_t *context_window_tokens[2] = {nullptr, nullptr};
 
   // The Target (Y): pinned host buffer — 1 token * 4 dim = 4 bfloat16_t
-  std::bfloat16_t *target_tokens = nullptr;
+  std::bfloat16_t *target_tokens[2] = {nullptr, nullptr};
 
   // Allocate the pinned buffers. Must be called once before the training loop.
   // Returns false if the CUDA DLL reports an allocation failure.
   bool allocate_pinned() {
-    if (context_window_tokens || target_tokens) {
+    if (context_window_tokens[0] || target_tokens[0]) {
       return true; // already allocated
     }
 
-    context_window_tokens = static_cast<std::bfloat16_t *>(
-        pinned_alloc(all_elements * sizeof(std::bfloat16_t)));
+    for (int i = 0; i < 2; ++i) {
+      context_window_tokens[i] = static_cast<std::bfloat16_t *>(
+          pinned_alloc(all_elements * sizeof(std::bfloat16_t)));
 
-    target_tokens = static_cast<std::bfloat16_t *>(
-        pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
+      target_tokens[i] = static_cast<std::bfloat16_t *>(
+          pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
 
-    if (!context_window_tokens || !target_tokens) {
-      std::cerr << "[Portion] pinned_alloc failed\n";
-      free_pinned();
-      return false;
+      if (!context_window_tokens[i] || !target_tokens[i]) {
+        std::cerr << "[Portion] pinned_alloc failed\n";
+        free_pinned();
+        return false;
+      }
     }
 
     return true;
@@ -123,15 +125,13 @@ struct Portion {
   // Release pinned host memory. Safe to call even if allocate_pinned() was
   // never called (pinned_free checks for nullptr internally).
   void free_pinned() {
-    //
-    pinned_free(context_window_tokens);
-    // free context
-    context_window_tokens = nullptr;
+    for (int i = 0; i < 2; ++i) {
+      pinned_free(context_window_tokens[i]);
+      context_window_tokens[i] = nullptr;
 
-    //
-    pinned_free(target_tokens);
-    // free target
-    target_tokens = nullptr;
+      pinned_free(target_tokens[i]);
+      target_tokens[i] = nullptr;
+    }
   }
 };
 
@@ -154,7 +154,7 @@ public:
 
   void disk_to_ram(Portion &portion);
 
-  bool ram_to_contextWindow(Portion &portion, bool &training_in_use);
+  bool ram_to_contextWindow(Portion &portion);
 };
 
 #endif

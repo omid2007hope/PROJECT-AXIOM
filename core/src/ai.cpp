@@ -52,20 +52,15 @@ bool AI::upload_weights_to_gpu() {
 }
 
 void AI::train(Optimizer &optimizer, Portion &portion) {
-  // Signal: we are now consuming a context window.
-  this->training_in_use.store(true, std::memory_order_release);
+  // Sync the stream to ensure the GPU is done with this buffer before we overwrite it.
+  synchronize_stream(&gpu_portion, portion.buffer_index);
 
-  // Extract the value into a plain bool so we can pass it by reference
-  // to ram_to_contextWindow (which still takes bool& for its internal guard).
-  bool in_use = this->training_in_use.load(std::memory_order_acquire);
-  bool has_data = optimizer.ram_to_contextWindow(portion, in_use);
-  // Sync the atomic back from what the optimizer may have modified.
-  this->training_in_use.store(in_use, std::memory_order_release);
+  bool has_data = optimizer.ram_to_contextWindow(portion);
 
   if (has_data) {
     // Transfer the pinned host memory to VRAM across the PCIe bus
-    if (upload_to_gpu(portion.context_window_tokens, portion.all_elements,
-                      portion.target_tokens, portion.target_elements,
+    if (upload_to_gpu(portion.context_window_tokens[portion.buffer_index], portion.all_elements,
+                      portion.target_tokens[portion.buffer_index], portion.target_elements,
                       &gpu_portion, portion.buffer_index)) {
 
       // Launch CUDA kernel for Forward Pass

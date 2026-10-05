@@ -49,8 +49,8 @@ void test_optimizer() {
   Portion portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
   check_eq(portion.ram_buffer_tokens.size(), size_t{0}, "ram_buffer empty");
   // Pinned buffers: nullptr until allocate_pinned() is called
-  check(portion.context_window_tokens == nullptr, "context_window_tokens == nullptr");
-  check(portion.target_tokens         == nullptr, "target_tokens == nullptr");
+  check(portion.context_window_tokens[0] == nullptr, "context_window_tokens == nullptr");
+  check(portion.target_tokens[0]         == nullptr, "target_tokens == nullptr");
   check(portion.buffer_in_use.load()  == false,   "buffer_in_use == false");
   check(portion.context_in_use.load() == false,   "context_in_use == false");
 
@@ -60,8 +60,8 @@ void test_optimizer() {
   // Allocate the pinned host buffers (cudaHostAllocWriteCombined)
   bool pinned_ok = portion.allocate_pinned();
   check(pinned_ok, "allocate_pinned() succeeded");
-  check(portion.context_window_tokens != nullptr, "context_window_tokens allocated");
-  check(portion.target_tokens         != nullptr, "target_tokens allocated");
+  check(portion.context_window_tokens[0] != nullptr, "context_window_tokens allocated");
+  check(portion.target_tokens[0]         != nullptr, "target_tokens allocated");
 
   Optimizer optimizer(test_embedded_path(), 0.001f);
 
@@ -75,16 +75,15 @@ void test_optimizer() {
   // ── [3] ram_to_contextWindow — slide one window ──────────────────────────
   std::cout << "\n[3] ram_to_contextWindow — slide " << EXPECTED_WINDOWS
             << " windows\n";
-  bool training_in_use = false;
-  optimizer.ram_to_contextWindow(portion, training_in_use);
+  optimizer.ram_to_contextWindow(portion);
 
   // After the call the pinned buffers must be filled
   // (we check element count via the Portion size fields, not .size())
-  check(portion.context_window_tokens != nullptr, "context_window_tokens filled");
-  check(portion.target_tokens         != nullptr, "target_tokens filled");
+  check(portion.context_window_tokens[0] != nullptr, "context_window_tokens filled");
+  check(portion.target_tokens[0]         != nullptr, "target_tokens filled");
   // Validate first value is a valid (non-NaN) BF16 by casting to float
   {
-    float v = static_cast<float>(portion.context_window_tokens[0]);
+    float v = static_cast<float>(portion.context_window_tokens[0][0]);
     check(v == v, "context_window_tokens[0] is not NaN");
   }
   check(portion.buffer_in_use.load()  == false, "buffer lock released after windows");
@@ -139,23 +138,23 @@ void test_optimizer() {
   for (int cycle = 0; cycle < 3; ++cycle) {
     optimizer.disk_to_ram(portion);
     size_t buf_size = portion.ram_buffer_tokens.size();
-    optimizer.ram_to_contextWindow(portion, training_in_use);
+    optimizer.ram_to_contextWindow(portion);
 
     std::cout << "  cycle " << cycle + 1
               << ": ram=" << buf_size
               << " → ctx_elems=" << portion.all_elements
               << " tgt_elems=" << portion.target_elements << "\n";
 
-    check(portion.context_window_tokens != nullptr, "ctx filled");
-    check(portion.target_tokens         != nullptr, "tgt filled");
+    check(portion.context_window_tokens[0] != nullptr, "ctx filled");
+    check(portion.target_tokens[0]         != nullptr, "tgt filled");
     check(portion.buffer_in_use.load()  == false,   "buffer unlocked after cycle");
     check(portion.context_in_use.load() == false,   "context unlocked after cycle");
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
   portion.free_pinned();
-  check(portion.context_window_tokens == nullptr, "context_window_tokens freed");
-  check(portion.target_tokens         == nullptr, "target_tokens freed");
+  check(portion.context_window_tokens[0] == nullptr, "context_window_tokens freed");
+  check(portion.target_tokens[0]         == nullptr, "target_tokens freed");
 
   std::cout << "\n=== Optimizer Test Suite: " << s_pass << " passed, "
             << s_fail << " failed ===\n";

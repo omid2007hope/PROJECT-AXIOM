@@ -27,12 +27,6 @@ public:
     GpuActivations gpu_activations;
     GpuPortion gpu_portion; // Reused across iterations to prevent reallocation
 
-    // Synchronization Lock
-    // UPGRADED: bool → std::atomic<bool>
-    // Prevents torn reads when the GPU thread and the data-loader thread
-    // access this flag concurrently.
-    std::atomic<bool> training_in_use{false};
-
     // Constructor: Takes dimensions and initializes with Chaos (Randomness)
     // inside [weight_min, weight_max]
     AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max);
