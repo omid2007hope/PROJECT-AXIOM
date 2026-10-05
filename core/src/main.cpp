@@ -83,6 +83,7 @@ int main(int argc, char *argv[]) {
               << "[2] Train it\n"
               << "> ";
     int option = 1;
+
     std::cin >> option;
     safeCin();
 
@@ -106,6 +107,7 @@ int main(int argc, char *argv[]) {
         input.user_text = Validate<std::vector<std::string>>("Enter Text: ");
 
         int media = 1;
+
         std::cout << "\nAdd media?\n[1] Yes\n[2] No\n> ";
         std::cin >> media;
         safeCin();
@@ -139,113 +141,173 @@ int main(int argc, char *argv[]) {
           std::vector<std::bfloat16_t> embed = parser.embedding(input, test);
         }
       } else if (type == 3) {
-        input.user_image_paths = Validate<std::vector<std::string>>("Enter Image Path: ");
+        input.user_image_paths =
+            Validate<std::vector<std::string>>("Enter Image Path: ");
       } else if (type == 4) {
-        input.user_video_paths = Validate<std::vector<std::string>>("Enter Video Path: ");
+        input.user_video_paths =
+            Validate<std::vector<std::string>>("Enter Video Path: ");
       } else if (type == 5) {
-        input.user_voice_paths = Validate<std::vector<std::string>>("Enter Voice Path: ");
+        input.user_voice_paths =
+            Validate<std::vector<std::string>>("Enter Voice Path: ");
       }
-    }
-  } else if (arg == "--train") {
-    std::cout << "--- Training AI ---\n";
 
-    // First thing first parser has top be fully executed!
-    // Read and tokenize all
-    std::vector<uint32_t> tokenize = parser.tokenization(input, test);
+      // *********************************************************
+      // Phase 1: Parsing and Storage Complete
+      // *********************************************************
 
-    // Embedded and Save them all
-    std::vector<std::bfloat16_t> embed = parser.embedding(input, test);
+      std::cout << "\n[OK] Data successfully generated at: "
+                << "PROJECT-AXIOM/core/database\n";
 
-    // allocate space
-    portion.allocate_pinned();
+      // *********************************************************
+      // Phase 2: Pinned Memory Allocation and Disk-to-RAM Stream
+      // *********************************************************
 
-    // Fill the buffer from the saved data in
-    // C:\Users\Omid\X\Code\PROJECT-AXIOM\core\database
+      std::cout << "[..] Optimizing data and loading to RAM...\n";
 
-    optimizer.disk_to_ram(portion);
+      // Allocate pinned host memory for ultra-fast DMA transfers
+      portion.allocate_pinned();
 
-    /* LEARN: Omid Teimory 2026 All rights reserved
-    AI is the type (your class).
+      // Stream the initial chunk of parsed data from disk into the RAM buffer
+      optimizer.disk_to_ram(portion);
 
-    ai is just the name we decided to give this specific variable. We could
-    have named it my_brain, model, or test_network.
+      // *********************************************************
+      // Phase 3: AI Instantiation and GPU PCIe Transfer
+      // *********************************************************
 
-    (...) tells C++: "Create this variable, and instantly pass these two
-    numbers into the AI(size_t in_dim, size_t out_dim) constructor to set it
-    up."
-    */
+      std::cout << "[..] Initializing AI model and uploading to VRAM...\n";
 
-    AI ai(portion.all_elements, portion.target_elements);
+      AI ai(portion.all_elements, portion.target_elements);
 
-    /* LEARN: Omid Teimory 2026 All rights reserved
-    Locks the Thread: It sets training_in_use to true so the CPU data-loader
-    thread doesn't collide with the GPU thread.
+      // Transfer the chaotic starting weights from CPU to GPU VRAM
+      ai.upload_weights_to_gpu();
 
-    Preps the Data: It asks the optimizer to load the batch of data from
-    system RAM into the context window.
+      // start training
+      std::cout << "Beginning continuous training loop...\n";
+      std::cout
+          << "Press 'R' at any time to reset AI weights and start fresh.\n";
 
-    PCIe Transfer: It pushes that data across the motherboard into your RTX
-    4080's VRAM using upload_to_gpu().
+      while (true) {
+        // Check for interactive user commands without blocking
+        if (_kbhit()) {
+          char ch = _getch();
+          if (ch == 'r' || ch == 'R') {
+            std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
+            ai.reset_weights();
+            ai.upload_weights_to_gpu(); // push new chaotic weights to VRAM
+            std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
+          }
+        }
 
-    Predicts (Forward Pass): It fires your custom CUDA forward_pass kernel
-    to push the data through the neural network and generate a prediction.
+        // Feed forward & backward pass
+        ai.train(optimizer, portion);
 
-    Learns (Backward Pass): It fires the CUDA backward_pass kernel to
-    calculate the errors and adjust the network's weights.
+        // When the RAM buffer is exhausted, the offset resets to 0.
+        // We must pull the next massive chunk from disk into RAM.
+        if (portion.offset == 0) {
+          optimizer.disk_to_ram(portion);
+        }
+      }
+    } else if (arg == "--train") {
+      std::cout << "--- Training AI ---\n";
 
-    Swaps Buffers: It flips the buffer_index (e.g., from 0 to 1) so the CPU
-    can start loading the next batch of data while the GPU finishes its
-    current math.
-    */
+      // First thing first parser has top be fully executed!
+      // Read and tokenize all
+      std::vector<uint32_t> tokenize = parser.tokenization(input, test);
 
-    // send the data from cpu to gpu
-    ai.upload_weights_to_gpu();
+      // Embedded and Save them all
+      std::vector<std::bfloat16_t> embed = parser.embedding(input, test);
 
-    // start training
-    std::cout << "Beginning continuous training loop...\n";
-    std::cout << "Press 'R' at any time to reset AI weights and start fresh.\n";
+      // allocate space
+      portion.allocate_pinned();
 
-    while (true) {
-      // Check for interactive user commands without blocking
-      if (_kbhit()) {
-        char ch = _getch();
-        if (ch == 'r' || ch == 'R') {
-          std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
-          ai.reset_weights();
-          ai.upload_weights_to_gpu(); // push new chaotic weights to VRAM
-          std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
+      // Fill the buffer from the saved data in
+      // C:\Users\Omid\X\Code\PROJECT-AXIOM\core\database
+
+      optimizer.disk_to_ram(portion);
+
+      /* LEARN: Omid Teimory 2026 All rights reserved
+      AI is the type (your class).
+
+      ai is just the name we decided to give this specific variable. We could
+      have named it my_brain, model, or test_network.
+
+      (...) tells C++: "Create this variable, and instantly pass these two
+      numbers into the AI(size_t in_dim, size_t out_dim) constructor to set it
+      up."
+      */
+
+      AI ai(portion.all_elements, portion.target_elements);
+
+      /* LEARN: Omid Teimory 2026 All rights reserved
+      Locks the Thread: It sets training_in_use to true so the CPU data-loader
+      thread doesn't collide with the GPU thread.
+
+      Preps the Data: It asks the optimizer to load the batch of data from
+      system RAM into the context window.
+
+      PCIe Transfer: It pushes that data across the motherboard into your RTX
+      4080's VRAM using upload_to_gpu().
+
+      Predicts (Forward Pass): It fires your custom CUDA forward_pass kernel
+      to push the data through the neural network and generate a prediction.
+
+      Learns (Backward Pass): It fires the CUDA backward_pass kernel to
+      calculate the errors and adjust the network's weights.
+
+      Swaps Buffers: It flips the buffer_index (e.g., from 0 to 1) so the CPU
+      can start loading the next batch of data while the GPU finishes its
+      current math.
+      */
+
+      // send the data from cpu to gpu
+      ai.upload_weights_to_gpu();
+
+      // start training
+      std::cout << "Beginning continuous training loop...\n";
+      std::cout
+          << "Press 'R' at any time to reset AI weights and start fresh.\n";
+
+      while (true) {
+        // Check for interactive user commands without blocking
+        if (_kbhit()) {
+          char ch = _getch();
+          if (ch == 'r' || ch == 'R') {
+            std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
+            ai.reset_weights();
+            ai.upload_weights_to_gpu(); // push new chaotic weights to VRAM
+            std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
+          }
+        }
+
+        // Feed forward & backward pass
+        ai.train(optimizer, portion);
+
+        // When the RAM buffer is exhausted, the offset resets to 0.
+        // We must pull the next massive chunk from disk into RAM.
+        if (portion.offset == 0) {
+          optimizer.disk_to_ram(portion);
         }
       }
 
-      // Feed forward & backward pass
-      ai.train(optimizer, portion);
+    } else if (arg == "--test") {
+      std::cout << "--- test_path AI ---\n";
+      test_path();
 
-      // When the RAM buffer is exhausted, the offset resets to 0.
-      // We must pull the next massive chunk from disk into RAM.
-      if (portion.offset == 0) {
-        optimizer.disk_to_ram(portion);
-      }
+      std::cout << "--- test_ifstream AI ---\n";
+      test_ifstream();
+
+      std::cout << "--- test_embeddings AI ---\n";
+      test_embeddings();
+
+      std::cout << "--- test_tokenization AI ---\n";
+      test_tokenization();
+
+      std::cout << "--- test_optimizer AI ---\n";
+      test_optimizer();
+
+      std::cout << "--- test_cuda_transfer AI ---\n";
+      test_cuda_transfer();
     }
 
-  } else if (arg == "--test") {
-    std::cout << "--- test_path AI ---\n";
-    test_path();
-
-    std::cout << "--- test_ifstream AI ---\n";
-    test_ifstream();
-
-    std::cout << "--- test_embeddings AI ---\n";
-    test_embeddings();
-
-    std::cout << "--- test_tokenization AI ---\n";
-    test_tokenization();
-
-    std::cout << "--- test_optimizer AI ---\n";
-    test_optimizer();
-
-    std::cout << "--- test_cuda_transfer AI ---\n";
-    test_cuda_transfer();
+    return 0;
   }
-
-  return 0;
-}
