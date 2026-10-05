@@ -3,9 +3,14 @@
 #include <stdfloat> // Required for std::bfloat16_t (C++23)
 #include <string>
 #include <vector>
+#include <windows.h>
+#include <psapi.h>
+#include <filesystem>
+#include <iomanip>
 
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
+#include "../src/CUDA/util/telemetry.cuh"
 
 void test_path();
 void test_ifstream();
@@ -169,6 +174,34 @@ int main(int argc, char *argv[]) {
 
       // Stream the initial chunk of parsed data from disk into the RAM buffer
       optimizer.disk_to_ram(portion);
+
+      // --- LIVE HARDWARE TELEMETRY ---
+      PROCESS_MEMORY_COUNTERS pmc;
+      GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
+      
+      MEMORYSTATUSEX memInfo;
+      memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+      GlobalMemoryStatusEx(&memInfo);
+
+      size_t gpu_free = 0, gpu_total = 0;
+      get_gpu_telemetry(&gpu_free, &gpu_total);
+
+      std::filesystem::space_info disk_space = std::filesystem::space(std::filesystem::current_path());
+
+      std::cout << "\n========================================================\n"
+                << "                LIVE HARDWARE TELEMETRY                 \n"
+                << "========================================================\n"
+                << std::fixed << std::setprecision(2)
+                << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
+                << "[RAM] Engine Stream : " << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0) << " MB\n"
+                << "[RAM] Process Usage : " << (pmc.WorkingSetSize / 1024.0 / 1024.0) << " MB\n"
+                << "[RAM] System Avail  : " << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0) << " GB / " 
+                                            << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
+                << "[GPU] Context Window: " << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
+                << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / " 
+                                            << (gpu_total / 1024.0 / 1024.0) << " MB\n"
+                << "[DSK] Disk Free     : " << (disk_space.available / 1024.0 / 1024.0 / 1024.0) << " GB\n"
+                << "========================================================\n\n";
 
       // *********************************************************
       // Phase 3: AI Instantiation and GPU PCIe Transfer

@@ -43,11 +43,11 @@ CUDA_LINK = $(if $(wildcard $(CUDA_DLL)),$(CUDA_DLL),)
 
 # ─── Link CPU + GPU into the app ─────────────────────────────────────────────
 $(APP_TARGET): $(APP_SRCS) $(CUDA_DLL)
-	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_LINK) -o $(APP_TARGET)
+	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_LINK) -o $(APP_TARGET) -lpsapi
 
 # ─── Link CPU + GPU into the test binary ─────────────────────────────────────
 $(TEST_TARGET): $(TEST_SRCS) $(CUDA_DLL)
-	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) -o $(TEST_TARGET)
+	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) -o $(TEST_TARGET) -lpsapi
 
 # ─── Clean ───────────────────────────────────────────────────────────────────
 clean:

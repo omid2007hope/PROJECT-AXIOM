@@ -10,5 +10,6 @@
 #include "gpu/download.cuh"
 #include "kernel/forward_pass.cuh"
 #include "kernel/backward_pass.cuh"
+#include "util/telemetry.cuh"
 
 #endif // CUDA_TRANSFER_CUH
