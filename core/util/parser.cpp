@@ -30,16 +30,22 @@ std::vector<uint32_t> Parser::tokenization(Input &input, Test &test) {
     }
 
     // 3. Image Tokenization (IDs 20000 - 29999)
-    tokenize_from_disk("Photo.jpeg", input.image_dictionary,
-                       input.next_image_id, input);
+    for (const std::string &file : test.data_image) {
+      tokenize_from_disk(file, input.image_dictionary, input.next_image_id,
+                         input);
+    }
 
     // 4. Video Tokenization (IDs 30000 - 39999)
-    tokenize_from_disk("Video.mp4", input.video_dictionary, input.next_video_id,
-                       input);
+    for (const std::string &file : test.data_video) {
+      tokenize_from_disk(file, input.video_dictionary, input.next_video_id,
+                         input);
+    }
 
     // 5. Voice/Audio Tokenization (IDs 40000 - 49999)
-    tokenize_from_disk("Voice.ogg", input.voice_dictionary, input.next_voice_id,
-                       input);
+    for (const std::string &file : test.data_voice) {
+      tokenize_from_disk(file, input.voice_dictionary, input.next_voice_id,
+                         input);
+    }
 
   } else {
     // Production Mode: Dynamically Tokenize User's UI Data
@@ -97,7 +103,7 @@ std::vector<std::bfloat16_t> Parser::embedding(Input &input, Test &test) {
   }
 
   // Use our new generalized save method
-  save_data(input.embedded_data, "embedded_data.bin");
+  save_data(input.embedded_data, embedded_path);
 
   return input.embedded_data;
 }

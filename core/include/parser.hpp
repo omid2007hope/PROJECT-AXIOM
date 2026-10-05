@@ -10,16 +10,19 @@
 #include <stdfloat>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-// Raw data samples
+// Raw data samples (filled in by the caller, e.g. main)
 struct Test {
   // Text by user
-  std::vector<std::string> data_txt = {"The",  "quick", "brown", "fox", "jumps",
-                                       "over", "the",   "lazy",  "dog"};
+  std::vector<std::string> data_txt = {};
   // Number by user
-  std::vector<double> data_num = {5.1, 3.5, 1.4, 0.2, 4.9, 3.0,
-                                  1.4, 0.2, 4.7, 3.2, 1.3, 0.2};
+  std::vector<double> data_num = {};
+  // Media file names, resolved against the parser's asset directories
+  std::vector<std::string> data_image = {};
+  std::vector<std::string> data_video = {};
+  std::vector<std::string> data_voice = {};
 };
 
 struct Input {
@@ -61,6 +64,12 @@ struct Input {
 
 class Parser {
 private:
+  // Binary file written by embedding(); decided by the caller.
+  std::filesystem::path embedded_path;
+
+  // Folders searched for relative media file names; decided by the caller.
+  std::vector<std::filesystem::path> asset_dirs;
+
   // ********************
   // add to dictionaries
   // ********************
@@ -79,13 +88,9 @@ private:
   // Generic data saver for any vector type (floats, ints, etc.)
   // ********************
   template <typename T>
-  void save_data(const std::vector<T> &data, const std::string &filename) {
-    // Automatically prepend the "database/" folder to all files using the source file location
-    std::filesystem::path absolute_path(__FILE__);
-    std::filesystem::path full_path =
-        absolute_path.parent_path().parent_path() / "database" / filename;
-
-    // Create the "database/" folder (and any subfolders) if they don't exist
+  void save_data(const std::vector<T> &data,
+                 const std::filesystem::path &full_path) {
+    // Create the output folder (and any subfolders) if they don't exist
     std::filesystem::create_directories(full_path.parent_path());
 
     // Use full_path for the file stream
@@ -112,17 +117,8 @@ private:
     std::filesystem::path c_standard_fileName(fileName);
 
     if (!c_standard_fileName.is_absolute()) {
-      std::filesystem::path absolute_path(__FILE__);
-      std::vector<std::filesystem::path> possible_paths = {
-          absolute_path.parent_path().parent_path() / "asset_sample" / fileName,
-          std::filesystem::path("Brain/asset_sample") /
-              fileName,
-          std::filesystem::path("asset_sample") /
-              fileName,
-          std::filesystem::path("deepLearning/asset_sample") / fileName,
-          std::filesystem::path("asset_sample") / fileName};
-
-      for (const auto &each_path : possible_paths) {
+      for (const auto &dir : asset_dirs) {
+        const std::filesystem::path each_path = dir / fileName;
         if (std::filesystem::exists(each_path)) {
           c_standard_fileName = each_path;
           std::cout << "Found in\n" << c_standard_fileName << "\n";
@@ -147,8 +143,14 @@ private:
   }
 
 public:
-  // Mode
-  bool developer_mode = true;
+  // Mode (true: tokenize the Test samples, false: tokenize the user's Input)
+  bool developer_mode;
+
+  // Every setting is handed in by the caller; the parser decides nothing.
+  Parser(bool developer_mode, std::filesystem::path embedded_path,
+         std::vector<std::filesystem::path> asset_dirs)
+      : embedded_path(std::move(embedded_path)),
+        asset_dirs(std::move(asset_dirs)), developer_mode(developer_mode) {}
 
   // Standalone parser, isolated from AI!
   std::vector<uint32_t> tokenization(Input &input, Test &test);

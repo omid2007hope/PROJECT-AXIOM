@@ -1,9 +1,10 @@
 #include "../include/parser.hpp"
+#include "test_header.hpp"
 
 void test_tokenization() {
   Input input;
-  Test test;
-  Parser parser;
+  Test test = make_test_data();
+  Parser parser(true, test_embedded_path(), test_asset_dirs());
 
   std::vector<uint32_t> tokenized = parser.tokenization(input, test);
 

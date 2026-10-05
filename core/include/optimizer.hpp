@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 // ── DLL-imported pinned memory API ──────────────────────────────────────────
@@ -49,7 +50,7 @@ struct Portion {
   // Tier 1: The RAM Buffer (Disk -> RAM)
   // Optimal size: 100,000 to 1,000,000 tokens to keep CPU fed.
   // ---------------------------------------------------------
-  size_t ram_buffer_size = 100000;
+  size_t ram_buffer_size;
 
   // Holds: ram_buffer_size * embedding_dim (e.g., 400,000 bfloat16_t values)
   std::vector<std::bfloat16_t> ram_buffer_tokens = {};
@@ -58,18 +59,26 @@ struct Portion {
   // Tier 2: The AI's Field of View (RAM -> AI)
   // Optimal for basic AI: 64 or 128 tokens.
   // ---------------------------------------------------------
-  // 1 token = 4 bfloat16_t values
-  size_t token_dim = 4;
+  // 1 token = token_dim bfloat16_t values (e.g., 4)
+  size_t token_dim;
 
-  size_t context_window_size = 128;
+  size_t context_window_size;
 
-  // 128 * 4 = 512
-  size_t all_elements = context_window_size * token_dim;
+  // context_window_size * token_dim (e.g., 128 * 4 = 512)
+  size_t all_elements;
 
-  // 1 * 4 = 4
-  size_t target_elements = 1 * token_dim;
+  // 1 * token_dim (e.g., 1 * 4 = 4)
+  size_t target_elements;
 
   size_t offset = 0;
+
+  // All sizes are decided by the caller (main); the derived element counts
+  // are computed here so they can never go out of sync with them.
+  Portion(size_t ram_buffer_size, size_t token_dim, size_t context_window_size)
+      : ram_buffer_size(ram_buffer_size), token_dim(token_dim),
+        context_window_size(context_window_size),
+        all_elements(context_window_size * token_dim),
+        target_elements(1 * token_dim) {}
 
   // =========================================================================
   // UPGRADED: pageable std::vector → cudaHostAllocWriteCombined pinned memory
@@ -134,8 +143,14 @@ private:
 
 public:
   // Path to the binary embedded data file produced by Parser::embedding().
-  // Must be set before the first call to disk_to_ram().
-  std::string data_path = "database/embedded.bin";
+  // Decided by the caller (main) and read by disk_to_ram().
+  std::filesystem::path data_path;
+
+  // Gradient-descent step size used by AI::train(); decided by the caller.
+  float learning_rate;
+
+  Optimizer(std::filesystem::path data_path, float learning_rate)
+      : data_path(std::move(data_path)), learning_rate(learning_rate) {}
 
   void disk_to_ram(Portion &portion);
 

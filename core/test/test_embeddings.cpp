@@ -1,4 +1,5 @@
 #include "../include/parser.hpp"
+#include "test_header.hpp"
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -36,8 +37,8 @@ void test_embeddings() {
   std::cout << "\n=== Embedding Test Suite ===\n";
 
   Input input;
-  Test test;
-  Parser parser;
+  Test test = make_test_data();
+  Parser parser(true, test_embedded_path(), test_asset_dirs());
 
 
 
@@ -134,8 +135,8 @@ void test_embeddings() {
   // ── [7] Re-run embedding is idempotent ───────────────────────────────────
   std::cout << "\n[7] Idempotency\n";
   Input input2;
-  Test test2;
-  Parser parser2;
+  Test test2 = make_test_data();
+  Parser parser2(true, test_embedded_path(), test_asset_dirs());
   parser2.tokenization(input2, test2);
   std::vector<std::bfloat16_t> emb2 = parser2.embedding(input2, test2);
   check_eq(emb2.size(), emb.size(), "second run produces same size");

@@ -2,7 +2,9 @@
 #include <iostream>
 #include <random>
 
-AI::AI(size_t in_dim, size_t out_dim) : input_dim(in_dim), output_dim(out_dim) {
+AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max)
+    : input_dim(in_dim), output_dim(out_dim), weight_min(weight_min),
+      weight_max(weight_max) {
   size_t weight_elements = in_dim * out_dim;
   size_t bias_elements = out_dim;
 
@@ -21,8 +23,8 @@ void AI::reset_weights() {
   std::random_device rd;
   std::mt19937 gen(rd());
 
-  // Uniform distribution between -0.1 and 0.1
-  std::uniform_real_distribution<float> dis(-0.1f, 0.1f);
+  // Uniform distribution between weight_min and weight_max
+  std::uniform_real_distribution<float> dis(weight_min, weight_max);
 
   for (size_t i = 0; i < weight_elements; ++i) {
     h_weights[i] = dis(gen);
@@ -71,7 +73,7 @@ void AI::train(Optimizer &optimizer, Portion &portion) {
                    output_dim, portion.buffer_index);
 
       // Launch CUDA kernel for Backward pass (Gradient Descent)
-      float learning_rate = 0.001f;
+      float learning_rate = optimizer.learning_rate;
       backward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_dim,
                     output_dim, learning_rate, portion.buffer_index);
 

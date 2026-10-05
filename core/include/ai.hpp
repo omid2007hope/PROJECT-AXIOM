@@ -13,6 +13,10 @@ private:
     size_t input_dim;
     size_t output_dim;
 
+    // Bounds of the uniform distribution used to initialize the weights
+    float weight_min;
+    float weight_max;
+
 public:
     // CPU Memory (High precision float for initialization and updates)
     std::vector<float> h_weights;
@@ -30,7 +34,8 @@ public:
     std::atomic<bool> training_in_use{false};
 
     // Constructor: Takes dimensions and initializes with Chaos (Randomness)
-    AI(size_t in_dim, size_t out_dim);
+    // inside [weight_min, weight_max]
+    AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max);
     ~AI();
 
     // Method to move memory to GPU

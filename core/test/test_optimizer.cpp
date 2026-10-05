@@ -1,5 +1,6 @@
 #include "../include/optimizer.hpp"
 #include "../include/parser.hpp"
+#include "test_header.hpp"
 #include <iostream>
 
 // ─── Minimal assertion helper ────────────────────────────────────────────────
@@ -45,7 +46,7 @@ void test_optimizer() {
 
   // ── [1] Initial Portion state ────────────────────────────────────────────
   std::cout << "\n[1] Initial Portion state\n";
-  Portion portion;
+  Portion portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
   check_eq(portion.ram_buffer_tokens.size(), size_t{0}, "ram_buffer empty");
   // Pinned buffers: nullptr until allocate_pinned() is called
   check(portion.context_window_tokens == nullptr, "context_window_tokens == nullptr");
@@ -53,11 +54,8 @@ void test_optimizer() {
   check(portion.buffer_in_use.load()  == false,   "buffer_in_use == false");
   check(portion.context_in_use.load() == false,   "context_in_use == false");
 
-  portion.ram_buffer_size    = RAM_BUF;
-  portion.context_window_size = CTX_WIN;
-  // Recompute the derived size fields after changing context_window_size
-  portion.all_elements    = portion.context_window_size * portion.token_dim;
-  portion.target_elements = 1 * portion.token_dim;
+  check_eq(portion.all_elements, WIN_ELEMS, "all_elements derived");
+  check_eq(portion.target_elements, TGT_ELEMS, "target_elements derived");
 
   // Allocate the pinned host buffers (cudaHostAllocWriteCombined)
   bool pinned_ok = portion.allocate_pinned();
@@ -65,7 +63,7 @@ void test_optimizer() {
   check(portion.context_window_tokens != nullptr, "context_window_tokens allocated");
   check(portion.target_tokens         != nullptr, "target_tokens allocated");
 
-  Optimizer optimizer;
+  Optimizer optimizer(test_embedded_path(), 0.001f);
 
   // ── [2] disk_to_ram — first load ─────────────────────────────────────────
   std::cout << "\n[2] disk_to_ram — first load\n";
@@ -120,19 +118,17 @@ void test_optimizer() {
   // ── [6] Lock safety — buffer_in_use blocks disk_to_ram ───────────────────
   std::cout << "\n[6] Lock safety\n";
   {
-    Portion locked;
+    Portion locked(64, TOKEN_DIM, CTX_WIN);
     locked.buffer_in_use.store(true, std::memory_order_relaxed);
-    locked.ram_buffer_size = 64;
-    Optimizer opt2;
+    Optimizer opt2(test_embedded_path(), 0.001f);
     opt2.disk_to_ram(locked); // must be a no-op
     check_eq(locked.ram_buffer_tokens.size(), size_t{0},
              "disk_to_ram skipped when buffer_in_use=true");
   }
   {
-    Portion locked;
+    Portion locked(64, TOKEN_DIM, CTX_WIN);
     locked.context_in_use.store(true, std::memory_order_relaxed);
-    locked.ram_buffer_size = 64;
-    Optimizer opt3;
+    Optimizer opt3(test_embedded_path(), 0.001f);
     opt3.disk_to_ram(locked); // must be a no-op
     check_eq(locked.ram_buffer_tokens.size(), size_t{0},
              "disk_to_ram skipped when context_in_use=true");
