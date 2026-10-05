@@ -1,0 +1,43 @@
+# 🎯 Project Axiom: Active To-Do & Roadmap
+
+## 🚨 Immediate Objective: The Ping-Pong Orchestration (Phase 3)
+**Current Issue (The Race Condition):** `cudaMemcpyAsync` queues transfers asynchronously, but the CPU's `while(true)` loop is overwriting pinned memory buffers *before* the DMA controllers can read them.
+**Solution:** Implement Lock-Free Concurrency using the **Stream Sync Method** (natively overlapping PCIe DMA transfers with neural network compute).
+
+### Action Items:
+- [ ] Retain the single `while (true)` loop in `main.cpp`.
+- [ ] Before the CPU writes to `context_window_tokens[0]`, call `cudaStreamSynchronize(stream[0])`.
+- [ ] Before the CPU writes to `context_window_tokens[1]`, call `cudaStreamSynchronize(stream[1])`.
+  > *Result: The CPU waits only for the active stream to finish, while the GPU crushes math on the alternate stream in the background.*
+
+---
+
+## 🧠 The Training Loop & Backward Pass (Phase 4)
+*Once data flows safely without race conditions, the engine must become mathematically correct.*
+- [ ] **Fix the State Loop:** Refactor `AI::train()` to remove the `training_in_use` spin-lock flag.
+- [ ] **Wire the Math:** Complete the mathematical loop so the network learns:
+  - `Upload` $\rightarrow$ `Forward Pass` $\rightarrow$ `Calculate Loss` $\rightarrow$ `Backward Pass` $\rightarrow$ `Update Weights`
+
+---
+
+## 🗺️ Upcoming Milestones (The Full Roadmap)
+
+### Tensor Core Saturation (Phase 4)
+- [ ] Replace custom matrix multiplication loops with NVIDIA's CUTLASS library.
+- [ ] Implement Epilogue Visitor Trees (EVT) to fuse GEMM, bias, and ReLU into a single kernel natively in `__nv_bfloat16`.
+
+### Production VRAM Management (Phase 5)
+- [ ] Eliminate slow, blocking `cudaMalloc` calls by implementing `cudaMallocAsync`.
+- [ ] Build a custom PyTorch-style Best-Fit with Coalescing (BFC) caching allocator in C++ userspace.
+
+### PagedAttention & KV Caching (Phase 6)
+- [ ] Implement OS-style virtual memory paging for VRAM (PagedAttention) to eliminate fragmentation during GPT-style generation.
+- [ ] Enable Copy-On-Write (COW) for system prompt caching to slash Time-to-First-Token (TTFT).
+
+### Zero-Overhead Dispatch & CUDA Graphs (Phase 7)
+- [ ] Wrap training loops in CUDA Graphs to reduce CPU kernel-launch overhead to zero.
+- [ ] Implement an ATen-style dispatcher to decouple tensor handles from hardware execution logic.
+
+### Orchestrator Polish
+- [ ] Wire up the stubbed "Use it" (inference phase) path in `main.cpp`.
+- [ ] Wire up the stubbed "Add media" path in `main.cpp`.
