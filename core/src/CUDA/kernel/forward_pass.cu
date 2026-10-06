@@ -9,8 +9,22 @@ __global__ static void forward_pass_kernel(
     const __nv_bfloat16* __restrict__ b, 
     __nv_bfloat16* __restrict__ y,       
     size_t in_dim, size_t out_dim) {
+
+  /*
+  blockDim.x is the number of apartments in each building (e.g., 10 apartments
+  per building).
+
+  blockIdx.x is the building number (e.g., Building #3).
+
+  threadIdx.x is the specific apartment number inside that building (e.g.,
+  Apartment #5).
+
+  Your Global ID is your absolute position on the street: (Building 3 × 10
+  apartments) + Apartment 5 = The 35th apartment overall.
+*/
   
   size_t row = blockIdx.x * blockDim.x + threadIdx.x;
+
   if (row < out_dim) {
     float sum = __bfloat162float(b[row]);
     for (size_t col = 0; col < in_dim; ++col) {
