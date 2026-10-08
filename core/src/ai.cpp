@@ -14,12 +14,12 @@ AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max,
   e.weight_elements = in_dim * out_dim;
 
   // out_dim = 4
-  e.bias_elemnets = out_dim;
+  e.bias_elements = out_dim;
 
-  h_weights.resize(weight_elements);
-  h_bias.resize(bias_elements);
+  h_weights.resize(e.weight_elements);
+  h_bias.resize(e.bias_elements);
 
-  reset_weights();
+  reset_weights(e);
 }
 
 void AI::reset_weights(Elements &e) {
@@ -34,11 +34,11 @@ void AI::reset_weights(Elements &e) {
   // Uniform distribution between weight_min and weight_max
   std::uniform_real_distribution<float> dis(weight_min, weight_max);
 
-  for (size_t i = 0; i < weight_elements; ++i) {
+  for (size_t i = 0; i < e.weight_elements; ++i) {
     h_weights[i] = dis(gen);
   }
 
-  for (size_t i = 0; i < bias_elements; ++i) {
+  for (size_t i = 0; i < e.bias_elements; ++i) {
     // Biases can often safely start at 0.0, because the chaotic weights
     // will do the heavy lifting to break the symmetry on the first pass.
     h_bias[i] = 0.0f;

@@ -281,7 +281,7 @@ void print_hardware_telemetry(const Portion &portion) {
 // Training loop (runs until the process is stopped)
 // *****************************************************************************
 [[noreturn]] void run_training_loop(AI &ai, Optimizer &optimizer,
-                                    Portion &portion) {
+                                    Portion &portion, Elements &elements) {
   std::cout << "Beginning continuous training loop...\n";
   std::cout << "Press 'R' at any time to reset AI weights and start fresh.\n";
 
@@ -291,7 +291,7 @@ void print_hardware_telemetry(const Portion &portion) {
       char ch = _getch();
       if (ch == 'r' || ch == 'R') {
         std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
-        ai.reset_weights();
+        ai.reset_weights(elements);
         if (ai.upload_weights_to_gpu()) { // push new chaotic weights to VRAM
           std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
         } else {
@@ -452,8 +452,9 @@ int main(int argc, char *argv[]) {
   weight_max) constructor to set it up."
   */
 
+  Elements ai_elements;
   AI ai(portion.all_elements, portion.target_elements, config::weight_min,
-        config::weight_max);
+        config::weight_max, ai_elements);
 
   // Transfer the chaotic starting weights from CPU to GPU VRAM
   if (!ai.upload_weights_to_gpu()) {
@@ -461,5 +462,5 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  run_training_loop(ai, optimizer, portion);
+  run_training_loop(ai, optimizer, portion, ai_elements);
 }

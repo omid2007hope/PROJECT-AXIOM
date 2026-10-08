@@ -9,8 +9,8 @@
 #include "../src/CUDA/transfer.cuh"
 
 struct Elements {
-  size_t weight_elements = 0.0;
-  size_t bias_elemnets = 0.0;
+  size_t weight_elements = 0;
+  size_t bias_elements = 0;
 };
 
 class AI {
