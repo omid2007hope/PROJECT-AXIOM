@@ -2,11 +2,19 @@
 #include <iostream>
 #include <random>
 
-AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max)
+AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max,
+       Elements &e)
     : input_dim(in_dim), output_dim(out_dim), weight_min(weight_min),
       weight_max(weight_max) {
-  size_t weight_elements = in_dim * out_dim;
-  size_t bias_elements = out_dim;
+
+  // in_dim = token * dim = 512
+  // out_dim = target * dim = 4
+
+  // 512 * 4 = 2048
+  e.weight_elements = in_dim * out_dim;
+
+  // out_dim = 4
+  e.bias_elemnets = out_dim;
 
   h_weights.resize(weight_elements);
   h_bias.resize(bias_elements);
@@ -14,9 +22,9 @@ AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max)
   reset_weights();
 }
 
-void AI::reset_weights() {
-  size_t weight_elements = input_dim * output_dim;
-  size_t bias_elements = output_dim;
+void AI::reset_weights(Elements &e) {
+  e.weight_elements = input_dim * output_dim;
+  e.bias_elements = output_dim;
 
   // Initialize with Chaos (Symmetry Breaking)
   // We use the Mersenne Twister engine for high-quality random numbers
@@ -52,16 +60,18 @@ bool AI::upload_weights_to_gpu() {
 }
 
 void AI::train(Optimizer &optimizer, Portion &portion) {
-  // Sync the stream to ensure the GPU is done with this buffer before we overwrite it.
+  // Sync the stream to ensure the GPU is done with this buffer before we
+  // overwrite it.
   synchronize_stream(&gpu_portion, portion.buffer_index);
 
   bool has_data = optimizer.ram_to_contextWindow(portion);
 
   if (has_data) {
     // Transfer the pinned host memory to VRAM across the PCIe bus
-    if (upload_to_gpu(portion.context_window_tokens[portion.buffer_index], portion.all_elements,
-                      portion.target_tokens[portion.buffer_index], portion.target_elements,
-                      &gpu_portion, portion.buffer_index)) {
+    if (upload_to_gpu(
+            portion.context_window_tokens[portion.buffer_index],
+            portion.all_elements, portion.target_tokens[portion.buffer_index],
+            portion.target_elements, &gpu_portion, portion.buffer_index)) {
 
       // Launch CUDA kernel for Forward Pass
       forward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_dim,

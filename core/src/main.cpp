@@ -13,8 +13,8 @@
 #define NOMINMAX // keep <windows.h> from defining min()/max() macros
 
 #include <conio.h> // For _kbhit() and _getch()
-#include <windows.h>
 #include <psapi.h>
+#include <windows.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -254,26 +254,27 @@ void print_hardware_telemetry(const Portion &portion) {
   const double disk_free_gb =
       ec ? 0.0 : disk_space.available / 1024.0 / 1024.0 / 1024.0;
 
-  std::cout
-      << "\n========================================================\n"
-      << "                LIVE HARDWARE TELEMETRY                 \n"
-      << "========================================================\n"
-      << std::fixed << std::setprecision(2)
-      << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
-      << "[RAM] Engine Stream : "
-      << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0)
-      << " MB\n"
-      << "[RAM] Process Usage : " << (pmc.WorkingSetSize / 1024.0 / 1024.0)
-      << " MB\n"
-      << "[RAM] System Avail  : "
-      << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0) << " GB / "
-      << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
-      << "[GPU] Context Window: "
-      << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
-      << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
-      << (gpu_total / 1024.0 / 1024.0) << " MB\n"
-      << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
-      << "========================================================\n\n";
+  std::cout << "\n========================================================\n"
+            << "                LIVE HARDWARE TELEMETRY                 \n"
+            << "========================================================\n"
+            << std::fixed << std::setprecision(2)
+            << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
+            << "[RAM] Engine Stream : "
+            << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 /
+                1024.0)
+            << " MB\n"
+            << "[RAM] Process Usage : "
+            << (pmc.WorkingSetSize / 1024.0 / 1024.0) << " MB\n"
+            << "[RAM] System Avail  : "
+            << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0) << " GB / "
+            << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
+            << "[GPU] Context Window: "
+            << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0)
+            << " KB\n"
+            << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0)
+            << " MB / " << (gpu_total / 1024.0 / 1024.0) << " MB\n"
+            << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
+            << "========================================================\n\n";
 }
 
 // *****************************************************************************
@@ -375,8 +376,8 @@ int main(int argc, char *argv[]) {
   const std::filesystem::path core_dir = locate_core_dir();
   const std::filesystem::path embedded_path =
       core_dir / config::database_folder / config::embedded_file;
-  const std::vector<std::filesystem::path> asset_dirs = {
-      core_dir / config::asset_folder};
+  const std::vector<std::filesystem::path> asset_dirs = {core_dir /
+                                                         config::asset_folder};
 
   // These are needed later on
   Parser parser(developer_mode, embedded_path, asset_dirs);
