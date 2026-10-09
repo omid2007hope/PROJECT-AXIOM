@@ -204,6 +204,133 @@ static void test_gpu_roundtrip() {
 	check(true, "free_gpu() safe to call twice (no double-free)");
 }
 
+static void test_cutlass_forward_pass_evt() {
+	const size_t in_dim = 512; // 128 tokens * 4 dim
+	const size_t out_dim = 4;
+
+	GpuPortion gpu {};
+	GpuWeights weights {};
+	GpuActivations acts {};
+
+	std::vector<std::bfloat16_t> h_ctx(in_dim);
+	for (size_t i = 0; i < in_dim; ++i) {
+		h_ctx[i] = static_cast<std::bfloat16_t>((static_cast<int>(i % 7) - 3) * 0.25f);
+	}
+	std::vector<std::bfloat16_t> h_tgt(out_dim, static_cast<std::bfloat16_t>(1.0f));
+
+	bool up_data = upload_to_gpu(h_ctx.data(), in_dim, h_tgt.data(), out_dim, &gpu, 0);
+	check(up_data, "upload_to_gpu() for CUTLASS forward test");
+
+	std::vector<float> h_w(in_dim * out_dim);
+	for (size_t i = 0; i < h_w.size(); ++i) {
+		h_w[i] = (static_cast<float>(i % 11) - 5.0f) * 0.05f;
+	}
+	std::vector<float> h_b = {0.1f, -0.5f, 0.2f, -0.1f};
+
+	bool up_w = upload_ai_weights(h_w.data(), h_w.size(), h_b.data(), h_b.size(), &weights);
+	check(up_w, "upload_ai_weights() succeeds");
+
+	// Run CUTLASS EVT forward pass
+	bool fwd = forward_pass(&gpu, &weights, &acts, in_dim, out_dim, 0);
+	check(fwd, "CUTLASS EVT forward_pass() kernel execution");
+
+	std::vector<std::bfloat16_t> h_out(out_dim);
+	bool down_out = download_output(&acts, h_out.data(), out_dim);
+	check(down_out, "download_output() succeeds");
+
+	// Compute CPU reference: ReLU(W * x + b)
+	bool matched = true;
+	for (size_t row = 0; row < out_dim; ++row) {
+		float sum = h_b[row];
+		for (size_t col = 0; col < in_dim; ++col) {
+			float x_val = static_cast<float>(h_ctx[col]);
+			float w_val = h_w[row * in_dim + col];
+			sum += w_val * x_val;
+		}
+		if (sum < 0.0f) {
+			sum = 0.0f; // ReLU
+		}
+		float actual = static_cast<float>(h_out[row]);
+		if (std::abs(actual - sum) > 0.15f) {
+			matched = false;
+			std::cerr << "Mismatch row " << row << ": actual=" << actual << " ref=" << sum << "\n";
+		}
+	}
+	check(matched, "CUTLASS EVT output matches CPU reference ReLU(Wx + b)");
+
+	free_gpu(&gpu);
+	free_gpu_weights(&weights);
+	free_gpu_activations(&acts);
+}
+
+static void test_backward_pass_and_loss_drop() {
+	const size_t in_dim = 512;
+	const size_t out_dim = 4;
+	const float lr = 0.01f;
+
+	GpuPortion gpu {};
+	GpuWeights weights {};
+	GpuActivations acts {};
+
+	std::vector<std::bfloat16_t> h_ctx(in_dim);
+	for (size_t i = 0; i < in_dim; ++i) {
+		h_ctx[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 5) + 1));
+	}
+	std::vector<std::bfloat16_t> h_tgt(out_dim);
+	for (size_t i = 0; i < out_dim; ++i) {
+		h_tgt[i] = static_cast<std::bfloat16_t>(1.0f + 0.5f * i);
+	}
+
+	upload_to_gpu(h_ctx.data(), in_dim, h_tgt.data(), out_dim, &gpu, 0);
+
+	std::vector<float> h_w_init(in_dim * out_dim, 0.01f);
+	std::vector<float> h_b_init(out_dim, 0.0f);
+	upload_ai_weights(h_w_init.data(), h_w_init.size(), h_b_init.data(), h_b_init.size(), &weights);
+
+	// 1. Initial step
+	forward_pass(&gpu, &weights, &acts, in_dim, out_dim, 0);
+	backward_pass(&gpu, &weights, &acts, in_dim, out_dim, lr, 0);
+
+	float init_loss = 0.0f;
+	download_loss(&acts, &init_loss);
+	check(init_loss > 0.0f, "Initial loss is strictly positive");
+
+	// 2. Check weights actually changed
+	std::vector<float> h_w_after(in_dim * out_dim);
+	std::vector<float> h_b_after(out_dim);
+	download_ai_weights(&weights, h_w_after.data(), h_w_after.size(), h_b_after.data(), h_b_after.size());
+
+	bool weights_changed = false;
+	for (size_t i = 0; i < h_w_after.size(); ++i) {
+		if (h_w_after[i] != h_w_init[i]) {
+			weights_changed = true;
+			break;
+		}
+	}
+	check(weights_changed, "backward_pass physically updated weights in VRAM");
+
+	// 3. Train for 50 steps on this pattern to verify loss drops
+	for (int step = 0; step < 50; ++step) {
+		forward_pass(&gpu, &weights, &acts, in_dim, out_dim, 0);
+		backward_pass(&gpu, &weights, &acts, in_dim, out_dim, lr, 0);
+	}
+
+	float final_loss = 0.0f;
+	download_loss(&acts, &final_loss);
+	// Final single-step loss after 50 updates
+	forward_pass(&gpu, &weights, &acts, in_dim, out_dim, 0);
+	backward_pass(&gpu, &weights, &acts, in_dim, out_dim, lr, 0);
+	float eval_loss = 0.0f;
+	download_loss(&acts, &eval_loss);
+
+	std::cout << "  Initial loss: " << init_loss << " -> Final loss: " << eval_loss << "\n";
+	check(eval_loss < init_loss * 0.1f, "Loss dropped by > 90% (Network is learning sequences)");
+
+	free_gpu(&gpu);
+	free_gpu_weights(&weights);
+	free_gpu_activations(&acts);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 void test_cuda_transfer() {
 	std::cout << "\n=== CUDA Transfer Test Suite ===\n";
@@ -222,6 +349,12 @@ void test_cuda_transfer() {
 
 	std::cout << "\n[5] GPU transfer tests\n";
 	test_gpu_roundtrip();
+
+	std::cout << "\n[6] CUTLASS EVT Forward Pass (Tensor Cores + Fused Bias/ReLU)\n";
+	test_cutlass_forward_pass_evt();
+
+	std::cout << "\n[7] Backward Pass Gradients & Validation Loss Drop\n";
+	test_backward_pass_and_loss_drop();
 
 	std::cout << "=== CUDA Transfer Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";

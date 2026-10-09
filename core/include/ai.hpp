@@ -13,6 +13,13 @@ struct Elements {
 	size_t bias_elements = 0;
 };
 
+// What one AI::train() call did
+enum class TrainStatus {
+	Trained, // one full forward + backward step ran
+	NoData,  // the RAM buffer is exhausted: the caller must refill it
+	Failed   // a CUDA step failed (already reported on stderr)
+};
+
 class AI {
 private:
 	size_t input_dim;
@@ -21,6 +28,9 @@ private:
 	// Bounds of the uniform distribution used to initialize the weights
 	float weight_min;
 	float weight_max;
+
+	// Training steps launched since the last read_loss()
+	size_t pending_steps = 0;
 
 public:
 	// CPU Memory (High precision float for initialization and updates)
@@ -41,11 +51,19 @@ public:
 	// Method to move memory to GPU
 	bool upload_weights_to_gpu();
 
+	// Method to copy the trained weights back into h_weights / h_bias
+	bool download_weights_from_gpu();
+
 	// Method to reset all parameters/weights back to chaotic state
 	void reset_weights(Elements& e);
 
 	// The Training Loop Orchestrator
-	void train(Optimizer& optimizer, Portion& portion);
+	TrainStatus train(Optimizer& optimizer, Portion& portion);
+
+	// Mean training loss (0.5 * squared error per step, measured before each update)
+	// over the steps since the previous call. `steps` receives how many that was.
+	// Waits for the GPU to finish, so call it once per report interval, not per step.
+	bool read_loss(double& mean_loss, size_t& steps);
 };
 
 #endif

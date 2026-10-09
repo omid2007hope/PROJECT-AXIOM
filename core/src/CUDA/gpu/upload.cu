@@ -32,6 +32,12 @@ extern "C" CUDA_API bool upload_to_gpu(const void* h_context,
 			CUDA_CHECK(cudaStreamCreateWithFlags((cudaStream_t*)&gpu->stream[i],
 							     cudaStreamNonBlocking));
 		}
+
+		if (gpu->compute_done[i] == nullptr) {
+			if (!CUDA_CHECK(cudaEventCreateWithFlags((cudaEvent_t*)&gpu->compute_done[i],
+								 cudaEventDisableTiming)))
+				return false;
+		}
 	}
 	gpu->context_elements = context_elements;
 
@@ -86,6 +92,11 @@ extern "C" CUDA_API bool upload_ai_weights(const float* h_weights,
 		return false;
 	}
 
+	// A reset can arrive mid-training: drain every in-flight kernel first so none of
+	// them is still updating the weights while they are overwritten below.
+	if (!CUDA_CHECK(cudaDeviceSynchronize()))
+		return false;
+
 	// ── Weights ───────────────────────────────────────────────────────────────
 	if (gpu->weight_elements != weight_elements) {
 		if (gpu->d_weights) {
@@ -93,30 +104,32 @@ extern "C" CUDA_API bool upload_ai_weights(const float* h_weights,
 				return false;
 			gpu->d_weights = nullptr;
 		}
+		if (gpu->d_weights_master) {
+			if (!CUDA_CHECK(cudaFree(gpu->d_weights_master)))
+				return false;
+			gpu->d_weights_master = nullptr;
+		}
 		if (!CUDA_CHECK(
 			    cudaMalloc(&gpu->d_weights, weight_elements * sizeof(__nv_bfloat16))))
+			return false;
+		if (!CUDA_CHECK(cudaMalloc(&gpu->d_weights_master, weight_elements * sizeof(float))))
 			return false;
 		gpu->weight_elements = weight_elements;
 	}
 
-	float* d_tmp_w = nullptr;
-	if (!CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_tmp_w),
-				   weight_elements * sizeof(float))))
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_weights_master,
+				   h_weights,
+				   weight_elements * sizeof(float),
+				   cudaMemcpyHostToDevice)))
 		return false;
-	if (!CUDA_CHECK(cudaMemcpy(
-		    d_tmp_w, h_weights, weight_elements * sizeof(float), cudaMemcpyHostToDevice))) {
-		cudaFree(d_tmp_w);
-		return false;
-	}
+
 	int threads = 256;
 	int blocks = static_cast<int>((weight_elements + threads - 1) / threads);
-	float_to_bf16_kernel<<<blocks, threads>>>(
-		d_tmp_w, static_cast<__nv_bfloat16*>(gpu->d_weights), weight_elements);
-	if (!CUDA_CHECK(cudaGetLastError())) {
-		cudaFree(d_tmp_w);
+	float_to_bf16_kernel<<<blocks, threads>>>(static_cast<const float*>(gpu->d_weights_master),
+						  static_cast<__nv_bfloat16*>(gpu->d_weights),
+						  weight_elements);
+	if (!CUDA_CHECK(cudaGetLastError()))
 		return false;
-	}
-	cudaFree(d_tmp_w);
 
 	// ── Bias ──────────────────────────────────────────────────────────────────
 	if (gpu->bias_elements != bias_elements) {
@@ -125,30 +138,31 @@ extern "C" CUDA_API bool upload_ai_weights(const float* h_weights,
 				return false;
 			gpu->d_bias = nullptr;
 		}
+		if (gpu->d_bias_master) {
+			if (!CUDA_CHECK(cudaFree(gpu->d_bias_master)))
+				return false;
+			gpu->d_bias_master = nullptr;
+		}
 		if (!CUDA_CHECK(cudaMalloc(&gpu->d_bias, bias_elements * sizeof(__nv_bfloat16))))
+			return false;
+		if (!CUDA_CHECK(cudaMalloc(&gpu->d_bias_master, bias_elements * sizeof(float))))
 			return false;
 		gpu->bias_elements = bias_elements;
 	}
 
-	float* d_tmp_b = nullptr;
-	if (!CUDA_CHECK(
-		    cudaMalloc(reinterpret_cast<void**>(&d_tmp_b), bias_elements * sizeof(float))))
-		return false;
 	if (!CUDA_CHECK(cudaMemcpy(
-		    d_tmp_b, h_bias, bias_elements * sizeof(float), cudaMemcpyHostToDevice))) {
-		cudaFree(d_tmp_b);
+		    gpu->d_bias_master, h_bias, bias_elements * sizeof(float), cudaMemcpyHostToDevice)))
 		return false;
-	}
-	blocks = static_cast<int>((bias_elements + threads - 1) / threads);
-	float_to_bf16_kernel<<<blocks, threads>>>(
-		d_tmp_b, static_cast<__nv_bfloat16*>(gpu->d_bias), bias_elements);
-	if (!CUDA_CHECK(cudaGetLastError())) {
-		cudaFree(d_tmp_b);
-		return false;
-	}
-	cudaFree(d_tmp_b);
 
-	return true;
+	blocks = static_cast<int>((bias_elements + threads - 1) / threads);
+	float_to_bf16_kernel<<<blocks, threads>>>(static_cast<const float*>(gpu->d_bias_master),
+						  static_cast<__nv_bfloat16*>(gpu->d_bias),
+						  bias_elements);
+	if (!CUDA_CHECK(cudaGetLastError()))
+		return false;
+
+	// Make the bf16 copies visible to the training streams
+	return CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 extern "C" CUDA_API void synchronize_stream(GpuPortion* gpu, int buffer_index) {

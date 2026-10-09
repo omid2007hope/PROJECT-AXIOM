@@ -4,10 +4,10 @@
 *Now that data flows continuously without race conditions, the Perceptron must start updating its weights and learning.*
 
 ### Action Items:
-- [ ] **Connect the Backward Pass & Gradients:** Fully wire the `backward_pass` kernel in `ai.cpp` so it correctly computes loss gradients and physically updates the network's weights.
-- [ ] **Validation / Inference Pipeline:** Set up a mechanism to watch the loss drop to prove the network is actually learning the token sequences.
-- [ ] **CUTLASS & Tensor Core Saturation:** Replace basic C++ nested loops on the GPU with NVIDIA's CUTLASS templates to run matrix multiplications natively on the Tensor Cores (preventing 95% compute waste).
-- [ ] **Epilogue Visitor Trees (EVT):** Fuse the matrix multiplication, bias addition, and ReLU activation into a single kernel to avoid catastrophic VRAM round-trips.
+- [x] **Connect the Backward Pass & Gradients:** Fully wire the `backward_pass` kernel in `ai.cpp` so it correctly computes loss gradients and physically updates the network's weights.
+- [x] **Validation / Inference Pipeline:** Set up a mechanism to watch the loss drop to prove the network is actually learning the token sequences.
+- [x] **CUTLASS & Tensor Core Saturation:** Replace basic C++ nested loops on the GPU with NVIDIA's CUTLASS templates to run matrix multiplications natively on the Tensor Cores (preventing 95% compute waste).
+- [x] **Epilogue Visitor Trees (EVT):** Fuse the matrix multiplication, bias addition, and ReLU activation into a single kernel to avoid catastrophic VRAM round-trips.
 
 ---
 

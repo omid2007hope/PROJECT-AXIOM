@@ -54,49 +54,89 @@ AI::~AI() {
 
 bool AI::upload_weights_to_gpu() {
 	// Pass the data down to the CUDA C-interface
-	return upload_ai_weights(
-		h_weights.data(), h_weights.size(), h_bias.data(), h_bias.size(), &gpu_weights);
+	if (!upload_ai_weights(
+		    h_weights.data(), h_weights.size(), h_bias.data(), h_bias.size(), &gpu_weights)) {
+		return false;
+	}
+
+	// Whatever loss was measured against the previous weights no longer describes
+	// this network, so start a fresh measurement.
+	float stale_loss = 0.0f;
+	download_loss(&gpu_activations, &stale_loss);
+	pending_steps = 0;
+
+	return true;
 }
 
-void AI::train(Optimizer& optimizer, Portion& portion) {
+bool AI::download_weights_from_gpu() {
+	return download_ai_weights(
+		&gpu_weights, h_weights.data(), h_weights.size(), h_bias.data(), h_bias.size());
+}
+
+bool AI::read_loss(double& mean_loss, size_t& steps) {
+	float loss_sum = 0.0f;
+
+	if (!download_loss(&gpu_activations, &loss_sum)) {
+		return false;
+	}
+
+	steps = pending_steps;
+	pending_steps = 0;
+	mean_loss = (steps > 0) ? static_cast<double>(loss_sum) / static_cast<double>(steps) : 0.0;
+
+	return true;
+}
+
+TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 	// Sync the stream to ensure the GPU is done with this buffer before we
 	// overwrite it.
 	synchronize_stream(&gpu_portion, portion.buffer_index);
 
 	bool has_data = optimizer.ram_to_contextWindow(portion);
 
-	if (has_data) {
-		// Transfer the pinned host memory to VRAM across the PCIe bus
-		if (upload_to_gpu(portion.context_window_tokens[portion.buffer_index],
-				  portion.all_elements,
-				  portion.target_tokens[portion.buffer_index],
-				  portion.target_elements,
-				  &gpu_portion,
-				  portion.buffer_index)) {
-
-			// Launch CUDA kernel for Forward Pass
-			forward_pass(&gpu_portion,
-				     &gpu_weights,
-				     &gpu_activations,
-				     input_dim,
-				     output_dim,
-				     portion.buffer_index);
-
-			// Launch CUDA kernel for Backward pass (Gradient Descent)
-			float learning_rate = optimizer.learning_rate;
-
-			backward_pass(&gpu_portion,
-				      &gpu_weights,
-				      &gpu_activations,
-				      input_dim,
-				      output_dim,
-				      learning_rate,
-				      portion.buffer_index);
-
-			// Slide to the next buffer for the next training step
-			portion.buffer_index = 1 - portion.buffer_index;
-		} else {
-			std::cerr << "[AI Brain] Failed to upload portion to GPU.\n";
-		}
+	if (!has_data) {
+		return TrainStatus::NoData;
 	}
+
+	// Transfer the pinned host memory to VRAM across the PCIe bus
+	if (!upload_to_gpu(portion.context_window_tokens[portion.buffer_index],
+			   portion.all_elements,
+			   portion.target_tokens[portion.buffer_index],
+			   portion.target_elements,
+			   &gpu_portion,
+			   portion.buffer_index)) {
+		std::cerr << "[AI Brain] Failed to upload portion to GPU.\n";
+		return TrainStatus::Failed;
+	}
+
+	// Launch CUDA kernel for Forward Pass
+	if (!forward_pass(&gpu_portion,
+			  &gpu_weights,
+			  &gpu_activations,
+			  input_dim,
+			  output_dim,
+			  portion.buffer_index)) {
+		std::cerr << "[AI Brain] Forward pass failed.\n";
+		return TrainStatus::Failed;
+	}
+
+	// Launch CUDA kernel for Backward pass (Gradient Descent)
+	float learning_rate = optimizer.learning_rate;
+
+	if (!backward_pass(&gpu_portion,
+			   &gpu_weights,
+			   &gpu_activations,
+			   input_dim,
+			   output_dim,
+			   learning_rate,
+			   portion.buffer_index)) {
+		std::cerr << "[AI Brain] Backward pass failed.\n";
+		return TrainStatus::Failed;
+	}
+
+	// Slide to the next buffer for the next training step
+	portion.buffer_index = 1 - portion.buffer_index;
+	++pending_steps;
+
+	return TrainStatus::Trained;
 }

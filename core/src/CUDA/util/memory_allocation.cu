@@ -28,6 +28,10 @@ extern "C" CUDA_API void free_gpu(GpuPortion* gpu) {
 			cudaStreamDestroy((cudaStream_t)gpu->stream[i]);
 			gpu->stream[i] = nullptr;
 		}
+		if (gpu->compute_done[i]) {
+			cudaEventDestroy((cudaEvent_t)gpu->compute_done[i]);
+			gpu->compute_done[i] = nullptr;
+		}
 	}
 }
 
@@ -42,6 +46,14 @@ extern "C" CUDA_API void free_gpu_weights(GpuWeights* gpu) {
 		cudaFree(gpu->d_bias);
 		gpu->d_bias = nullptr;
 	}
+	if (gpu->d_weights_master) {
+		cudaFree(gpu->d_weights_master);
+		gpu->d_weights_master = nullptr;
+	}
+	if (gpu->d_bias_master) {
+		cudaFree(gpu->d_bias_master);
+		gpu->d_bias_master = nullptr;
+	}
 	gpu->weight_elements = 0;
 	gpu->bias_elements = 0;
 }
@@ -52,6 +64,10 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 	if (gpu->d_output) {
 		cudaFree(gpu->d_output);
 		gpu->d_output = nullptr;
+	}
+	if (gpu->d_loss) {
+		cudaFree(gpu->d_loss);
+		gpu->d_loss = nullptr;
 	}
 	gpu->output_elements = 0;
 }

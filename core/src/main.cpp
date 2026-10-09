@@ -19,13 +19,18 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <psapi.h>
+#include <optional>
 #include <sstream>
 #include <stdfloat> // Required for std::bfloat16_t (C++23)
 #include <string>
 #include <type_traits>
 #include <vector>
+
+// psapi.h needs the types from windows.h, so this order must not be re-sorted
+// clang-format off
 #include <windows.h>
+#include <psapi.h>
+// clang-format on
 
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
@@ -48,6 +53,9 @@ constexpr size_t ram_buffer_size = 100000;
 constexpr size_t token_dim = 4;
 constexpr size_t context_window_size = 128;
 constexpr float learning_rate = 0.001f;
+
+// How many training steps pass between two loss reports
+constexpr size_t loss_report_interval = 10000;
 
 // Initial weights are drawn uniformly from [weight_min, weight_max]
 constexpr float weight_min = -0.1f;
@@ -270,6 +278,36 @@ void print_hardware_telemetry(const Portion& portion) {
 }
 
 // *****************************************************************************
+// Loss report: the proof that the network is learning
+// *****************************************************************************
+
+// Prints the mean loss of the last interval next to the very first one. A falling
+// number means the weights are really being pulled toward the token sequences.
+void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
+	double loss = 0.0;
+	size_t steps = 0;
+
+	if (!ai.read_loss(loss, steps)) {
+		std::cerr << "[!] Could not read the loss from the GPU.\n";
+		return;
+	}
+
+	if (!first_loss) {
+		first_loss = loss;
+	}
+
+	std::cout << std::fixed << std::setprecision(6) << "[Step " << step << "] loss " << loss;
+
+	if (*first_loss > 0.0) {
+		std::cout << std::showpos << std::setprecision(1) << "  ("
+			  << (loss - *first_loss) / *first_loss * 100.0 << "% vs first)"
+			  << std::noshowpos;
+	}
+
+	std::cout << "\n";
+}
+
+// *****************************************************************************
 // Training loop (runs until the process is stopped)
 // *****************************************************************************
 [[noreturn]] void run_training_loop(AI& ai,
@@ -279,6 +317,10 @@ void print_hardware_telemetry(const Portion& portion) {
 	std::cout << "Beginning continuous training loop...\n";
 	std::cout << "Press 'R' at any time to reset AI weights and start fresh.\n";
 
+	// Steps trained since the start (or the last reset) and the first loss reported
+	size_t step = 0;
+	std::optional<double> first_loss;
+
 	while (true) {
 		// Check for interactive user commands without blocking
 		if (_kbhit()) {
@@ -287,6 +329,8 @@ void print_hardware_telemetry(const Portion& portion) {
 				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
 				ai.reset_weights(elements);
 				if (ai.upload_weights_to_gpu()) { // push new chaotic weights to VRAM
+					step = 0;
+					first_loss.reset();
 					std::cout
 						<< "[!] Brain wipe complete. Resuming training.\n\n";
 				} else {
@@ -318,7 +362,16 @@ void print_hardware_telemetry(const Portion& portion) {
     */
 
 		// Feed forward & backward pass
-		ai.train(optimizer, portion);
+		const TrainStatus status = ai.train(optimizer, portion);
+
+		if (status == TrainStatus::Failed) {
+			std::cerr << "[!] Training stopped: a GPU step failed.\n";
+			std::exit(1);
+		}
+
+		if (status == TrainStatus::Trained && ++step % config::loss_report_interval == 0) {
+			print_loss(ai, step, first_loss);
+		}
 
 		// When the RAM buffer is exhausted, the offset resets to 0.
 		// We must pull the next massive chunk from disk into RAM.
