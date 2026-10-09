@@ -8,10 +8,12 @@ extern "C" {
 #endif
 
 CUDA_API bool backward_pass(const GpuPortion* gpu_portion,
-                            GpuWeights* gpu_weights,
-                            const GpuActivations* gpu_activations,
-                            size_t input_dim, size_t output_dim, 
-                            float learning_rate, int buffer_index);
+			    GpuWeights* gpu_weights,
+			    const GpuActivations* gpu_activations,
+			    size_t input_dim,
+			    size_t output_dim,
+			    float learning_rate,
+			    int buffer_index);
 
 #ifdef __cplusplus
 }

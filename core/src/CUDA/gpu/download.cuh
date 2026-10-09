@@ -7,9 +7,12 @@
 extern "C" {
 #endif
 
-CUDA_API bool download_from_gpu(void *h_context, size_t context_elements,
-                                void *h_target,  size_t target_elements,
-                                const GpuPortion *gpu, int buffer_index);
+CUDA_API bool download_from_gpu(void* h_context,
+				size_t context_elements,
+				void* h_target,
+				size_t target_elements,
+				const GpuPortion* gpu,
+				int buffer_index);
 
 #ifdef __cplusplus
 }

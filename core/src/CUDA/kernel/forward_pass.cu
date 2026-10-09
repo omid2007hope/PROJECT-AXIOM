@@ -1,16 +1,17 @@
-#include "forward_pass.cuh"
-#include "../util/cuda_utils.cuh"
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
 
-__global__ static void forward_pass_kernel(
-    const __nv_bfloat16* __restrict__ W, 
-    const __nv_bfloat16* __restrict__ x, 
-    const __nv_bfloat16* __restrict__ b, 
-    __nv_bfloat16* __restrict__ y,       
-    size_t in_dim, size_t out_dim) {
+#include "../util/cuda_utils.cuh"
+#include "forward_pass.cuh"
 
-  /*
+__global__ static void forward_pass_kernel(const __nv_bfloat16* __restrict__ W,
+					   const __nv_bfloat16* __restrict__ x,
+					   const __nv_bfloat16* __restrict__ b,
+					   __nv_bfloat16* __restrict__ y,
+					   size_t in_dim,
+					   size_t out_dim) {
+
+	/*
   blockDim.x is the number of apartments in each building (e.g., 10 apartments
   per building).
 
@@ -24,7 +25,7 @@ __global__ static void forward_pass_kernel(
   apartments) + Apartment 5 = The 35th apartment overall.
 */
 
-  /*
+	/*
   blockDim.x (Block Size):
   This is a fixed constant: it is always 256 for every thread. It never changes.
 
@@ -39,58 +40,66 @@ threads, the block number is always 0. It never changes.
 */
 
 
-  size_t row = blockIdx.x * blockDim.x + threadIdx.x;
+	size_t row = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (row < out_dim) {
-    float sum = __bfloat162float(b[row]);
+	if (row < out_dim) {
+		float sum = __bfloat162float(b[row]);
 
-    for (size_t col = 0; col < in_dim; ++col) {
-      sum += __bfloat162float(W[row * in_dim + col]) * __bfloat162float(x[col]);
-    }
+		for (size_t col = 0; col < in_dim; ++col) {
+			sum += __bfloat162float(W[row * in_dim + col]) * __bfloat162float(x[col]);
+		}
 
-    // ReLU activation
-    if (sum < 0.0f) {
-      sum = 0.0f;
-    }
-    
-    y[row] = __float2bfloat16(sum);
-  }
+		// ReLU activation
+		if (sum < 0.0f) {
+			sum = 0.0f;
+		}
+
+		y[row] = __float2bfloat16(sum);
+	}
 }
 
-extern "C" CUDA_API bool forward_pass(const GpuPortion *gpu_portion,
-                                      const GpuWeights *gpu_weights,
-                                      GpuActivations *gpu_activations,
-                                      size_t input_dim, size_t output_dim,
-                                      int buffer_index) {
+extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
+				      const GpuWeights* gpu_weights,
+				      GpuActivations* gpu_activations,
+				      size_t input_dim,
+				      size_t output_dim,
+				      int buffer_index) {
 
-  // Safe Guard
-  if (!gpu_portion || !gpu_weights || !gpu_activations || 
-      !gpu_portion->d_context_window[buffer_index] || 
-      !gpu_weights->d_weights || !gpu_weights->d_bias) {
-    return false;
-  }
-  
-  if (gpu_activations->output_elements != output_dim) {
-    if (gpu_activations->d_output) {
-      if (!CUDA_CHECK(cudaFree(gpu_activations->d_output))) return false;
-      gpu_activations->d_output = nullptr;
-    }
+	// Safe Guard
+	if (!gpu_portion || !gpu_weights || !gpu_activations ||
+	    !gpu_portion->d_context_window[buffer_index] || !gpu_weights->d_weights ||
+	    !gpu_weights->d_bias) {
+		return false;
+	}
 
-    if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_output, output_dim * sizeof(__nv_bfloat16)))) return false;
-    gpu_activations->output_elements = output_dim;
-  }
+	if (gpu_activations->output_elements != output_dim) {
+		if (gpu_activations->d_output) {
+			if (!CUDA_CHECK(cudaFree(gpu_activations->d_output)))
+				return false;
+			gpu_activations->d_output = nullptr;
+		}
 
-  Grid grid(output_dim);
+		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_output,
+					   output_dim * sizeof(__nv_bfloat16))))
+			return false;
+		gpu_activations->output_elements = output_dim;
+	}
 
-  forward_pass_kernel<<<grid.block, grid.thread, grid.index, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
-      static_cast<const __nv_bfloat16*>(gpu_weights->d_weights),
-      static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
-      static_cast<const __nv_bfloat16*>(gpu_weights->d_bias),
-      static_cast<__nv_bfloat16*>(gpu_activations->d_output),
-      input_dim, output_dim
-  );
-  
-  if (!CUDA_CHECK(cudaGetLastError())) return false;
-  
-  return true;
+	Grid grid(output_dim);
+
+	forward_pass_kernel<<<grid.block,
+			      grid.thread,
+			      grid.index,
+			      (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
+		static_cast<const __nv_bfloat16*>(gpu_weights->d_weights),
+		static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+		static_cast<const __nv_bfloat16*>(gpu_weights->d_bias),
+		static_cast<__nv_bfloat16*>(gpu_activations->d_output),
+		input_dim,
+		output_dim);
+
+	if (!CUDA_CHECK(cudaGetLastError()))
+		return false;
+
+	return true;
 }

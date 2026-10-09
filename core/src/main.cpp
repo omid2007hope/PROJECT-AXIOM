@@ -13,20 +13,19 @@
 #define NOMINMAX // keep <windows.h> from defining min()/max() macros
 
 #include <conio.h> // For _kbhit() and _getch()
-#include <psapi.h>
-#include <windows.h>
-
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <psapi.h>
 #include <sstream>
 #include <stdfloat> // Required for std::bfloat16_t (C++23)
 #include <string>
 #include <type_traits>
 #include <vector>
+#include <windows.h>
 
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
@@ -55,27 +54,26 @@ constexpr float weight_min = -0.1f;
 constexpr float weight_max = 0.1f;
 
 // Folder layout, relative to the core/ folder
-constexpr const char *database_folder = "database";
-constexpr const char *embedded_file = "embedded_data.bin";
-constexpr const char *asset_folder = "asset_sample";
+constexpr const char* database_folder = "database";
+constexpr const char* embedded_file = "embedded_data.bin";
+constexpr const char* asset_folder = "asset_sample";
 
 } // namespace config
 
 // core/ folder, located from this source file (core/src/main.cpp)
 std::filesystem::path locate_core_dir() {
-  return std::filesystem::absolute(__FILE__).parent_path().parent_path();
+	return std::filesystem::absolute(__FILE__).parent_path().parent_path();
 }
 
 // Raw data samples used by developer mode (--train)
 Test make_sample_data() {
-  Test test;
-  test.data_txt = {"The",  "quick", "brown", "fox", "jumps",
-                   "over", "the",   "lazy",  "dog"};
-  test.data_num = {5.1, 3.5, 1.4, 0.2, 4.9, 3.0, 1.4, 0.2, 4.7, 3.2, 1.3, 0.2};
-  test.data_image = {"Photo.jpeg"};
-  test.data_video = {"Video.mp4"};
-  test.data_voice = {"Voice.ogg"};
-  return test;
+	Test test;
+	test.data_txt = {"The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"};
+	test.data_num = {5.1, 3.5, 1.4, 0.2, 4.9, 3.0, 1.4, 0.2, 4.7, 3.2, 1.3, 0.2};
+	test.data_image = {"Photo.jpeg"};
+	test.data_video = {"Video.mp4"};
+	test.data_voice = {"Voice.ogg"};
+	return test;
 }
 
 // *****************************************************************************
@@ -84,223 +82,221 @@ Test make_sample_data() {
 
 // ! Clears input stream errors and flushes invalid buffer characters
 void safeCin() {
-  if (!std::cin) {
-    std::cin.clear();
-  }
-  std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	if (!std::cin) {
+		std::cin.clear();
+	}
+	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 // Reads a menu choice; returns 0 when the input is not a number
 int read_choice() {
-  int choice = 0;
-  std::cin >> choice;
-  safeCin();
-  return choice;
+	int choice = 0;
+	std::cin >> choice;
+	safeCin();
+	return choice;
 }
 
 // Validates a single whitespace-free token
-template <typename E> bool parse_token(const std::string &token, E &value) {
-  char extra;
-  std::istringstream iss(token);
+template <typename E>
+bool parse_token(const std::string& token, E& value) {
+	char extra;
+	std::istringstream iss(token);
 
-  if (!(iss >> value) || (iss >> extra)) {
-    return false;
-  }
+	if (!(iss >> value) || (iss >> extra)) {
+		return false;
+	}
 
-  if constexpr (std::is_arithmetic_v<E>) {
-    // Numeric types: zero or positive only
-    return value >= 0;
-  } else {
-    // Non-numeric types (e.g. std::string): any non-empty token is accepted
-    return true;
-  }
+	if constexpr (std::is_arithmetic_v<E>) {
+		// Numeric types: zero or positive only
+		return value >= 0;
+	} else {
+		// Non-numeric types (e.g. std::string): any non-empty token is accepted
+		return true;
+	}
 }
 
 // Validator for final stage v-1
 // Asks until the whole line is a non-empty, space-separated list of valid
 // values. T is a vector of the wanted element type.
-template <typename T> T Validate(const std::string &c_out) {
-  using Element = typename T::value_type;
+template <typename T>
+T Validate(const std::string& c_out) {
+	using Element = typename T::value_type;
 
-  std::string c_in;
+	std::string c_in;
 
-  while (true) {
-    std::cout << c_out << "\n";
+	while (true) {
+		std::cout << c_out << "\n";
 
-    if (!std::getline(std::cin, c_in)) {
-      std::cin.clear();
-      std::cerr << "\n[!] Input stream closed. Exiting.\n";
-      std::exit(1);
-    }
+		if (!std::getline(std::cin, c_in)) {
+			std::cin.clear();
+			std::cerr << "\n[!] Input stream closed. Exiting.\n";
+			std::exit(1);
+		}
 
-    T data;
-    Element value{};
-    std::string token;
-    std::istringstream iss(c_in);
-    bool valid = true;
+		T data;
+		Element value {};
+		std::string token;
+		std::istringstream iss(c_in);
+		bool valid = true;
 
-    while (iss >> token) {
-      if (!parse_token(token, value)) {
-        valid = false;
-        break;
-      }
-      data.push_back(value);
-    }
+		while (iss >> token) {
+			if (!parse_token(token, value)) {
+				valid = false;
+				break;
+			}
+			data.push_back(value);
+		}
 
-    if (valid && !data.empty()) {
-      return data;
-    }
+		if (valid && !data.empty()) {
+			return data;
+		}
 
-    std::cout << "[!] Invalid input. Please try again.\n";
-  }
+		std::cout << "[!] Invalid input. Please try again.\n";
+	}
 }
 
 // fetch arguments
-std::string fetch_argument(int count, char *argument[]) {
-  return count > 1 ? std::string(argument[1]) : std::string();
+std::string fetch_argument(int count, char* argument[]) {
+	return count > 1 ? std::string(argument[1]) : std::string();
 }
 
 // Interactive menu. Fills `input` and returns true when it is ready to be
 // parsed, or false when there is nothing to train on.
-bool collect_user_input(Input &input) {
-  std::cout << "==========================\n"
-            << "     Welcome to AXIOM     \n"
-            << "==========================\n"
-            << "[1] Use it\n"
-            << "[2] Train it\n"
-            << "> ";
+bool collect_user_input(Input& input) {
+	std::cout << "==========================\n"
+		  << "     Welcome to AXIOM     \n"
+		  << "==========================\n"
+		  << "[1] Use it\n"
+		  << "[2] Train it\n"
+		  << "> ";
 
-  const int option = read_choice();
+	const int option = read_choice();
 
-  if (option == 1) {
-    // For later on
-    std::cout << "\n[!] 'Use it' is not available yet.\n";
-    return false;
-  }
+	if (option == 1) {
+		// For later on
+		std::cout << "\n[!] 'Use it' is not available yet.\n";
+		return false;
+	}
 
-  if (option != 2) {
-    std::cout << "\n[!] Invalid option.\n";
-    return false;
-  }
+	if (option != 2) {
+		std::cout << "\n[!] Invalid option.\n";
+		return false;
+	}
 
-  std::cout << "\n--- Training Mode: ON ---\n\n";
+	std::cout << "\n--- Training Mode: ON ---\n\n";
 
-  std::cout << "Select Data Type:\n"
-            << "[1] Text\n"
-            << "[2] Number\n"
-            << "[3] Image\n"
-            << "[4] Video\n"
-            << "[5] Voice\n"
-            << "> ";
+	std::cout << "Select Data Type:\n"
+		  << "[1] Text\n"
+		  << "[2] Number\n"
+		  << "[3] Image\n"
+		  << "[4] Video\n"
+		  << "[5] Voice\n"
+		  << "> ";
 
-  const int type = read_choice();
+	const int type = read_choice();
 
-  if (type == 1) {
-    input.user_text = Validate<std::vector<std::string>>("Enter Text: ");
-  } else if (type == 2) {
-    input.user_numbers = Validate<std::vector<double>>("Enter Number: ");
-  } else if (type == 3) {
-    input.user_image_paths =
-        Validate<std::vector<std::string>>("Enter Image Path: ");
-  } else if (type == 4) {
-    input.user_video_paths =
-        Validate<std::vector<std::string>>("Enter Video Path: ");
-  } else if (type == 5) {
-    input.user_voice_paths =
-        Validate<std::vector<std::string>>("Enter Voice Path: ");
-  } else {
-    std::cout << "\n[!] Invalid data type.\n";
-    return false;
-  }
+	if (type == 1) {
+		input.user_text = Validate<std::vector<std::string>>("Enter Text: ");
+	} else if (type == 2) {
+		input.user_numbers = Validate<std::vector<double>>("Enter Number: ");
+	} else if (type == 3) {
+		input.user_image_paths = Validate<std::vector<std::string>>("Enter Image Path: ");
+	} else if (type == 4) {
+		input.user_video_paths = Validate<std::vector<std::string>>("Enter Video Path: ");
+	} else if (type == 5) {
+		input.user_voice_paths = Validate<std::vector<std::string>>("Enter Voice Path: ");
+	} else {
+		std::cout << "\n[!] Invalid data type.\n";
+		return false;
+	}
 
-  // Text and numbers can be paired with media
-  if (type == 1 || type == 2) {
-    std::cout << "\nAdd media?\n[1] Yes\n[2] No\n> ";
+	// Text and numbers can be paired with media
+	if (type == 1 || type == 2) {
+		std::cout << "\nAdd media?\n[1] Yes\n[2] No\n> ";
 
-    const int media = read_choice();
+		const int media = read_choice();
 
-    if (media == 1) {
-      // For later
-      std::cout << "\n[!] Adding media is not available yet.\n";
-      return false;
-    }
+		if (media == 1) {
+			// For later
+			std::cout << "\n[!] Adding media is not available yet.\n";
+			return false;
+		}
 
-    if (media != 2) {
-      std::cout << "\n[!] Invalid option.\n";
-      return false;
-    }
-  }
+		if (media != 2) {
+			std::cout << "\n[!] Invalid option.\n";
+			return false;
+		}
+	}
 
-  return true;
+	return true;
 }
 
 // *****************************************************************************
 // Live hardware telemetry
 // *****************************************************************************
-void print_hardware_telemetry(const Portion &portion) {
-  PROCESS_MEMORY_COUNTERS pmc{};
-  GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
+void print_hardware_telemetry(const Portion& portion) {
+	PROCESS_MEMORY_COUNTERS pmc {};
+	GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
 
-  MEMORYSTATUSEX memInfo{};
-  memInfo.dwLength = sizeof(MEMORYSTATUSEX);
-  GlobalMemoryStatusEx(&memInfo);
+	MEMORYSTATUSEX memInfo {};
+	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+	GlobalMemoryStatusEx(&memInfo);
 
-  size_t gpu_free = 0, gpu_total = 0;
-  get_gpu_telemetry(&gpu_free, &gpu_total);
+	size_t gpu_free = 0, gpu_total = 0;
+	get_gpu_telemetry(&gpu_free, &gpu_total);
 
-  std::error_code ec;
-  const std::filesystem::space_info disk_space =
-      std::filesystem::space(std::filesystem::current_path(ec), ec);
-  const double disk_free_gb =
-      ec ? 0.0 : disk_space.available / 1024.0 / 1024.0 / 1024.0;
+	std::error_code ec;
+	const std::filesystem::space_info disk_space =
+		std::filesystem::space(std::filesystem::current_path(ec), ec);
+	const double disk_free_gb = ec ? 0.0 : disk_space.available / 1024.0 / 1024.0 / 1024.0;
 
-  std::cout << "\n========================================================\n"
-            << "                LIVE HARDWARE TELEMETRY                 \n"
-            << "========================================================\n"
-            << std::fixed << std::setprecision(2)
-            << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
-            << "[RAM] Engine Stream : "
-            << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 /
-                1024.0)
-            << " MB\n"
-            << "[RAM] Process Usage : "
-            << (pmc.WorkingSetSize / 1024.0 / 1024.0) << " MB\n"
-            << "[RAM] System Avail  : "
-            << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0) << " GB / "
-            << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
-            << "[GPU] Context Window: "
-            << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0)
-            << " KB\n"
-            << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0)
-            << " MB / " << (gpu_total / 1024.0 / 1024.0) << " MB\n"
-            << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
-            << "========================================================\n\n";
+	std::cout << "\n========================================================\n"
+		  << "                LIVE HARDWARE TELEMETRY                 \n"
+		  << "========================================================\n"
+		  << std::fixed << std::setprecision(2)
+		  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
+		  << "[RAM] Engine Stream : "
+		  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0)
+		  << " MB\n"
+		  << "[RAM] Process Usage : " << (pmc.WorkingSetSize / 1024.0 / 1024.0) << " MB\n"
+		  << "[RAM] System Avail  : " << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0)
+		  << " GB / " << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
+		  << "[GPU] Context Window: "
+		  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
+		  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
+		  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
+		  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
+		  << "========================================================\n\n";
 }
 
 // *****************************************************************************
 // Training loop (runs until the process is stopped)
 // *****************************************************************************
-[[noreturn]] void run_training_loop(AI &ai, Optimizer &optimizer,
-                                    Portion &portion, Elements &elements) {
-  std::cout << "Beginning continuous training loop...\n";
-  std::cout << "Press 'R' at any time to reset AI weights and start fresh.\n";
+[[noreturn]] void run_training_loop(AI& ai,
+				    Optimizer& optimizer,
+				    Portion& portion,
+				    Elements& elements) {
+	std::cout << "Beginning continuous training loop...\n";
+	std::cout << "Press 'R' at any time to reset AI weights and start fresh.\n";
 
-  while (true) {
-    // Check for interactive user commands without blocking
-    if (_kbhit()) {
-      char ch = _getch();
-      if (ch == 'r' || ch == 'R') {
-        std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
-        ai.reset_weights(elements);
-        if (ai.upload_weights_to_gpu()) { // push new chaotic weights to VRAM
-          std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
-        } else {
-          std::cerr << "[!] Brain wipe failed: could not upload weights.\n\n";
-        }
-      }
-    }
+	while (true) {
+		// Check for interactive user commands without blocking
+		if (_kbhit()) {
+			char ch = _getch();
+			if (ch == 'r' || ch == 'R') {
+				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
+				ai.reset_weights(elements);
+				if (ai.upload_weights_to_gpu()) { // push new chaotic weights to VRAM
+					std::cout
+						<< "[!] Brain wipe complete. Resuming training.\n\n";
+				} else {
+					std::cerr
+						<< "[!] Brain wipe failed: could not upload weights.\n\n";
+				}
+			}
+		}
 
-    /* LEARN: Omid Teimory 2026 All rights reserved
+		/* LEARN: Omid Teimory 2026 All rights reserved
     Locks the Thread: It sets training_in_use to true so the CPU data-loader
     thread doesn't collide with the GPU thread.
 
@@ -321,127 +317,123 @@ void print_hardware_telemetry(const Portion &portion) {
     current math.
     */
 
-    // Feed forward & backward pass
-    ai.train(optimizer, portion);
+		// Feed forward & backward pass
+		ai.train(optimizer, portion);
 
-    // When the RAM buffer is exhausted, the offset resets to 0.
-    // We must pull the next massive chunk from disk into RAM.
-    if (portion.offset == 0) {
-      optimizer.disk_to_ram(portion);
-    }
-  }
+		// When the RAM buffer is exhausted, the offset resets to 0.
+		// We must pull the next massive chunk from disk into RAM.
+		if (portion.offset == 0) {
+			optimizer.disk_to_ram(portion);
+		}
+	}
 }
 
 void run_tests() {
-  std::cout << "--- test_path AI ---\n";
-  test_path();
+	std::cout << "--- test_path AI ---\n";
+	test_path();
 
-  std::cout << "--- test_ifstream AI ---\n";
-  test_ifstream();
+	std::cout << "--- test_ifstream AI ---\n";
+	test_ifstream();
 
-  std::cout << "--- test_embeddings AI ---\n";
-  test_embeddings();
+	std::cout << "--- test_embeddings AI ---\n";
+	test_embeddings();
 
-  std::cout << "--- test_tokenization AI ---\n";
-  test_tokenization();
+	std::cout << "--- test_tokenization AI ---\n";
+	test_tokenization();
 
-  std::cout << "--- test_optimizer AI ---\n";
-  test_optimizer();
+	std::cout << "--- test_optimizer AI ---\n";
+	test_optimizer();
 
-  std::cout << "--- test_cuda_transfer AI ---\n";
-  test_cuda_transfer();
+	std::cout << "--- test_cuda_transfer AI ---\n";
+	test_cuda_transfer();
 }
 
 // main function
-int main(int argc, char *argv[]) {
-  const std::string arg = fetch_argument(argc, argv);
+int main(int argc, char* argv[]) {
+	const std::string arg = fetch_argument(argc, argv);
 
-  if (arg == "--test") {
-    run_tests();
-    return 0;
-  }
+	if (arg == "--test") {
+		run_tests();
+		return 0;
+	}
 
-  if (!arg.empty() && arg != "--train") {
-    std::cerr << "Usage: app.exe [--train | --test]\n"
-              << "  (no argument)  interactive menu\n"
-              << "  --train        train on the built-in sample data\n"
-              << "  --test         run the test suites\n";
-    return 1;
-  }
+	if (!arg.empty() && arg != "--train") {
+		std::cerr << "Usage: app.exe [--train | --test]\n"
+			  << "  (no argument)  interactive menu\n"
+			  << "  --train        train on the built-in sample data\n"
+			  << "  --test         run the test suites\n";
+		return 1;
+	}
 
-  // Developer mode tokenizes the built-in samples; the menu uses real input
-  const bool developer_mode = (arg == "--train");
+	// Developer mode tokenizes the built-in samples; the menu uses real input
+	const bool developer_mode = (arg == "--train");
 
-  // Everything below is configured here and handed down to the backend
-  const std::filesystem::path core_dir = locate_core_dir();
-  const std::filesystem::path embedded_path =
-      core_dir / config::database_folder / config::embedded_file;
-  const std::vector<std::filesystem::path> asset_dirs = {core_dir /
-                                                         config::asset_folder};
+	// Everything below is configured here and handed down to the backend
+	const std::filesystem::path core_dir = locate_core_dir();
+	const std::filesystem::path embedded_path =
+		core_dir / config::database_folder / config::embedded_file;
+	const std::vector<std::filesystem::path> asset_dirs = {core_dir / config::asset_folder};
 
-  // These are needed later on
-  Parser parser(developer_mode, embedded_path, asset_dirs);
-  Input input;
-  input.embedding_dim = config::token_dim;
-  Test test = make_sample_data();
+	// These are needed later on
+	Parser parser(developer_mode, embedded_path, asset_dirs);
+	Input input;
+	input.embedding_dim = config::token_dim;
+	Test test = make_sample_data();
 
-  // Instantiate the required objects for the AI to train
-  Portion portion(config::ram_buffer_size, config::token_dim,
-                  config::context_window_size);
-  Optimizer optimizer(embedded_path, config::learning_rate);
+	// Instantiate the required objects for the AI to train
+	Portion portion(config::ram_buffer_size, config::token_dim, config::context_window_size);
+	Optimizer optimizer(embedded_path, config::learning_rate);
 
-  if (developer_mode) {
-    std::cout << "--- Training AI ---\n";
-  } else if (!collect_user_input(input)) {
-    return 0;
-  }
+	if (developer_mode) {
+		std::cout << "--- Training AI ---\n";
+	} else if (!collect_user_input(input)) {
+		return 0;
+	}
 
-  // *********************************************************
-  // Phase 1: Parsing and Storage
-  // *********************************************************
+	// *********************************************************
+	// Phase 1: Parsing and Storage
+	// *********************************************************
 
-  // First thing first parser has top be fully executed!
-  // Read and tokenize all
-  parser.tokenization(input, test);
+	// First thing first parser has top be fully executed!
+	// Read and tokenize all
+	parser.tokenization(input, test);
 
-  // Embedded and Save them all
-  parser.embedding(input, test);
+	// Embedded and Save them all
+	parser.embedding(input, test);
 
-  std::cout << "\n[OK] Data successfully generated at: " << embedded_path
-            << "\n";
+	std::cout << "\n[OK] Data successfully generated at: " << embedded_path << "\n";
 
-  // *********************************************************
-  // Phase 2: Pinned Memory Allocation and Disk-to-RAM Stream
-  // *********************************************************
+	// *********************************************************
+	// Phase 2: Pinned Memory Allocation and Disk-to-RAM Stream
+	// *********************************************************
 
-  std::cout << "[..] Optimizing data and loading to RAM...\n";
+	std::cout << "[..] Optimizing data and loading to RAM...\n";
 
-  // Allocate pinned host memory for ultra-fast DMA transfers
-  if (!portion.allocate_pinned()) {
-    std::cerr << "[!] Failed to allocate pinned host memory.\n";
-    return 1;
-  }
+	// Allocate pinned host memory for ultra-fast DMA transfers
+	if (!portion.allocate_pinned()) {
+		std::cerr << "[!] Failed to allocate pinned host memory.\n";
+		return 1;
+	}
 
-  // Stream the initial chunk of parsed data from disk into the RAM buffer
-  optimizer.disk_to_ram(portion);
+	// Stream the initial chunk of parsed data from disk into the RAM buffer
+	optimizer.disk_to_ram(portion);
 
-  // The AI needs at least one full window plus its target to train on
-  if (portion.ram_buffer_tokens.size() <
-      portion.all_elements + portion.target_elements) {
-    std::cerr << "[!] Not enough data in " << embedded_path
-              << " to fill one context window.\n";
-    return 1;
-  }
+	// The AI needs at least one full window plus its target to train on
+	if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
+		std::cerr << "[!] Not enough data in " << embedded_path
+			  << " to fill one context window.\n";
+		return 1;
+	}
 
-  print_hardware_telemetry(portion);
+	print_hardware_telemetry(portion);
 
-  // *********************************************************
-  // Phase 3: AI Instantiation and GPU PCIe Transfer
-  // *********************************************************
+	// *********************************************************
+	// Phase 3: AI Instantiation and GPU PCIe Transfer
+	// *********************************************************
 
-  std::cout << "[..] Initializing AI model and uploading to VRAM...\n";
+	std::cout << "[..] Initializing AI model and uploading to VRAM...\n";
 
-  /* LEARN: Omid Teimory 2026 All rights reserved
+	/* LEARN: Omid Teimory 2026 All rights reserved
   AI is the type (your class).
 
   ai is just the name we decided to give this specific variable. We could
@@ -452,15 +444,18 @@ int main(int argc, char *argv[]) {
   weight_max) constructor to set it up."
   */
 
-  Elements ai_elements;
-  AI ai(portion.all_elements, portion.target_elements, config::weight_min,
-        config::weight_max, ai_elements);
+	Elements ai_elements;
+	AI ai(portion.all_elements,
+	      portion.target_elements,
+	      config::weight_min,
+	      config::weight_max,
+	      ai_elements);
 
-  // Transfer the chaotic starting weights from CPU to GPU VRAM
-  if (!ai.upload_weights_to_gpu()) {
-    std::cerr << "[!] Failed to upload the AI weights to VRAM.\n";
-    return 1;
-  }
+	// Transfer the chaotic starting weights from CPU to GPU VRAM
+	if (!ai.upload_weights_to_gpu()) {
+		std::cerr << "[!] Failed to upload the AI weights to VRAM.\n";
+		return 1;
+	}
 
-  run_training_loop(ai, optimizer, portion, ai_elements);
+	run_training_loop(ai, optimizer, portion, ai_elements);
 }

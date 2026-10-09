@@ -1,0 +1,71 @@
+---
+# Based on Project Readiness & Coding Guidelines (Readness.md)
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++20
+
+# --- Indentation & Tabs (Linus Torvalds 8-Char Tab Standard) ---
+IndentWidth: 8
+TabWidth: 8
+UseTab: Always
+ContinuationIndentWidth: 8
+AccessModifierOffset: -8
+IndentCaseLabels: true
+
+# --- Braces & Control Structures ---
+BreakBeforeBraces: Attach
+KeepEmptyLinesAtTheStartOfBlocks: true
+
+# --- Line & Spacing Management ---
+MaxEmptyLinesToKeep: 4
+ColumnLimit: 100
+ReflowComments: false
+BreakStringLiterals: false
+SortUsingDeclarations: true
+
+# --- Includes & Header Grouping ---
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<.*>'
+    Priority: 1
+  - Regex: '.*'
+    Priority: 2
+
+# --- Pointers & References ---
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# --- Alignment & Spacing ---
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Right
+AlignOperands: Align
+AlignTrailingComments: true
+
+# --- Functions & Arguments ---
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BinPackArguments: false
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: true
+AlwaysBreakTemplateDeclarations: Yes
+
+# --- Specific Formatting Rules ---
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: true
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInContainerLiterals: true
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
