@@ -1,12 +1,16 @@
-#ifndef GPU_KERNEL
-#define GPU_KERNEL
+#ifndef GPU_KERNEL_CUH
+#define GPU_KERNEL_CUH
 
-#include "../../../../include/ai.hpp"
+#include <cstddef>
 
 struct Grid {
-  int thread = 256;
-  int block = static_cast<int>((output_dim + thread - 1) / thread);
-  int index = 0;
- };
+  int thread;
+  int block;
+  int index;
 
-#endif // GPU_KERNEL
+  inline Grid(size_t output_dim) : thread(256), index(0) {
+    block = static_cast<int>((output_dim + thread - 1) / thread);
+  }
+};
+
+#endif // GPU_KERNEL_CUH

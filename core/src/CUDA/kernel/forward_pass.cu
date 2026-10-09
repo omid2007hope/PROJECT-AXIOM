@@ -39,18 +39,19 @@ threads, the block number is always 0. It never changes.
 */
 
 
-size_t row = blockIdx.x * blockDim.x + threadIdx.x;
+  size_t row = blockIdx.x * blockDim.x + threadIdx.x;
 
-if (row < out_dim) {
-  float sum = __bfloat162float(b[row]);
+  if (row < out_dim) {
+    float sum = __bfloat162float(b[row]);
 
-  for (size_t col = 0; col < in_dim; ++col) {
+    for (size_t col = 0; col < in_dim; ++col) {
       sum += __bfloat162float(W[row * in_dim + col]) * __bfloat162float(x[col]);
     }
 
     // ReLU activation
-    if (sum < 0.0f)
+    if (sum < 0.0f) {
       sum = 0.0f;
+    }
     
     y[row] = __float2bfloat16(sum);
   }
@@ -63,8 +64,11 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion *gpu_portion,
                                       int buffer_index) {
 
   // Safe Guard
-  if (!gpu_portion || !gpu_weights || !gpu_activations || !gpu_portion->d_context_window[buffer_index] || !gpu_weights->d_weights || !gpu_weights->d_bias)
+  if (!gpu_portion || !gpu_weights || !gpu_activations || 
+      !gpu_portion->d_context_window[buffer_index] || 
+      !gpu_weights->d_weights || !gpu_weights->d_bias) {
     return false;
+  }
   
   if (gpu_activations->output_elements != output_dim) {
     if (gpu_activations->d_output) {
@@ -76,7 +80,9 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion *gpu_portion,
     gpu_activations->output_elements = output_dim;
   }
 
-  forward_pass_kernel<<<Grid->block, Grid->thread, Grid->index, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
+  Grid grid(output_dim);
+
+  forward_pass_kernel<<<grid.block, grid.thread, grid.index, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
       static_cast<const __nv_bfloat16*>(gpu_weights->d_weights),
       static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
       static_cast<const __nv_bfloat16*>(gpu_weights->d_bias),

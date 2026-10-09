@@ -41,9 +41,15 @@ extern "C" CUDA_API bool backward_pass(const GpuPortion *gpu_portion,
                                        float learning_rate, int buffer_index) {
 
   // Safe Guard
-  if (!gpu_portion || !gpu_weights || !gpu_activations || !gpu_portion->d_context_window[buffer_index] || !gpu_portion->d_target[buffer_index]|| !gpu_weights->d_weights || !gpu_weights->d_bias || !gpu_activations->d_output) return false;
+  if (!gpu_portion || !gpu_weights || !gpu_activations || 
+      !gpu_portion->d_context_window[buffer_index] || !gpu_portion->d_target[buffer_index] || 
+      !gpu_weights->d_weights || !gpu_weights->d_bias || !gpu_activations->d_output) {
+    return false;
+  }
 
-  backward_pass_kernel<<<Grid->block, Grid->thread, Grid->index, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
+  Grid grid(output_dim);
+
+  backward_pass_kernel<<<grid.block, grid.thread, grid.index, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
       static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
       static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
       static_cast<__nv_bfloat16*>(gpu_weights->d_bias),
