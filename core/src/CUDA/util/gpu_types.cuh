@@ -3,6 +3,8 @@
 
 #include <cstddef>
 
+#include "gpu_kernel.cuh"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

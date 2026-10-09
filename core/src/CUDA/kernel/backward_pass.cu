@@ -10,8 +10,9 @@ __global__ static void backward_pass_kernel(
     const __nv_bfloat16* __restrict__ y, 
     const __nv_bfloat16* __restrict__ target, 
     size_t in_dim, size_t out_dim, float learning_rate) {
-  
+
   size_t row = blockIdx.x * blockDim.x + threadIdx.x;
+  
   if (row < out_dim) {
     float y_val = __bfloat162float(y[row]);
     float t_val = __bfloat162float(target[row]);
@@ -33,19 +34,16 @@ __global__ static void backward_pass_kernel(
   }
 }
 
-extern "C" CUDA_API bool backward_pass(const GpuPortion* gpu_portion,
-                                       GpuWeights* gpu_weights,
-                                       const GpuActivations* gpu_activations,
-                                       size_t input_dim, size_t output_dim, 
+extern "C" CUDA_API bool backward_pass(const GpuPortion *gpu_portion,
+                                       GpuWeights *gpu_weights,
+                                       const GpuActivations *gpu_activations,
+                                       size_t input_dim, size_t output_dim,
                                        float learning_rate, int buffer_index) {
-  if (!gpu_portion || !gpu_weights || !gpu_activations) return false;
-  if (!gpu_portion->d_context_window[buffer_index] || !gpu_portion->d_target[buffer_index]) return false;
-  if (!gpu_weights->d_weights || !gpu_weights->d_bias || !gpu_activations->d_output) return false;
 
-  int threads = 256;
-  int blocks = static_cast<int>((output_dim + threads - 1) / threads);
-  
-  backward_pass_kernel<<<blocks, threads, 0, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
+  // Safe Guard
+  if (!gpu_portion || !gpu_weights || !gpu_activations || !gpu_portion->d_context_window[buffer_index] || !gpu_portion->d_target[buffer_index]|| !gpu_weights->d_weights || !gpu_weights->d_bias || !gpu_activations->d_output) return false;
+
+  backward_pass_kernel<<<Grid->block, Grid->thread, Grid->index, (cudaStream_t)gpu_portion->stream[buffer_index]>>>(
       static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
       static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
       static_cast<__nv_bfloat16*>(gpu_weights->d_bias),

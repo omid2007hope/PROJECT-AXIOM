@@ -79,6 +79,7 @@ void AI::train(Optimizer &optimizer, Portion &portion) {
 
       // Launch CUDA kernel for Backward pass (Gradient Descent)
       float learning_rate = optimizer.learning_rate;
+
       backward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_dim,
                     output_dim, learning_rate, portion.buffer_index);
 
