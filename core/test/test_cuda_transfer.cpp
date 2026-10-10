@@ -332,7 +332,7 @@ static void test_backward_pass_and_loss_drop() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-void test_cuda_transfer() {
+bool test_cuda_transfer() {
 	std::cout << "\n=== CUDA Transfer Test Suite ===\n";
 
 	std::cout << "\n[1] BF16 type size\n";
@@ -358,5 +358,7 @@ void test_cuda_transfer() {
 
 	std::cout << "=== CUDA Transfer Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";
+	int fails = s_fail;
 	s_pass = s_fail = 0;
+	return fails == 0;
 }

@@ -34,7 +34,7 @@ static void check_eq(A actual, B expected, const char* label) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-void test_embeddings() {
+bool test_embeddings() {
 	std::cout << "\n=== Embedding Test Suite ===\n";
 
 	Input input;
@@ -150,5 +150,7 @@ void test_embeddings() {
 
 	std::cout << "\n=== Embedding Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";
+	int fails = s_fail;
 	s_pass = s_fail = 0; // reset for next suite
+	return fails == 0;
 }

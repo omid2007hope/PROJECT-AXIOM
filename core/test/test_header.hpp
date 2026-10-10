@@ -21,7 +21,8 @@ inline void print_file_path() {
 
 // core/ folder (this header lives in core/test/)
 inline std::filesystem::path test_core_dir() {
-	return std::filesystem::path(__FILE__).parent_path().parent_path();
+	std::filesystem::path p = std::filesystem::absolute(__FILE__).parent_path().parent_path();
+	return p.empty() ? std::filesystem::current_path() : p;
 }
 
 inline std::filesystem::path test_embedded_path() {
@@ -41,4 +42,27 @@ inline Test make_test_data() {
 	test.data_video = {"Video.mp4"};
 	test.data_voice = {"Voice.ogg"};
 	return test;
+}
+
+// ─── Test Assertion Helpers ──────────────────────────────────────────────────
+inline void test_check(bool cond, const char* label, int& s_pass, int& s_fail) {
+	if (cond) {
+		std::cout << "  PASS [" << label << "]\n";
+		++s_pass;
+	} else {
+		std::cerr << "  FAIL [" << label << "]\n";
+		++s_fail;
+	}
+}
+
+template <typename A, typename B>
+inline void test_check_eq(A actual, B expected, const char* label, int& s_pass, int& s_fail) {
+	if (static_cast<B>(actual) == expected) {
+		std::cout << "  PASS [" << label << "]: " << actual << "\n";
+		++s_pass;
+	} else {
+		std::cerr << "  FAIL [" << label << "]: got " << actual << ", expected " << expected
+			  << "\n";
+		++s_fail;
+	}
 }

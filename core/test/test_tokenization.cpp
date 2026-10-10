@@ -1,62 +1,31 @@
 #include "../include/parser.hpp"
 #include "test_header.hpp"
 
-void test_tokenization() {
+bool test_tokenization() {
+	std::cout << "\n=== Tokenization & Modality Test Suite ===\n";
+	int s_pass = 0, s_fail = 0;
+
 	Input input;
 	Test test = make_test_data();
 	Parser parser(true, test_embedded_path(), test_asset_dirs());
 
 	std::vector<uint32_t> tokenized = parser.tokenization(input, test);
+	test_check(!tokenized.empty(), "Tokenized stream is non-empty", s_pass, s_fail);
+	test_check_eq(tokenized.size(), input.tokenized_data.size(), "Parser output matches input.tokenized_data", s_pass, s_fail);
 
-	std::cout << "Successfully generated " << tokenized.size() << " tokens!\n";
-	std::cout << "All tokens: ";
+	// Modality dictionaries must be populated
+	test_check(!input.text_dictionary.empty(), "Text vocabulary populated", s_pass, s_fail);
+	test_check(!input.number_dictionary.empty(), "Number vocabulary populated", s_pass, s_fail);
+	test_check(!input.image_dictionary.empty(), "Image vocabulary populated", s_pass, s_fail);
+	test_check(!input.video_dictionary.empty(), "Video vocabulary populated", s_pass, s_fail);
+	test_check(!input.voice_dictionary.empty(), "Voice vocabulary populated", s_pass, s_fail);
 
-	// Print all tokens
-	for (size_t i = 0; i < tokenized.size() && i < 1000; ++i) {
-		std::cout << tokenized[i] << " ";
-	}
-	std::cout << "\n";
-
-	// Vocabulary summary: count and ID range per modality
-	auto summary = [](const char* name, auto& dict) {
-		if (dict.empty()) {
-			std::cout << "  " << name << ": 0 unique tokens\n";
-			return;
-		}
-		uint32_t lo = UINT32_MAX, hi = 0;
-		for (const auto& [key, id] : dict) {
-			if (id < lo)
-				lo = id;
-			if (id > hi)
-				hi = id;
-		}
-		std::cout << "  " << name << ": " << dict.size() << " unique tokens  [" << lo
-			  << " .. " << hi << "]\n";
-	};
-
-	std::cout << "\n--- Vocabulary Summary ---\n";
-	summary("Text  ", input.text_dictionary);
-	summary("Number", input.number_dictionary);
-	summary("Image ", input.image_dictionary);
-	summary("Video ", input.video_dictionary);
-	summary("Voice ", input.voice_dictionary);
-	std::cout << "--------------------------\n";
-
-	// Run embedding // bfloat16_t
+	// Generate and verify embeddings
 	std::vector<std::bfloat16_t> embedded = parser.embedding(input, test);
+	test_check(!embedded.empty(), "Embedded vector is non-empty", s_pass, s_fail);
+	test_check_eq(embedded.size(), tokenized.size() * input.embedding_dim, "Embedded floats == tokens * embedding_dim", s_pass, s_fail);
+	test_check(!input.embedding_table.empty(), "Embedding lookup table is populated", s_pass, s_fail);
 
-	std::cout << "\n--- Embedding Summary ---\n";
-	std::cout << "\n--- Type:  bfloat16_t ---\n";
-	std::cout << "  Tokens       : " << tokenized.size() << "\n";
-	std::cout << "  Dim per token: " << input.embedding_dim << "\n";
-	std::cout << "  Total floats : " << embedded.size() << "\n";
-	std::cout << "  Unique embeds: " << input.embedding_table.size() << "\n";
-	std::cout << "  First token [" << tokenized[0] << "] -> [";
-	for (uint32_t d = 0; d < input.embedding_dim; ++d) {
-		std::cout << embedded[d];
-		if (d + 1 < input.embedding_dim)
-			std::cout << ", ";
-	}
-	std::cout << "]\n";
-	std::cout << "-------------------------\n";
+	std::cout << "=== Tokenization & Modality Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
+	return s_fail == 0;
 }

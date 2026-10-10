@@ -36,12 +36,14 @@
 #include "../include/optimizer.hpp"
 #include "../src/CUDA/util/telemetry.cuh"
 
-void test_path();
-void test_ifstream();
-void test_embeddings();
-void test_tokenization();
-void test_optimizer();
-void test_cuda_transfer();
+bool test_path();
+bool test_ifstream();
+bool test_embeddings();
+bool test_tokenization();
+bool test_optimizer();
+bool test_cuda_transfer();
+bool test_transfer();
+bool test_ai();
 
 // *****************************************************************************
 // Configuration: the single source of truth for everything the backend uses
@@ -381,24 +383,42 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 	}
 }
 
-void run_tests() {
+bool run_tests() {
+	bool all_ok = true;
+
 	std::cout << "--- test_path AI ---\n";
-	test_path();
+	all_ok &= test_path();
 
 	std::cout << "--- test_ifstream AI ---\n";
-	test_ifstream();
+	all_ok &= test_ifstream();
 
 	std::cout << "--- test_embeddings AI ---\n";
-	test_embeddings();
+	all_ok &= test_embeddings();
 
 	std::cout << "--- test_tokenization AI ---\n";
-	test_tokenization();
+	all_ok &= test_tokenization();
 
 	std::cout << "--- test_optimizer AI ---\n";
-	test_optimizer();
+	all_ok &= test_optimizer();
 
 	std::cout << "--- test_cuda_transfer AI ---\n";
-	test_cuda_transfer();
+	all_ok &= test_cuda_transfer();
+
+	std::cout << "--- test_transfer AI ---\n";
+	all_ok &= test_transfer();
+
+	std::cout << "--- test_ai AI ---\n";
+	all_ok &= test_ai();
+
+	std::cout << "\n============================================\n";
+	if (all_ok) {
+		std::cout << "  ALL TEST SUITES PASSED (100% GREEN)       \n";
+	} else {
+		std::cerr << "  ONE OR MORE TEST SUITES FAILED            \n";
+	}
+	std::cout << "============================================\n\n";
+
+	return all_ok;
 }
 
 // main function
@@ -406,8 +426,7 @@ int main(int argc, char* argv[]) {
 	const std::string arg = fetch_argument(argc, argv);
 
 	if (arg == "--test") {
-		run_tests();
-		return 0;
+		return run_tests() ? 0 : 1;
 	}
 
 	if (!arg.empty() && arg != "--train") {

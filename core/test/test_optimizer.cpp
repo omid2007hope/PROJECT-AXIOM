@@ -29,7 +29,7 @@ static void check(bool cond, const char* label) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-void test_optimizer() {
+bool test_optimizer() {
 	std::cout << "\n=== Optimizer Test Suite ===\n";
 
 	// Constants that match optimizer.cpp internals
@@ -161,5 +161,7 @@ void test_optimizer() {
 
 	std::cout << "\n=== Optimizer Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";
+	int fails = s_fail;
 	s_pass = s_fail = 0;
+	return fails == 0;
 }
