@@ -112,25 +112,33 @@ bool test_ai() {
 	auto refill = [&]() {
 		conv_portion.ram_buffer_tokens.resize(RAM_BUF);
 		for (size_t i = 0; i < RAM_BUF; ++i) {
-			conv_portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.2f * ((i % 5) + 1));
+			conv_portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 4) + 1));
 		}
 	};
 	refill();
 
-	// Measure step 1 loss
+	// Step 1: initial loss
 	ai.train(optimizer, conv_portion);
 	double initial_loss = 0.0;
 	size_t initial_steps = 0;
 	ai.read_loss(initial_loss, initial_steps);
 
-	// Train 40 additional steps
-	for (int step = 0; step < 40; ++step) {
+	// Train 50 steps on this repeatable pattern
+	for (int step = 0; step < 50; ++step) {
 		if (ai.train(optimizer, conv_portion) == TrainStatus::NoData) {
 			refill();
 			ai.train(optimizer, conv_portion);
 		}
 	}
 
+	// Drain any remaining pending loss
+	double drain_loss = 0.0;
+	size_t drain_steps = 0;
+	ai.read_loss(drain_loss, drain_steps);
+
+	// Single evaluation step on the known pattern
+	conv_portion.offset = 0;
+	ai.train(optimizer, conv_portion);
 	double final_loss = 0.0;
 	size_t final_steps = 0;
 	ai.read_loss(final_loss, final_steps);

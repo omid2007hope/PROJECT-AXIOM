@@ -31,10 +31,12 @@ Axiom reclaims total control of the hardware and data pipeline:
 ♾️ **"The Seam" Continuous Context:** Slices the final 128 tokens across 100,000-token RAM chunks and carries them forward to eliminate boundary amnesia.
 🌌 **True Native Multimodality:** A discrete VQ-VAE coordinate space mapping Text, Numbers, Images, Video, and Voice across orthogonal 10,000,000-slot namespaces so modalities never collide.
 
-### Total Model Ownership & The Handpicked Philosophy
+### The Single-Model Architecture & Open-Source Philosophy
 Axiom is built on the philosophy that AI achieves peak intelligence when trained on **handpicked, validated data** tailored to your exact goal. 
 
-You run it 100% locally and offline on your own GPU. You teach the model yourself, name it, save it, and maintain an entire personal library of specialized models (e.g., `cat_video_ai`, coding models, audio models). Switch between them on demand, train them further, or execute an instant **hard weight reset** to wipe the slate clean and restart from scratch in seconds.
+There are no bloated model managers, multi-model switching layers, or runtime registries. It is **one dedicated neural model**:
+- **End-User Experience:** Normal end-users run the pre-trained model directly for instant, zero-friction inference ("Use it") with zero Python dependencies.
+- **Developer & Contributor Experience:** Open-source contributors can fork the repository, run `--train` on their own curated data, produce custom release weights, or hit 'R' for an instant **hard weight reset** to start fresh in seconds.
 
 ### The Scientific Horizon: The Rewind Test
 Beyond performance, Axiom serves as an empirical research sandbox to test the boundaries of computational determinism. By feeding hardware thermal entropy (`std::random_device`) into Axiom's unified mathematical space, we are executing **The Rewind Test** to see if a neural network can reverse-engineer physical generators and predict physical jitter.
@@ -66,7 +68,7 @@ No Python. No garbage collector. Pure hardware mastery.
 • Discrete VQ-VAE space: text, vision, audio & numbers unified with 0 collisions
 • 100% local, private, and offline on consumer GPUs (RTX 4080)
 
-Train on handpicked data. Save your models (`cat_video_ai`). Switch between them at will, or hard-reset all weights in seconds.
+Train on handpicked data. Run offline inference locally, or hit 'R' to hard-reset weights in seconds.
 
 Read the whitepaper & code: [Insert Link]
 
@@ -97,7 +99,7 @@ Memory logistics matter as much as compute:
 The Core Philosophy:
 Throwing uncurated internet sludge at models creates cancerous data feedback loops and model collapse.
 
-Axiom lets you train specialized models on **handpicked, validated data** locally. Name your models, save them, swap them, retrain them, or hit 'R' to hard-reset weights in seconds.
+Axiom delivers a dedicated, unified model architecture: end-users run instant local inference ("Use it"), while developers fork the repo to train on their own curated data via `--train` or hit 'R' to hard-reset weights in seconds.
 
 **5/5**
 Axiom also tests the boundaries of physics: using our custom hardware entropy pipeline, we’re running **The Rewind Test** to see if neural networks can crack physical computational determinism.
@@ -125,7 +127,7 @@ Standard Python stacks (PyTorch/TensorFlow) introduce significant abstraction pe
 - **CUTLASS v4.8.0 + EVT:** Executes hardware `mma.sync` instructions on Tensor Cores, fusing GEMM, bias addition, and ReLU into a single kernel with zero intermediate VRAM round-trips.
 - **The Seam:** Slices the final 128 tokens from 100k-token RAM chunks and staples them to the front of the next chunk, preserving continuous sequence consciousness without backward disk seeks.
 - **Discrete VQ-VAE Unified Space:** Maps text, numerical hashes, images, video, and audio across orthogonal 10M-integer offsets to eliminate modal namespace collisions.
-- **Modular Model Lifecycle:** Train on curated, handpicked domain data. Save and name individual models, switch between them on demand, or execute an instant hard reset of all weights in VRAM.
+- **Single Dedicated Model Architecture:** End users run direct zero-overhead inference with shipped weights. Open-source developers run the continuous `--train` loop on custom datasets or hit 'R' to hard-reset weights in seconds.
 - **The Rewind Test:** Ingests hardware thermal jitter (`std::random_device`) to empirically test computational determinism.
 
 The entire CUDA backend compiles into a clean `cuda_transfer.dll` behind an `extern "C"` boundary, tested with 78 unit/integration tests.

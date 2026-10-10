@@ -19,12 +19,14 @@ Using a discrete VQ-VAE inspired integrated space system, the engine natively in
 ## Production Ready Defense Memory
 Follows a strict new-guard free neutralize lifecycle to entirely prevent RAM leaks. Additionally, `std::atomic<bool>` guarantees sequentially consistent memory operations to prevent thread races across CPU threads. 
 
-Axiom lets you teach your model, run an interface—I repeat, most importantly the whole purpose of this project Axiom lets you teach your model, run an interface, save your weights to disk, experiment with new ones, or wipe them completely to start fresh in seconds. Note: because it pushes hardware to the absolute limit, Axiom is currently exclusively supported on Nvidia GPUs. We don't need more cloud dependencies or bloated wrappers, we need absolute mastery over the silicon.
+Axiom provides a streamlined, bare-metal workflow. When shipped to end-users, Axiom runs as a dedicated, fully trained local model ready for instant inference ("Use it"). End-users do not train or manage complex model libraries; they simply run the pre-trained weights locally. Note: because it pushes hardware to the absolute limit, Axiom is currently exclusively supported on Nvidia GPUs. We don't need more cloud dependencies or bloated wrappers, we need absolute mastery over the silicon.
 
-## The Philosophy
-The philosophy is that an AI is fundamentally best trained specifically on handpicked, validated data required for your exact goal. Axiom lets you teach the model yourself on a focused task, save that model, and use it. You can then create a new model, train it on something else, save it, and use it—maintaining as many named, specialized models as you need (e.g., dedicated models for video like `cat_video_ai`, coding, voice, or image generation).
+## The Philosophy & Open-Source Workflow
+The core architecture is built around **one unified, dedicated model**:
+1. **End-User Experience ("The Product"):** Normal end-users do not train; they run the pre-trained model directly in the interface for zero-friction inference.
+2. **Developer & Contributor Experience:** When open-sourced on GitHub, developers and contributors can fork the repository, run the training pipeline (`--train`) on their own curated datasets, produce their own custom model weights, and package their own release.
 
-You can train them, use them, and switch between them whenever you want—such as returning to an earlier saved model to train it a bit more and continue using it. And whenever you wish, you can execute a hard reset on all weights, wipe everything clean, and start over from the beginning. You teach him, use him, save the models you teach, switch between them freely, or wipe them out completely to start fresh.
+There are no bloated model managers, multi-model switching layers, or complex runtime registries. It is one clean, dedicated neural model engineered for maximum hardware performance and simplicity.
 
 ## One Extra Feature
 Project Axiom is an LLM that locally runs on your device without any need to be connected to the internet at all. But we have designed a feature that lets you connect your device to the internet, crawl the web, train the AI on it, train this neural network on it, disconnect, and run it once again locally on your device.

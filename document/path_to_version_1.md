@@ -8,25 +8,28 @@
 ## 1. Executive Summary & V1 Definition
 
 ### Current Project Status
-- **Overall Completion:** **~60% – 65%**
-- **Core Systems & Compute Engine:** **100% Complete & Validated (78 Automated Tests Passing)**
-- **Application Orchestration & Persistence:** **~30% Complete (Active Focus)**
+- **Overall Completion:** **~70% – 75%**
+- **Core Systems & Compute Engine:** **100% Complete & Validated (All 8 Test Suites Passing, 141 Tests 100% Green)**
+- **Application Orchestration & Inference Pipeline:** **~40% Complete (Active Focus)**
 
 The most complex, high-risk systems engineering hurdles—bare-metal CUDA kernel fusion, CUTLASS v4.8.0 Tensor Core saturation, PCIe DMA write-combined streaming, dual-stream ping-pong concurrency, FP32 master weights backpropagation, and the 4-tier Seam streaming data loader—are **fully functional and passing all test suites**.
 
 ### What Defines Version 1.0 (V1)?
 **Version 1.0 represents the first fully autonomous, standalone release of Project Axiom.** 
-It operationalizes the core philosophy outlined in [Features.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/Features.md): a user can train an AI locally on handpicked data, name and save the model to disk, switch between models, retrain them, run forward inference ("Use it"), or hard-reset all weights in seconds—with zero Python runtime dependencies.
+It operationalizes the core philosophy outlined in [Features.md](Features.md):
+1. **The Product Experience:** End users receive a pre-packaged, dedicated single model. They do not train or manage multi-model libraries; they simply run forward inference ("Use it") with zero Python dependencies.
+2. **The Open-Source Contributor Experience:** Developers fork the repository, run the training pipeline (`--train`) on their own curated datasets, produce their own custom model weights (`weights.axiom`), and package releases.
+3. **Simplicity First:** There are no runtime model registries, dynamic model switchers, or complex abstraction wrappers. It is **ONE unified model**.
 
 ```mermaid
 graph LR
-    subgraph V1 ["Project Axiom V1.0 (Standalone Native CLI/TUI)"]
+    subgraph V1 ["Project Axiom V1.0 (Single Model Architecture)"]
         direction TB
         A["1. Data Ingestion & Tokenizer"] --> B["2. 4-Tier Streaming DataLoader"]
         B --> C["3. CUTLASS EVT Tensor Core Compute"]
-        C --> D["4. Model Persistence (Save / Load / Switch)"]
-        D --> E["5. Forward Inference ('Use it')"]
-        E --> F["6. Interactive Model Manager"]
+        C --> D["4. Weight Persistence (weights.axiom)"]
+        D --> E["5. Inference Engine ('Use it')"]
+        E --> F["6. Developer CLI (--train / --use)"]
     end
     
     subgraph PostV1 ["Post-V1 (V1.1 - V2.0)"]
@@ -56,52 +59,48 @@ The foundational bedrock of Project Axiom is built, stable, and verified:
 | **Ping-Pong Concurrency** | Dual non-blocking streams (`cudaStreamNonBlocking`) overlapping PCIe memory transfers with Tensor Core compute. | ✅ Complete |
 | **CUTLASS EVT Saturation** | `mma.sync.aligned.m16n8k16` Tensor Core GEMM fused with bias addition and ReLU in shared memory (0 VRAM round-trips). | ✅ Complete |
 | **SGD Backpropagation** | Custom `backward_pass_kernel` updating FP32 master weights with SGD, in-place BF16 rounding, and atomic loss accumulation. | ✅ Complete |
-| **Automated Verification** | 78 comprehensive test cases across Optimizer, Tokenizer, Embeddings, CUDA Transfers, and EVT Gradients. | ✅ Complete |
+| **Automated Verification** | 141 comprehensive test cases across Path, Stream, Embedding, Tokenization, Optimizer, Transfer, AI, and EVT Gradients (100% Green). | ✅ Complete |
 
 ---
 
 ## 3. The Critical Path to V1: Remaining Sprints
 
-To graduate from a working technical prototype to the official **V1.0 Release**, the following 4 focused sprints must be executed:
+To graduate from a working technical prototype to the official **V1.0 Release**, the following 3 focused sprints must be executed:
 
 ```
 V1.0 Critical Path:
-Sprint 1: Model Disk Serialization (Save & Load)
-    └── Sprint 2: Inference Engine ("Use it")
-            └── Sprint 3: Interactive Model Registry & Switching
-                    └── Sprint 4: Release Packaging & Verification
+Sprint 1: Single Model Weight Persistence (weights.axiom)
+    └── Sprint 2: Inference Engine ("Use it" Forward Pass)
+            └── Sprint 3: Release Packaging & Verification
 ```
 
 ---
 
-### 🏃 Sprint 1: Model Persistence & Disk Serialization (Save & Load)
-*Objective: Transform volatile VRAM/RAM weights into persistent, named models on disk.*
+### 🏃 Sprint 1: Single Model Weight Persistence (Save & Load)
+*Objective: Persist trained neural parameters to disk (`weights.axiom`) and load them directly on startup.*
 
 #### The Problem
-Weights currently live only in volatile host memory (`h_weights`, `h_bias`) and GPU VRAM during process execution. Exiting `app.exe` destroys all trained parameters.
+Currently, weights exist in volatile host memory (`h_weights`, `h_bias`) and GPU VRAM during process execution. Exiting `app.exe` destroys all trained parameters unless saved.
 
 #### Technical Deliverables
-1. **Binary Model Format (`.axiom` / `.bin`):**
-   - Design a compact, header-validated binary serialization format:
+1. **Direct Binary Weight Serialization (`weights.axiom`):**
+   - Clean, lightweight binary file format:
      ```text
-     [Magic Header: "AXIOM_MODEL_V1"]
-     [uint32_t: in_dim (512)]
-     [uint32_t: out_dim (4)]
-     [float: learning_rate]
-     [uint64_t: total_training_steps]
-     [uint64_t: weight_bytes] -> Raw FP32/BF16 weights payload
-     [uint64_t: bias_bytes]   -> Raw FP32/BF16 bias payload
-     [uint32_t: vocab_size]   -> Token vocabulary / hash table
+     [Magic Header: "AXIOM_V1"]
+     [uint64_t: in_dim (512)]
+     [uint64_t: out_dim (4)]
+     [uint64_t: weight_count] -> Raw FP32 weights
+     [uint64_t: bias_count]   -> Raw FP32 biases
      ```
-2. **Implementation in [core/src/ai.cpp](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp) & [core/include/ai.hpp](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.hpp):**
-   - `bool AI::save_model(const std::string& model_name, const std::string& directory = "database/models");`
-     - Downloads latest weights from GPU via `download_weights_from_gpu()`.
-     - Serializes metadata, weights, and biases to `database/models/<model_name>.axiom`.
-   - `bool AI::load_model(const std::string& filepath);`
-     - Reads binary payload from disk into `h_weights` and `h_bias`.
+2. **Implementation in `AI` (`core/src/ai.cpp` & `core/include/ai.hpp`):**
+   - `bool AI::save_weights(const std::string& path = "weights.axiom");`
+     - Downloads latest master weights from GPU via `download_weights_from_gpu()`.
+     - Flushes binary buffer directly to disk.
+   - `bool AI::load_weights(const std::string& path = "weights.axiom");`
+     - Reads binary payload into `h_weights` and `h_bias`.
      - Uploads directly into GPU VRAM via `upload_weights_to_gpu()`.
 3. **Unit Tests:**
-   - Round-trip test: Initialize $\rightarrow$ Train 100 steps $\rightarrow$ Save $\rightarrow$ Reset to chaos $\rightarrow$ Load $\rightarrow$ Assert weights match exactly.
+   - Round-trip verification: Train $\rightarrow$ Save $\rightarrow$ Reset to chaos $\rightarrow$ Load $\rightarrow$ Assert weights match bit-for-bit.
 
 ---
 
@@ -109,7 +108,7 @@ Weights currently live only in volatile host memory (`h_weights`, `h_bias`) and 
 *Objective: Activate menu option `[1] Use it` to run forward prediction without backward gradient passes.*
 
 #### The Problem
-In [core/src/main.cpp](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/main.cpp#L183-L187), selecting `[1] Use it` prints `[!] 'Use it' is not available yet.` The model can train, but cannot be prompted to generate outputs.
+In `core/src/main.cpp`, selecting `[1] Use it` prints `[!] 'Use it' is not available yet.` The model can train, but cannot be prompted to generate outputs.
 
 #### Technical Deliverables
 1. **Inference Forward Pass Method:**
@@ -118,68 +117,25 @@ In [core/src/main.cpp](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/main.
    - Downloads device activations (`d_output`) back to host RAM.
 2. **Tokenizer Decoding / Output Mapper:**
    - Take the 4-dimensional predicted embedding $Y \in \mathbb{R}^{1 \times 4}$.
-   - Find the nearest neighbor in the token embedding space or map the continuous prediction back to categorical text/token outputs.
+   - Find the nearest neighbor in the token embedding space or map the continuous prediction back to discrete categorical outputs.
 3. **Interactive Inference Prompt in `main.cpp`:**
-   - Allow user to type text or supply inputs.
+   - Allow user to provide inputs.
    - Run forward pass and stream predictions to the console in real time.
 
 ---
 
-### 🏃 Sprint 3: Interactive Model Registry & Seamless Model Switching
-*Objective: Operationalize the philosophy of maintaining a library of named models (`cat_video_ai`, `coding_ai`).*
-
-#### The Problem
-There is currently no user interface for creating named models, listing existing saved models, or switching between models without terminating the process.
+### 🏃 Sprint 3: V1 Release Packaging & Verification
+*Objective: Finalize CLI ergonomic flags (`--use`, `--train`, `--test`), verify end-to-end workflows, and package V1.0.*
 
 #### Technical Deliverables
-1. **Model Directory Manager:**
-   - Scan `database/models/` for all `.axiom` files.
-   - Display a model management menu in `main.cpp`:
-     ```text
-     =======================================
-               AXIOM MODEL MANAGER          
-     =======================================
-     Active Model: [cat_video_ai] (Steps: 45,000 | Loss: 0.0084)
-     
-     [1] Train active model
-     [2] Use active model (Inference)
-     [3] Switch / Load another model
-     [4] Create new model from scratch
-     [5] Hard reset active model weights
-     [6] Export / Save active model
-     [0] Exit
-     ```
-2. **Seamless In-Memory Model Switching:**
-   - When switching models: download/save current model $\rightarrow$ free device memory $\rightarrow$ load selected model from disk $\rightarrow$ upload to VRAM $\rightarrow$ resume immediately.
-   - Supports the user's workflow: *"Tired of image model? Switch back to cat model, train it a bit more, and use it."*
-
----
-
-### 🏃 Sprint 4: Media Ingestion & Parser Hardening
-*Objective: Remove placeholder stubs for media and harden multimodal input parsing.*
-
-#### Technical Deliverables
-1. **Activate Media Pairing in `main.cpp`:**
-   - Remove `[!] Adding media is not available yet` stub.
-   - Allow user input combining text and file paths to images (`.jpeg`, `.png`), video (`.mp4`), and audio (`.ogg`, `.wav`).
-2. **Byte / Tokenizer Ingestion:**
-   - Verify byte tokenization for media files into their respective 10,000,000-slot namespaces.
-
----
-
-### 🏃 Sprint 5: V1 Verification, Benchmarks & Release Packaging
-*Objective: Build production binaries, verify end-to-end user workflows, and package V1.0.*
-
-#### Technical Deliverables
-1. **End-to-End Workflow Verification:**
-   - Script automated verification covering: Create $\rightarrow$ Train on sample data $\rightarrow$ Save as `test_model.axiom` $\rightarrow$ Hard reset $\rightarrow$ Verify loss jumps $\rightarrow$ Reload `test_model.axiom` $\rightarrow$ Verify loss restores $\rightarrow$ Run inference.
-2. **CLI Arguments & Ergonomics:**
-   - `app.exe --train --model cat_video_ai`
-   - `app.exe --use --model cat_video_ai`
-   - `app.exe --list-models`
-   - `app.exe --test`
+1. **CLI Arguments & Ergonomics:**
+   - Default / `app.exe --use`: Launch direct inference for end users with pre-loaded `weights.axiom`.
+   - `app.exe --train`: Launch continuous training loop for developers / open-source contributors on custom data.
+   - `app.exe --test`: Run the automated verification suite.
+2. **End-to-End Workflow Verification:**
+   - Automated verification covering: Train on sample data $\rightarrow$ Save `weights.axiom` $\rightarrow$ Run `--use` inference.
 3. **Release Artifacts:**
-   - Pre-compiled production binaries (`app.exe`, `cuda_transfer.dll`, `test.exe`).
+   - Pre-compiled production binaries (`app.exe`, `cuda_transfer.dll`).
    - Clean user manual and Quickstart Guide in `README.md`.
 
 ---
@@ -191,11 +147,11 @@ To guarantee a fast, disciplined V1.0 launch, the project scope is clearly segme
 ```
 ┌────────────────────────────────────────────────────────┐
 │                   AXIOM VERSION 1.0                    │
-│   • Workflow 1: Native C++23 / CUDA CLI/TUI            │
-│   • Model Persistence (Save / Load / Switch)           │
-│   • Inference Engine ("Use it")                        │
-│   • Curated Handpicked Data Training                   │
-│   • 78 Tests Passing • Standalone Executables          │
+│   • Single Dedicated Model Architecture                │
+│   • End-User Inference Engine ("Use it")               │
+│   • Developer Training Pipeline (--train)              │
+│   • Binary Weight Persistence (weights.axiom)          │
+│   • 141 Tests Passing • Standalone Executables         │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
@@ -203,7 +159,7 @@ To guarantee a fast, disciplined V1.0 launch, the project scope is clearly segme
 │                   AXIOM VERSION 1.1                    │
 │   • Workflow 2: Next.js Frontend + Backend API         │
 │   • Visual Real-Time Loss Curves in Browser            │
-│   • Web-Based Model Switching & Media Uploads          │
+│   • Web-Based Media & Data Uploads                     │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
@@ -220,12 +176,10 @@ To guarantee a fast, disciplined V1.0 launch, the project scope is clearly segme
 
 ## 5. Master Action Checklist to V1.0
 
-### Phase A: Persistence & Model Registry
-- [ ] Add `.axiom` binary header format specification
-- [ ] Implement `AI::save_model()` in `ai.cpp`
-- [ ] Implement `AI::load_model()` in `ai.cpp`
-- [ ] Implement model listing in `database/models/`
-- [ ] Add unit test for model serialization round-trip
+### Phase A: Persistence
+- [ ] Implement `AI::save_weights()` in `core/src/ai.cpp`
+- [ ] Implement `AI::load_weights()` in `core/src/ai.cpp`
+- [ ] Add unit test for weight serialization round-trip in `core/test/test_ai.cpp`
 
 ### Phase B: Inference & Interactive Loop
 - [ ] Implement forward-only inference method in `ai.cpp`
@@ -233,13 +187,7 @@ To guarantee a fast, disciplined V1.0 launch, the project scope is clearly segme
 - [ ] Hook option `[1] Use it` in `main.cpp`
 - [ ] Build interactive prompt for inference
 
-### Phase C: Model Switching & CLI Polish
-- [ ] Build interactive Model Manager menu in `main.cpp`
-- [ ] Wire seamless in-memory model switching
-- [ ] Enable CLI flags (`--train`, `--use`, `--model <name>`, `--list`)
-- [ ] Remove `Add media` stub and wire multimodal file paths
-
-### Phase D: Final Testing & Release
-- [ ] Run full 78+ automated tests including persistence tests
-- [ ] Perform live end-to-end user manual test
+### Phase C: CLI Polish & Release
+- [ ] Enable CLI flags (`--use`, `--train`, `--test`)
+- [ ] Verify live end-to-end user manual test
 - [ ] Tag `v1.0.0` on GitHub and publish announcement

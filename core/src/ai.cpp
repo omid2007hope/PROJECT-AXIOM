@@ -3,7 +3,6 @@
 #include <iostream>
 #include <random>
 
-#include "../include/logistic.hpp"
 #include "../include/transfer.hpp"
 
 AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max, Elements& e)

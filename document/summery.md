@@ -90,12 +90,11 @@ This document details the project's human-centric engineering philosophy, core f
    - **Production-Ready Memory Defense:** Strict neutralize lifecycle and `std::atomic<bool>` sequentially consistent memory barriers.
    - **Local Sandbox with Web Ingestion:** Runs 100% offline, with an optional module to connect, crawl, train, disconnect, and run locally again.
 
-3. **The Philosophy of Model Ownership & Lifecycle:**
+3. **The Single-Model Architecture & Open-Source Workflow:**
    - AI performs best when trained specifically on **handpicked, validated data** tailored to a precise goal.
-   - Users teach the model themselves, save it under a unique name, and use it immediately.
-   - Enables building an entire library of specialized models (e.g., `cat_video_ai`, coding model, voice model, image creation model).
-   - Allows seamless switching between models: pause an image model, return to an earlier video model, train it further, and redeploy it.
-   - Supports on-demand **hard weight resets** to wipe everything clean and restart from scratch in seconds.
+   - **End-User Experience:** Normal end-users run the pre-trained, dedicated model directly for instant zero-friction inference ("Use it") without training overhead.
+   - **Developer Experience:** Open-source contributors fork the repository, run the training loop (`--train`) on their own data, produce custom releases, or hit 'R' to hard-reset weights in seconds.
+   - No runtime model registries or multi-model switching overhead: pure simplicity with **one dedicated neural model**.
 
 4. **Dual Workflows:**
    - **Workflow 1:** Pure CUDA / C++ native UI/UX.
@@ -291,7 +290,7 @@ The practical engineering bridge connecting the theoretical research hypotheses 
 | **Tensor Computation** | Dispatched via framework kernels with VRAM round-trips | **CUTLASS v4.8.0** Tensor Core GEMM + **Epilogue Visitor Trees (EVT)** kernel fusion |
 | **Context Management** | Truncated batch loading (historical amnesia at boundaries) | **The Seam (Carry-Forward)**: 128-token overlap bridging 100k-token buffers |
 | **Multimodal Handling** | Disconnected encoders stitched via cross-attention | **Discrete VQ-VAE Space**: Orthogonal 10M-integer offsets for all modalities |
-| **Model Lifecycle** | Monolithic foundation weights stored in cloud clusters | **Personal Model Library**: Named, specialized models (`cat_video_ai`), swap, retrain, or hard-reset |
+| **Model Lifecycle** | Monolithic foundation weights stored in cloud clusters | **Single Dedicated Model**: Shipped weights for end-user inference; fork `--train` for contributors |
 | **Data Philosophy** | Indiscriminate web crawling (vulnerable to cancerous data) | **Handpicked, validated data** tailored to precise user goals |
 | **Empirical Mission** | Consumer text & image generation | Testing fundamental physics & determinism via **The Rewind Test** on silicon entropy |
 
