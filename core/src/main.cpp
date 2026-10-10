@@ -413,7 +413,8 @@ void run_training_loop(AI& ai,
 		       Optimizer& optimizer,
 		       Portion& portion,
 		       Elements& elements,
-		       const std::filesystem::path& weights_path) {
+		       const std::filesystem::path& weights_path,
+		       size_t max_steps = 0) {
 	std::cout << "Beginning continuous training loop...\n";
 	std::cout << "Controls:\n"
 		  << "  [S] Save current model weights to " << weights_path.filename().string() << "\n"
@@ -463,8 +464,18 @@ void run_training_loop(AI& ai,
 			std::exit(1);
 		}
 
-		if (status == TrainStatus::Trained && ++step % config::loss_report_interval == 0) {
-			print_loss(ai, step, first_loss);
+		if (status == TrainStatus::Trained) {
+			++step;
+			if (step % config::loss_report_interval == 0 || (max_steps > 0 && step == max_steps)) {
+				print_loss(ai, step, first_loss);
+			}
+			if (max_steps > 0 && step >= max_steps) {
+				std::cout << "\n[!] Target training steps reached (" << max_steps
+					  << "). Saving model weights...\n";
+				ai.save_weights(weights_path.string());
+				std::cout << "[OK] Model checkpoint saved to " << weights_path.filename().string() << "\n";
+				break;
+			}
 		}
 
 		// When the RAM buffer is exhausted, the offset resets to 0.
@@ -529,7 +540,7 @@ int main(int argc, char* argv[]) {
 			  << "Options:\n"
 			  << "  (no argument)  Interactive console menu\n"
 			  << "  --use          Run direct forward inference ('Use it')\n"
-			  << "  --train        Train on built-in sample multimodal data\n"
+			  << "  --train [N]    Train on built-in sample data (optional N steps limit)\n"
 			  << "  --test         Run all automated test suites\n"
 			  << "  --help, -h     Show this help message\n\n";
 		return 0;
@@ -543,6 +554,7 @@ int main(int argc, char* argv[]) {
 
 	AppMode mode = AppMode::Train;
 	bool developer_mode = false;
+	size_t max_steps = 0;
 
 	if (arg == "--use") {
 		mode = AppMode::Use;
@@ -550,6 +562,13 @@ int main(int argc, char* argv[]) {
 	} else if (arg == "--train") {
 		mode = AppMode::Train;
 		developer_mode = true;
+		if (argc > 2) {
+			try {
+				max_steps = std::stoull(argv[2]);
+			} catch (...) {
+				max_steps = 0;
+			}
+		}
 	}
 
 	// Everything below is configured here and handed down to the backend
@@ -648,7 +667,7 @@ int main(int argc, char* argv[]) {
 
 	print_hardware_telemetry(portion);
 
-	run_training_loop(ai, optimizer, portion, ai_elements, weights_path);
+	run_training_loop(ai, optimizer, portion, ai_elements, weights_path, max_steps);
 
 	portion.free_pinned();
 	return 0;
