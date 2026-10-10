@@ -74,6 +74,26 @@ void Optimizer::disk_to_ram(Portion& portion) {
 		// Truncate to actual elements read (handles partial read at EOF)
 		portion.ram_buffer_tokens.resize(prev_size + brain_floats_read);
 
+		// If the file reached EOF but we still don't have enough data for a single context window,
+		// loop around and read again until we have at least (all_elements + target_elements)
+		while (portion.ram_buffer_tokens.size() > 0 &&
+		       portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
+			file_stream.clear();
+			file_stream.seekg(0, std::ios::beg);
+			size_t cur_sz = portion.ram_buffer_tokens.size();
+			size_t needed = (portion.all_elements + portion.target_elements) - cur_sz;
+			portion.ram_buffer_tokens.resize(cur_sz + needed);
+			file_stream.read(
+				reinterpret_cast<char*>(portion.ram_buffer_tokens.data() + cur_sz),
+				needed * sizeof(std::bfloat16_t));
+			std::streamsize more_bytes = file_stream.gcount();
+			if (more_bytes == 0) {
+				portion.ram_buffer_tokens.resize(cur_sz);
+				break;
+			}
+			portion.ram_buffer_tokens.resize(cur_sz + (more_bytes / sizeof(std::bfloat16_t)));
+		}
+
 		// Atomic release: all prior writes are visible to any thread that
 		// subsequently acquires this flag.
 		portion.buffer_in_use.store(false, std::memory_order_release);

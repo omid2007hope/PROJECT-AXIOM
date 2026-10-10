@@ -754,6 +754,22 @@ int main(int argc, char* argv[]) {
 		}
 		return 1;
 	}
+
+	// Repeat sequence if shorter than one full context window + target to enable continuous training
+	const size_t min_training_tokens = config::context_window_size + 1;
+	if (input.tokenized_data.size() < min_training_tokens) {
+		std::cout << "[..] Dataset sequence (" << input.tokenized_data.size()
+			  << " tokens) is shorter than context window (" << config::context_window_size
+			  << " tokens). Repeating sequence to enable continuous autoregressive training...\n";
+		const size_t orig_sz = input.tokenized_data.size();
+		const size_t target_tokens = config::context_window_size * 8;
+		while (input.tokenized_data.size() < target_tokens) {
+			for (size_t i = 0; i < orig_sz && input.tokenized_data.size() < target_tokens; ++i) {
+				input.tokenized_data.push_back(input.tokenized_data[i]);
+			}
+		}
+	}
+
 	parser.embedding(input, test);
 	parser.build_embedding_table(input);
 	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
