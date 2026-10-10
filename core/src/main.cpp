@@ -34,7 +34,7 @@
 
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
-#include "../src/CUDA/util/telemetry.cuh"
+#include "../include/telemetry.hpp"
 
 bool test_path();
 bool test_ifstream();
@@ -76,6 +76,7 @@ enum class AppMode {
 	Use,
 	Train,
 	Test,
+	Benchmark,
 	Exit
 };
 
@@ -181,13 +182,14 @@ std::string fetch_argument(int count, char* argument[]) {
 
 // Interactive menu. Fills `input` and returns the selected AppMode.
 AppMode collect_user_input(Input& input) {
-	std::cout << "==========================\n"
-		  << "     Welcome to AXIOM     \n"
-		  << "==========================\n"
+	std::cout << "======================================\n"
+		  << "           Welcome to AXIOM           \n"
+		  << "======================================\n"
 		  << "[1] Use it (Inference)\n"
 		  << "[2] Train it (Training)\n"
 		  << "[3] Run Tests\n"
-		  << "[4] Exit\n"
+		  << "[4] Benchmark Hardware (Telemetry HUD)\n"
+		  << "[5] Exit\n"
 		  << "> ";
 
 	const int option = read_choice();
@@ -201,6 +203,10 @@ AppMode collect_user_input(Input& input) {
 	}
 
 	if (option == 4) {
+		return AppMode::Benchmark;
+	}
+
+	if (option == 5) {
 		return AppMode::Exit;
 	}
 
@@ -388,12 +394,16 @@ void run_inference_engine(AI& ai,
 		std::vector<std::bfloat16_t> ctx_window =
 			parser.tokens_to_context_window(input, tokens, config::context_window_size);
 
+		AxiomTelemetry telemetry;
+		telemetry.begin_inference();
+
 		// Run forward prediction on Tensor Cores
 		std::vector<float> prediction;
 		if (!ai.predict(ctx_window, prediction)) {
 			std::cerr << "[!] Forward prediction failed.\n";
 			continue;
 		}
+		telemetry.record_first_token();
 
 		// Decode prediction via nearest-neighbor L2 search
 		uint32_t pred_token_id = parser.decode_embedding_to_token(input, prediction);
@@ -404,7 +414,53 @@ void run_inference_engine(AI& ai,
 			  << ", " << prediction[2] << ", " << prediction[3] << "]\n"
 			  << "[Next Token ID] #" << pred_token_id << "\n"
 			  << "[Prediction]    \"" << pred_token_str << "\"\n";
+
+		telemetry.end_inference(ai.h_weights.size());
 	}
+}
+
+// *****************************************************************************
+// Hardware Benchmark
+// *****************************************************************************
+void run_hardware_benchmark(AI& ai,
+			    Parser& parser,
+			    Input& input) {
+	std::cout << "\n========================================================\n"
+		  << "       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION      \n"
+		  << "========================================================\n";
+
+	AxiomTelemetry telemetry;
+	const HardwareSpecs& specs = telemetry.get_specs();
+
+	std::cout << "Hardware Device : " << specs.gpu_name << "\n"
+		  << "Architecture    : sm_" << specs.sm_major << specs.sm_minor << " (Ada Lovelace)\n"
+		  << "Memory Bus      : " << specs.bus_width_bits << "-bit | Peak Bandwidth: " << std::fixed << std::setprecision(1) << specs.peak_bandwidth_gb_s << " GB/s\n"
+		  << "Compute Engine  : " << specs.peak_dense_tflops << " Peak Dense BF16 TFLOPs\n"
+		  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024)) << " MB Free / "
+		  << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n"
+		  << "--------------------------------------------------------\n"
+		  << "[..] Warming up Tensor Cores (10 forward passes)...\n";
+
+	std::vector<std::bfloat16_t> dummy_ctx(config::context_window_size * config::token_dim,
+					       static_cast<std::bfloat16_t>(0.05f));
+	std::vector<float> pred;
+	for (int i = 0; i < 10; ++i) {
+		ai.predict(dummy_ctx, pred);
+	}
+
+	constexpr int bench_passes = 100;
+	std::cout << "[..] Executing " << bench_passes << " Hardware-Timed Tensor Core Inferences...\n";
+
+	telemetry.begin_inference();
+	for (int i = 0; i < bench_passes; ++i) {
+		ai.predict(dummy_ctx, pred);
+		if (i == 0) {
+			telemetry.record_first_token();
+		} else {
+			telemetry.record_token();
+		}
+	}
+	telemetry.end_inference(ai.h_weights.size());
 }
 
 // *****************************************************************************
@@ -545,14 +601,15 @@ int main(int argc, char* argv[]) {
 			  << "  (no argument)  Interactive console menu\n"
 			  << "  --use          Run direct forward inference ('Use it')\n"
 			  << "  --train [N]    Train on built-in sample data (optional N steps limit)\n"
+			  << "  --benchmark    Run hardware saturation & telemetry benchmark\n"
 			  << "  --test         Run all automated test suites\n"
 			  << "  --help, -h     Show this help message\n\n";
 		return 0;
 	}
 
-	if (!arg.empty() && arg != "--train" && arg != "--use") {
+	if (!arg.empty() && arg != "--train" && arg != "--use" && arg != "--benchmark") {
 		std::cerr << "Unknown argument: " << arg << "\n"
-			  << "Usage: app.exe [--use | --train | --test | --help]\n";
+			  << "Usage: app.exe [--use | --train | --benchmark | --test | --help]\n";
 		return 1;
 	}
 
@@ -562,6 +619,9 @@ int main(int argc, char* argv[]) {
 
 	if (arg == "--use") {
 		mode = AppMode::Use;
+		developer_mode = true;
+	} else if (arg == "--benchmark") {
+		mode = AppMode::Benchmark;
 		developer_mode = true;
 	} else if (arg == "--train") {
 		mode = AppMode::Train;
@@ -599,7 +659,7 @@ int main(int argc, char* argv[]) {
 		if (mode == AppMode::Test) {
 			return run_tests() ? 0 : 1;
 		}
-		if (mode == AppMode::Use) {
+		if (mode == AppMode::Use || mode == AppMode::Benchmark) {
 			developer_mode = true;
 			parser.developer_mode = true;
 		}
@@ -639,6 +699,11 @@ int main(int argc, char* argv[]) {
 	// *********************************************************
 	if (mode == AppMode::Use) {
 		run_inference_engine(ai, parser, input, weights_path);
+		return 0;
+	}
+
+	if (mode == AppMode::Benchmark) {
+		run_hardware_benchmark(ai, parser, input);
 		return 0;
 	}
 

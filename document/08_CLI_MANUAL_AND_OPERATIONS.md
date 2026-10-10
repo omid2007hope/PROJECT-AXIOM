@@ -16,8 +16,9 @@ The executable accepts standard UNIX-style command-line flags:
 
 | Flag | Argument | Description |
 | :--- | :--- | :--- |
-| **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) for zero-latency prompt evaluation. |
-| **`--train`** | `[STEPS]` (Optional) | Executes the continuous training loop on `training_data.txt`. Takes an optional step count integer (defaults to `10000` if omitted). |
+| **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) for zero-latency prompt evaluation with live HUD telemetry. |
+| **`--train`** | `[STEPS]` (Optional) | Executes the continuous training loop on `training_data.txt`. Takes an optional step count integer (defaults to continuous if omitted). |
+| **`--benchmark`** | _None_ | Executes the bare-metal hardware profiler using `cudaEvent_t` driver timers, printing the 4-variable Hardware Saturation HUD. |
 | **`--test`** | _None_ | Runs the internal self-test validation routine. For the complete 200-test suite, run [`test.exe --test`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/test.exe). |
 | **`--help`** | _None_ | Prints command-line argument documentation and version info to the console. |
 
@@ -25,15 +26,15 @@ The executable accepts standard UNIX-style command-line flags:
 If [`app.exe`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/app.exe) is launched without flags, it presents an interactive terminal dashboard:
 
 ```
-======================================================
-           PROJECT AXIOM: SILICON-NATIVE AI           
-======================================================
- [1] Use Model (Direct Offline Inference)
- [2] Train Model (Continuous SGD Loop)
- [3] Run Automated Verification Suite
- [4] Exit Engine
-======================================================
- Select option [1-4]: 
+======================================
+           Welcome to AXIOM           
+======================================
+[1] Use it (Inference)
+[2] Train it (Training)
+[3] Run Tests
+[4] Benchmark Hardware (Telemetry HUD)
+[5] Exit
+> 
 ```
 
 ---
