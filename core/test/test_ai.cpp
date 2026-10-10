@@ -112,6 +112,15 @@ bool test_ai() {
 	Portion conv_portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
 	conv_portion.allocate_pinned();
 
+	// Initialize weights and biases to positive regime to ensure active gradient flow (avoid dead ReLU)
+	for (float& w : ai.h_weights) {
+		w = 0.01f;
+	}
+	for (float& b : ai.h_bias) {
+		b = 0.1f;
+	}
+	ai.upload_weights_to_gpu();
+
 	auto refill = [&]() {
 		conv_portion.ram_buffer_tokens.resize(RAM_BUF);
 		for (size_t i = 0; i < RAM_BUF; ++i) {
