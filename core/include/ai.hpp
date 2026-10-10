@@ -3,10 +3,23 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 #include "../src/CUDA/transfer.cuh"
 #include "optimizer.hpp"
+
+#pragma pack(push, 1)
+struct AxiomWeightHeader {
+	char magic[8] = {'A', 'X', 'I', 'O', 'M', '_', 'V', '1'};
+	uint64_t in_dim = 0;
+	uint64_t out_dim = 0;
+	uint64_t weight_count = 0;
+	uint64_t bias_count = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(AxiomWeightHeader) == 40, "AxiomWeightHeader must be exactly 40 bytes");
 
 struct Elements {
 	size_t weight_elements = 0;
@@ -64,6 +77,10 @@ public:
 	// over the steps since the previous call. `steps` receives how many that was.
 	// Waits for the GPU to finish, so call it once per report interval, not per step.
 	bool read_loss(double& mean_loss, size_t& steps);
+
+	// Weight persistence methods
+	bool save_weights(const std::string& path = "weights.axiom");
+	bool load_weights(const std::string& path = "weights.axiom");
 };
 
 #endif

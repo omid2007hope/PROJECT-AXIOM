@@ -1,6 +1,9 @@
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdfloat>
+#include <string>
 #include <vector>
 
 #include "../include/ai.hpp"
@@ -70,9 +73,9 @@ bool test_ai() {
 
 	// ── [5] Training Loop Step & Loss Reading ─────────────────────────────────
 	std::cout << "\n[5] Training Step Execution\n";
-	const size_t RAM_BUF = 100;
+	const size_t RAM_BUF = 1000;
 	const size_t TOKEN_DIM = 4;
-	const size_t CTX_WIN = 4; // 16 floats window, 4 floats target
+	const size_t CTX_WIN = 128; // 512 floats window, 4 floats target (matches in_dim)
 	Portion portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
 	portion.allocate_pinned();
 
@@ -147,6 +150,60 @@ bool test_ai() {
 	test_check(final_loss < initial_loss, "Loss decreased after training (AI is actively learning)", s_pass, s_fail);
 
 	conv_portion.free_pinned();
+
+	// ── [8] Weight Persistence Roundtrip (Save & Load) ────────────────────────
+	std::cout << "\n[8] Weight Persistence Roundtrip (Save & Load)\n";
+	const std::string test_weights_path = "test_weights.axiom";
+
+	// Save trained weights to disk
+	test_check(ai.save_weights(test_weights_path), "ai.save_weights() returns true", s_pass, s_fail);
+	test_check(std::filesystem::exists(test_weights_path), "test_weights.axiom file exists on disk", s_pass, s_fail);
+
+	const size_t expected_file_size = sizeof(AxiomWeightHeader) +
+					  (in_dim * out_dim * sizeof(float)) +
+					  (out_dim * sizeof(float));
+	test_check_eq(std::filesystem::file_size(test_weights_path), expected_file_size, "File size matches exact binary format", s_pass, s_fail);
+
+	// Snapshot of the saved parameters
+	std::vector<float> saved_weights = ai.h_weights;
+	std::vector<float> saved_bias = ai.h_bias;
+
+	// Reset memory to chaos (breaking current state)
+	ai.reset_weights(e);
+	test_check(ai.upload_weights_to_gpu(), "Upload chaotic weights to GPU VRAM", s_pass, s_fail);
+
+	// Verify host weights are different from saved
+	bool weights_differ_from_saved = (ai.h_weights != saved_weights);
+	test_check(weights_differ_from_saved, "Memory wiped: current weights differ from saved snapshot", s_pass, s_fail);
+
+	// Load weights from file
+	test_check(ai.load_weights(test_weights_path), "ai.load_weights() returns true", s_pass, s_fail);
+
+	// Assert bit-for-bit equality on host memory
+	test_check(ai.h_weights == saved_weights, "Loaded weights match saved weights bit-for-bit", s_pass, s_fail);
+	test_check(ai.h_bias == saved_bias, "Loaded biases match saved biases bit-for-bit", s_pass, s_fail);
+
+	// Verify GPU VRAM was also restored by load_weights()
+	ai.h_weights[0] = 999.0f; // Tamper with CPU memory
+	test_check(ai.download_weights_from_gpu(), "download_weights_from_gpu() succeeds after load", s_pass, s_fail);
+	test_check(ai.h_weights == saved_weights, "VRAM verified: weights downloaded from GPU match saved bit-for-bit", s_pass, s_fail);
+
+	// Test error cases: non-existent file and invalid magic header
+	test_check(!ai.load_weights("non_existent_file.axiom"), "load_weights() fails on non-existent file", s_pass, s_fail);
+
+	// Corrupt magic header test
+	{
+		std::string corrupt_path = "corrupt_weights.axiom";
+		std::ofstream corrupt_out(corrupt_path, std::ios::binary);
+		char bad_header[40] = {0};
+		corrupt_out.write(bad_header, sizeof(bad_header));
+		corrupt_out.close();
+		test_check(!ai.load_weights(corrupt_path), "load_weights() rejects invalid magic header", s_pass, s_fail);
+		std::filesystem::remove(corrupt_path);
+	}
+
+	// Clean up test file
+	std::filesystem::remove(test_weights_path);
 
 	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";
