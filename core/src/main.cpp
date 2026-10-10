@@ -35,6 +35,7 @@
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
 #include "../include/telemetry.hpp"
+#include "../src/CUDA/kernel/forward_pass.cuh"
 
 bool test_path();
 bool test_ifstream();
@@ -475,6 +476,7 @@ void run_hardware_benchmark(AI& ai,
 		  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024)) << " MB Free / "
 		  << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n"
 		  << "--------------------------------------------------------\n"
+		  << "[BENCHMARK 1/2] Interactive Micro-Perceptron Inference (512 -> 4)\n"
 		  << "[..] Warming up Tensor Cores (10 forward passes)...\n";
 
 	std::vector<std::bfloat16_t> dummy_ctx(config::context_window_size * config::token_dim,
@@ -496,7 +498,34 @@ void run_hardware_benchmark(AI& ai,
 			telemetry.record_token();
 		}
 	}
-	telemetry.end_inference(ai.h_weights.size());
+	telemetry.end_inference(ai.h_weights.size(), "INFERENCE DISPATCH LATENCY");
+
+	// Benchmark 2: Saturated Matrix Sweep
+	std::cout << "--------------------------------------------------------\n"
+		  << "[BENCHMARK 2/2] CUTLASS EVT Kernel Saturation Sweep (M=128, N=4096, K=4096)\n"
+		  << "[..] Allocating transformer-scale tensor buffers (34 MB VRAM footprint)...\n"
+		  << "[..] Warming up all Ada Lovelace Streaming Multiprocessors...\n"
+		  << "[..] Executing 50 Hardware-Timed Fused EVT Tensor Core Sweeps...\n";
+
+	constexpr int sat_M = 128;
+	constexpr int sat_N = 4096;
+	constexpr int sat_K = 4096;
+	constexpr int sat_iters = 50;
+
+	double sat_tflops = 0.0;
+	double sat_bw = 0.0;
+	float sat_avg_ms = 0.0f;
+
+	if (run_cutlass_saturation_benchmark(sat_M, sat_N, sat_K, sat_iters,
+					     &sat_tflops, &sat_bw, &sat_avg_ms)) {
+		float sat_bw_pct = static_cast<float>((sat_bw / specs.peak_bandwidth_gb_s) * 100.0);
+		float sat_mfu_pct = static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0);
+		std::string arch_tag = "sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
+
+		AxiomTelemetry::print_saturation_hud(sat_avg_ms, sat_tflops, sat_bw, sat_bw_pct, sat_mfu_pct, arch_tag);
+	} else {
+		std::cerr << "[!] CUTLASS saturation benchmark failed.\n";
+	}
 }
 
 // *****************************************************************************

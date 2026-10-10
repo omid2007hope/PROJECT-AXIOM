@@ -107,7 +107,8 @@ public:
 	}
 
 	// Call when generation is completed
-	void end_inference(size_t total_model_parameters) {
+	void end_inference(size_t total_model_parameters,
+			   const std::string& title = "BARE-METAL HARDWARE SATURATION") {
 		if (stop_event) {
 			record_cuda_event(stop_event, nullptr);
 			sync_cuda_event(stop_event); // STRICT BARRIER: Wait for hardware execution to physically finish
@@ -146,18 +147,23 @@ public:
 
 		std::string arch_tag = "sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
-		print_compact_hud(ttft_ms, tok_per_sec, bandwidth_gb_s, bandwidth_pct, mfu_pct, arch_tag);
+		print_compact_hud(ttft_ms, tok_per_sec, bandwidth_gb_s, bandwidth_pct, mfu_pct, arch_tag, title);
 	}
 
 	static void print_compact_hud(double ttft_ms, float tok_per_sec,
 				       double bandwidth_gb_s, float bandwidth_pct,
-				       float mfu_pct, const std::string& arch_tag = "sm_89") {
+				       float mfu_pct, const std::string& arch_tag = "sm_89",
+				       const std::string& title = "BARE-METAL HARDWARE SATURATION") {
 		float ms_per_tok = (tok_per_sec > 0.0f) ? (1000.0f / tok_per_sec) : 0.0f;
+
+		std::string header = "  PROJECT AXIOM v1.0 • " + title + " [" + arch_tag + "]";
+		int visible_len = static_cast<int>(header.length()) - 2; // '•' is 3 bytes in UTF-8 but 1 display column
+		int pad = 72 - visible_len;
+		if (pad < 0) pad = 0;
 
 		std::cout << "\n"
 			  << "┌────────────────────────────────────────────────────────────────────────┐\n"
-			  << "│  PROJECT AXIOM v1.0 • BARE-METAL HARDWARE SATURATION ["
-			  << std::left << std::setw(5) << arch_tag << "]            │\n"
+			  << "│" << header << std::string(pad, ' ') << "│\n"
 			  << "├────────────────────────────────────────────────────────────────────────┤\n"
 			  << "│  1. PREFILL LATENCY (TTFT)  : " << std::right << std::setw(7) << std::fixed
 			  << std::setprecision(1) << ttft_ms
@@ -182,6 +188,43 @@ public:
 				  << "% MFU   (Tensor Core Saturation)   │\n";
 		} else if (mfu_pct > 0.0001f) {
 			std::cout << "<0.1% MFU   (Tensor Core L1-Resident)  │\n";
+		} else {
+			std::cout << "  0.0% MFU   (Tensor Core L1-Resident)  │\n";
+		}
+
+		std::cout << "└────────────────────────────────────────────────────────────────────────┘\n\n";
+	}
+
+	static void print_saturation_hud(double sweep_time_ms, double achieved_tflops,
+					  double bandwidth_gb_s, float bandwidth_pct,
+					  float mfu_pct, const std::string& arch_tag = "sm_89") {
+		std::string header = "  PROJECT AXIOM v1.0 • TRANSFORMER KERNEL SATURATION [" + arch_tag + "]";
+		int visible_len = static_cast<int>(header.length()) - 2; // '•' is 3 bytes in UTF-8 but 1 display column
+		int pad = 72 - visible_len;
+		if (pad < 0) pad = 0;
+
+		std::cout << "\n"
+			  << "┌────────────────────────────────────────────────────────────────────────┐\n"
+			  << "│" << header << std::string(pad, ' ') << "│\n"
+			  << "├────────────────────────────────────────────────────────────────────────┤\n"
+			  << "│  1. FUSED EVT SWEEP TIME    : " << std::right << std::setw(7) << std::fixed
+			  << std::setprecision(2) << sweep_time_ms
+			  << " ms                                │\n"
+			  << "│  2. SUSTAINED COMPUTE POWER : " << std::setw(7) << std::setprecision(1)
+			  << achieved_tflops << " TFLOPs (BF16 Dense)                 │\n";
+
+		std::cout << "│  3. MEMORY BUS SATURATION   : ";
+		if (bandwidth_gb_s >= 0.1) {
+			std::cout << std::setw(6) << std::setprecision(1) << bandwidth_gb_s << " GB/s   ("
+				  << std::setw(4) << std::setprecision(1) << bandwidth_pct << "% of Peak)          │\n";
+		} else {
+			std::cout << "   0.0 GB/s   ( 0.0% of Peak)          │\n";
+		}
+
+		std::cout << "│  4. COMPUTE EFFICIENCY (MFU): ";
+		if (mfu_pct >= 0.1f) {
+			std::cout << std::setw(5) << std::setprecision(1) << mfu_pct
+				  << "% MFU   (Tensor Core Saturation)   │\n";
 		} else {
 			std::cout << "  0.0% MFU   (Tensor Core Saturation)   │\n";
 		}
