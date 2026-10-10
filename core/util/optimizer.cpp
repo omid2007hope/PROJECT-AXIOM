@@ -31,7 +31,6 @@ void Optimizer::disk_to_ram(Portion& portion) {
 		if (file_stream.eof()) {
 			file_stream.clear();
 			file_stream.seekg(0, std::ios::beg);
-			std::cerr << "EOF Reached!!! New Epoch Started!\n";
 		}
 
 		// ----------------------------------------------------------------
