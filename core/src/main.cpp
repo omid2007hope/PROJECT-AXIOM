@@ -44,6 +44,7 @@ bool test_optimizer();
 bool test_cuda_transfer();
 bool test_transfer();
 bool test_ai();
+bool test_inference();
 
 // *****************************************************************************
 // Configuration: the single source of truth for everything the backend uses
@@ -512,6 +513,9 @@ bool run_tests() {
 
 	std::cout << "--- test_ai AI ---\n";
 	all_ok &= test_ai();
+
+	std::cout << "--- test_inference AI ---\n";
+	all_ok &= test_inference();
 
 	std::cout << "\n============================================\n";
 	if (all_ok) {
