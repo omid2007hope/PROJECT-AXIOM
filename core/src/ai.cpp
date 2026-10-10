@@ -56,15 +56,13 @@ AI::~AI() {
 }
 
 bool AI::upload_weights_to_gpu() {
-	Transfer transfer;
-	return transfer.upload_weights_to_gpu(
-		h_weights, h_bias, pending_steps, gpu_weights, gpu_activations, gpu_portion);
+	return Transfer::upload_weights_to_gpu(
+		h_weights, h_bias, pending_steps, gpu_weights, gpu_activations);
 }
 
 bool AI::download_weights_from_gpu() {
-	Transfer transfer;
-	return transfer.download_weights_from_gpu(
-		h_weights, h_bias, pending_steps, gpu_weights, gpu_activations, gpu_portion);
+	return Transfer::download_weights_from_gpu(
+		h_weights, h_bias, gpu_weights);
 }
 
 bool AI::read_loss(double& mean_loss, size_t& steps) {
