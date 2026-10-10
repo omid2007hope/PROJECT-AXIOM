@@ -1,7 +1,10 @@
-#include "ai.hpp"
+#include "../include/ai.hpp"
 
 #include <iostream>
 #include <random>
+
+#include "../include/logistic.hpp"
+#include "../include/transfer.hpp"
 
 AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max, Elements& e)
     : input_dim(in_dim), output_dim(out_dim), weight_min(weight_min), weight_max(weight_max) {
@@ -53,24 +56,15 @@ AI::~AI() {
 }
 
 bool AI::upload_weights_to_gpu() {
-	// Pass the data down to the CUDA C-interface
-	if (!upload_ai_weights(
-		    h_weights.data(), h_weights.size(), h_bias.data(), h_bias.size(), &gpu_weights)) {
-		return false;
-	}
-
-	// Whatever loss was measured against the previous weights no longer describes
-	// this network, so start a fresh measurement.
-	float stale_loss = 0.0f;
-	download_loss(&gpu_activations, &stale_loss);
-	pending_steps = 0;
-
-	return true;
+	Transfer transfer;
+	return transfer.upload_weights_to_gpu(
+		h_weights, h_bias, pending_steps, gpu_weights, gpu_activations, gpu_portion);
 }
 
 bool AI::download_weights_from_gpu() {
-	return download_ai_weights(
-		&gpu_weights, h_weights.data(), h_weights.size(), h_bias.data(), h_bias.size());
+	Transfer transfer;
+	return transfer.download_weights_from_gpu(
+		h_weights, h_bias, pending_steps, gpu_weights, gpu_activations, gpu_portion);
 }
 
 bool AI::read_loss(double& mean_loss, size_t& steps) {

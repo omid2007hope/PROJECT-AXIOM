@@ -16,8 +16,8 @@ struct Elements {
 // What one AI::train() call did
 enum class TrainStatus {
 	Trained, // one full forward + backward step ran
-	NoData,  // the RAM buffer is exhausted: the caller must refill it
-	Failed   // a CUDA step failed (already reported on stderr)
+	NoData,	 // the RAM buffer is exhausted: the caller must refill it
+	Failed	 // a CUDA step failed (already reported on stderr)
 };
 
 class AI {
@@ -25,7 +25,7 @@ private:
 	size_t input_dim;
 	size_t output_dim;
 
-	// Bounds of the uniform distribution used to initialize the weights
+	// Bounds of the uniform distr      ibution used to initialize the weights
 	float weight_min;
 	float weight_max;
 
