@@ -293,27 +293,41 @@ Memory Bus      : 192-bit | Peak Bandwidth: 432.0 GB/s
 Compute Engine  : 67.7 Peak Dense BF16 TFLOPs
 VRAM Footprint  : 11061 MB Free / 12281 MB Total
 --------------------------------------------------------
+[BENCHMARK 1/2] Interactive Micro-Perceptron Inference (512 -> 4)
 [..] Warming up Tensor Cores (10 forward passes)...
 [..] Executing 100 Hardware-Timed Tensor Core Inferences...
 
 ┌────────────────────────────────────────────────────────────────────────┐
-│  PROJECT AXIOM v1.0 • BARE-METAL HARDWARE SATURATION [sm_89]            │
+│  PROJECT AXIOM v1.0 • INFERENCE DISPATCH LATENCY [sm_89]               │
 ├────────────────────────────────────────────────────────────────────────┤
 │  1. PREFILL LATENCY (TTFT)  :     0.1 ms                                │
-│  2. DECODE THROUGHPUT       : 11114.7 tok/s  ( 0.09 ms/tok)             │
-│  3. MEMORY BUS SATURATION   :   0.05 GB/s   (<0.1% of Peak)           │
-│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core Saturation)   │
+│  2. DECODE THROUGHPUT       :  9302.3 tok/s  ( 0.11 ms/tok)             │
+│  3. MEMORY BUS SATURATION   :   0.04 GB/s   (<0.1% of Peak)           │
+│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core L1-Resident)  │
+└────────────────────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------
+[BENCHMARK 2/2] CUTLASS EVT Kernel Saturation Sweep (M=128, N=4096, K=4096)
+[..] Allocating transformer-scale tensor buffers (34 MB VRAM footprint)...
+[..] Warming up all Ada Lovelace Streaming Multiprocessors...
+[..] Executing 50 Hardware-Timed Fused EVT Tensor Core Sweeps...
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PROJECT AXIOM v1.0 • TRANSFORMER KERNEL SATURATION [sm_89]            │
+├────────────────────────────────────────────────────────────────────────┤
+│  1. FUSED EVT SWEEP TIME    :    0.13 ms                                │
+│  2. SUSTAINED COMPUTE POWER :    33.6 TFLOPs (BF16 Dense)                 │
+│  3. MEMORY BUS SATURATION   :  278.9 GB/s   (64.5% of Peak)          │
+│  4. COMPUTE EFFICIENCY (MFU):  49.6% MFU   (Tensor Core Saturation)   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### The Four Golden Variables Explained
+### The Two-Stage Benchmark Architecture Explained
 
-| Metric | Measured Unit | What It Physically Proves | The Engineering Flex |
+| Stage | Benchmark Focus | Measured Metrics | What It Physically Proves |
 | :--- | :--- | :--- | :--- |
-| **1. Prefill Latency (TTFT)** | **$0.1\text{ ms}$** | Delay from user dispatch to the 1st token output. | Proves zero driver latency, zero Python runtime overhead, and instant PCIe DMA dispatch. |
-| **2. Decode Throughput** | **$11,114.7\text{ tok/s}$** ($0.09\text{ ms/tok}$) | Sustained forward-pass evaluation speed. | Breaking $10,000+\text{ tok/s}$ proves non-blocking execution with zero CPU thread stalls. |
-| **3. Memory Bus Saturation** | **$GB/s$ & $\%$ of Peak** | Bandwidth moved across VRAM memory bus. | For 2,048 weights (4 KB), the model is 100% L1/L2 cache resident. In V2 (100M+ weights), bandwidth saturates $>80\%$ of GDDR6X physical peak. |
-| **4. Compute Efficiency (MFU)** | **$\% \text{MFU}$** | Actual FLOPS achieved vs theoretical peak. | Custom CUTLASS EVT fused kernels eliminate intermediate VRAM spills, maximizing Tensor Core active cycles. |
+| **[1/2] Micro-Perceptron** | **Interactive Dispatch Latency** | **$0.1\text{ ms}$ TTFT**<br>**$\sim 9,300+\text{ tok/s}$** ($0.11\text{ ms/tok}$)<br>**$0.04\text{ GB/s}$** ($<0.1\%$ peak)<br>**$0.0\%\text{ MFU}$** (L1-Resident) | Proves ultra-low driver latency and instant PCIe DMA dispatch. Because all 2,048 weights fit entirely in L1/L2 cache, VRAM bus saturation and MFU are near-zero as expected for a micro-model. |
+| **[2/2] CUTLASS EVT** | **Hardware Saturation Sweep**<br>($M=128, N=4096, K=4096$) | **$0.13\text{ ms}$ Sweep Time**<br>**$33.6\text{ TFLOPs}$ Sustained**<br>**$278.9\text{ GB/s}$** ($64.5\%$ peak)<br>**$49.6\%\text{ MFU}$** (SM Saturation) | Exercises all Streaming Multiprocessors with transformer-scale matrix tiles (34 MB VRAM footprint). Proves the CUTLASS Epilogue Visitor Tree (EVT) kernel saturates Ada Lovelace Tensor Cores and memory bus without kernel-launch overhead. |
 
 ---
 
@@ -531,16 +545,32 @@ Memory Bus      : 192-bit | Peak Bandwidth: 432.0 GB/s
 Compute Engine  : 67.7 Peak Dense BF16 TFLOPs
 VRAM Footprint  : 11061 MB Free / 12281 MB Total
 --------------------------------------------------------
+[BENCHMARK 1/2] Interactive Micro-Perceptron Inference (512 -> 4)
 [..] Warming up Tensor Cores (10 forward passes)...
 [..] Executing 100 Hardware-Timed Tensor Core Inferences...
 
 ┌────────────────────────────────────────────────────────────────────────┐
-│  PROJECT AXIOM v1.0 • BARE-METAL HARDWARE SATURATION [sm_89]            │
+│  PROJECT AXIOM v1.0 • INFERENCE DISPATCH LATENCY [sm_89]               │
 ├────────────────────────────────────────────────────────────────────────┤
 │  1. PREFILL LATENCY (TTFT)  :     0.1 ms                                │
-│  2. DECODE THROUGHPUT       : 11114.7 tok/s  ( 0.09 ms/tok)             │
-│  3. MEMORY BUS SATURATION   :   0.05 GB/s   (<0.1% of Peak)           │
-│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core Saturation)   │
+│  2. DECODE THROUGHPUT       :  9302.3 tok/s  ( 0.11 ms/tok)             │
+│  3. MEMORY BUS SATURATION   :   0.04 GB/s   (<0.1% of Peak)           │
+│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core L1-Resident)  │
+└────────────────────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------
+[BENCHMARK 2/2] CUTLASS EVT Kernel Saturation Sweep (M=128, N=4096, K=4096)
+[..] Allocating transformer-scale tensor buffers (34 MB VRAM footprint)...
+[..] Warming up all Ada Lovelace Streaming Multiprocessors...
+[..] Executing 50 Hardware-Timed Fused EVT Tensor Core Sweeps...
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PROJECT AXIOM v1.0 • TRANSFORMER KERNEL SATURATION [sm_89]            │
+├────────────────────────────────────────────────────────────────────────┤
+│  1. FUSED EVT SWEEP TIME    :    0.13 ms                                │
+│  2. SUSTAINED COMPUTE POWER :    33.6 TFLOPs (BF16 Dense)                 │
+│  3. MEMORY BUS SATURATION   :  278.9 GB/s   (64.5% of Peak)          │
+│  4. COMPUTE EFFICIENCY (MFU):  49.6% MFU   (Tensor Core Saturation)   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 

@@ -91,7 +91,59 @@ During the training loop, the engine continuously monitors non-blocking keyboard
 
 ---
 
-## 4. Compilation and Build Automation
+## 4. Bare-Metal Hardware Benchmark (`--benchmark`)
+
+Executing the zero-overhead hardware benchmark and kernel saturation sweep:
+```powershell
+.\app.exe --benchmark
+```
+
+The benchmark employs driver-level `cudaEvent_t` timers across active CUDA streams to execute a two-stage hardware characterization:
+1. **Interactive Micro-Perceptron Inference (`512 -> 4`):** Measures bare-metal driver dispatch latency, prefill time-to-first-token (TTFT), and decode throughput on the active model architecture.
+2. **CUTLASS EVT Kernel Saturation Sweep (`M=128, N=4096, K=4096`):** Allocates transformer-scale matrix tiles to saturate all Streaming Multiprocessors, verifying peak compute (TFLOPs), GDDR6 memory bus throughput, and Model FLOPs Utilization (MFU).
+
+```text
+========================================================
+       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION      
+========================================================
+Hardware Device : NVIDIA GeForce RTX 4080 Laptop GPU
+Architecture    : sm_89 (Ada Lovelace)
+Memory Bus      : 192-bit | Peak Bandwidth: 432.0 GB/s
+Compute Engine  : 67.7 Peak Dense BF16 TFLOPs
+VRAM Footprint  : 11061 MB Free / 12281 MB Total
+--------------------------------------------------------
+[BENCHMARK 1/2] Interactive Micro-Perceptron Inference (512 -> 4)
+[..] Warming up Tensor Cores (10 forward passes)...
+[..] Executing 100 Hardware-Timed Tensor Core Inferences...
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PROJECT AXIOM v1.0 • INFERENCE DISPATCH LATENCY [sm_89]               │
+├────────────────────────────────────────────────────────────────────────┤
+│  1. PREFILL LATENCY (TTFT)  :     0.1 ms                                │
+│  2. DECODE THROUGHPUT       :  9302.3 tok/s  ( 0.11 ms/tok)             │
+│  3. MEMORY BUS SATURATION   :   0.04 GB/s   (<0.1% of Peak)           │
+│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core L1-Resident)  │
+└────────────────────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------
+[BENCHMARK 2/2] CUTLASS EVT Kernel Saturation Sweep (M=128, N=4096, K=4096)
+[..] Allocating transformer-scale tensor buffers (34 MB VRAM footprint)...
+[..] Warming up all Ada Lovelace Streaming Multiprocessors...
+[..] Executing 50 Hardware-Timed Fused EVT Tensor Core Sweeps...
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PROJECT AXIOM v1.0 • TRANSFORMER KERNEL SATURATION [sm_89]            │
+├────────────────────────────────────────────────────────────────────────┤
+│  1. FUSED EVT SWEEP TIME    :    0.13 ms                                │
+│  2. SUSTAINED COMPUTE POWER :    33.6 TFLOPs (BF16 Dense)                 │
+│  3. MEMORY BUS SATURATION   :  278.9 GB/s   (64.5% of Peak)          │
+│  4. COMPUTE EFFICIENCY (MFU):  49.6% MFU   (Tensor Core Saturation)   │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Compilation and Build Automation
 
 Project Axiom employs a dual-compiler toolchain combining **MinGW-w64 GCC** (for ISO C++23 host code) and **NVIDIA NVCC** (for CUDA device code).
 
