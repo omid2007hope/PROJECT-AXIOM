@@ -8,9 +8,10 @@
 ## 1. Executive Summary & V1 Definition
 
 ### Current Project Status
-- **Overall Completion:** **~70% – 75%**
-- **Core Systems & Compute Engine:** **100% Complete & Validated (All 8 Test Suites Passing, 141 Tests 100% Green)**
-- **Application Orchestration & Inference Pipeline:** **~40% Complete (Active Focus)**
+- **Overall Completion:** **~80%**
+- **Core Systems & Compute Engine:** **100% Complete & Validated (All 8 Test Suites Passing, 142 Tests 100% Green)**
+- **Weight Persistence (Sprint 1):** **100% Complete & Validated (`weights.axiom` atomic binary save/load)**
+- **Application Orchestration & Inference Pipeline:** **~50% Complete (Active Focus)**
 
 The most complex, high-risk systems engineering hurdles—bare-metal CUDA kernel fusion, CUTLASS v4.8.0 Tensor Core saturation, PCIe DMA write-combined streaming, dual-stream ping-pong concurrency, FP32 master weights backpropagation, and the 4-tier Seam streaming data loader—are **fully functional and passing all test suites**.
 
@@ -20,26 +21,27 @@ It operationalizes the core philosophy outlined in [Features.md](Features.md):
 1. **The Product Experience:** End users receive a pre-packaged, dedicated single model. They do not train or manage multi-model libraries; they simply run forward inference ("Use it") with zero Python dependencies.
 2. **The Open-Source Contributor Experience:** Developers fork the repository, run the training pipeline (`--train`) on their own curated datasets, produce their own custom model weights (`weights.axiom`), and package releases.
 3. **Simplicity First:** There are no runtime model registries, dynamic model switchers, or complex abstraction wrappers. It is **ONE unified model**.
+4. **Zero UI/UX Overhead (Pure Terminal Application):** Version 1.0 does **not** include any Graphical User Interface (UI/UX), web frontend, or browser dashboard. It is strictly a pure, bare-metal terminal application (`app.exe`). Any dedicated UI/UX is explicitly reserved for **Version 2.0**.
 
 ```mermaid
 graph LR
-    subgraph V1 ["Project Axiom V1.0 (Single Model Architecture)"]
+    subgraph V1 ["Project Axiom V1.0 (Pure Terminal Application • Zero UI/UX)"]
         direction TB
         A["1. Data Ingestion & Tokenizer"] --> B["2. 4-Tier Streaming DataLoader"]
         B --> C["3. CUTLASS EVT Tensor Core Compute"]
         C --> D["4. Weight Persistence (weights.axiom)"]
         D --> E["5. Inference Engine ('Use it')"]
-        E --> F["6. Developer CLI (--train / --use)"]
+        E --> F["6. Terminal CLI (app.exe --train / --use)"]
     end
     
-    subgraph PostV1 ["Post-V1 (V1.1 - V2.0)"]
-        G["Workflow 2: Full-Stack Web GUI (Next.js)"]
-        H["Phase 5: BFC Caching Allocator"]
-        I["Phase 6: PagedAttention GPT Scaling"]
+    subgraph V2 ["Project Axiom V2.0 (UI/UX & Future Scaling)"]
+        G["Phase 5: Dedicated UI/UX Interface"]
+        H["Phase 6: BFC Caching Allocator"]
+        I["Phase 7: PagedAttention GPT Scaling"]
         J["The Rewind Test Experiment"]
     end
 
-    V1 -.-> PostV1
+    V1 -.-> V2
 ```
 
 ---
@@ -140,31 +142,27 @@ In `core/src/main.cpp`, selecting `[1] Use it` prints `[!] 'Use it' is not avail
 
 ---
 
-## 4. Workflows & Post-V1 Scope (V1.1 – V2.0)
+## 4. Scope Segmentation: V1.0 Pure CLI vs. V2.0 UI/UX
 
-To guarantee a fast, disciplined V1.0 launch, the project scope is clearly segmented into **V1.0 Core** vs. **Post-V1 Scale**:
+To guarantee a fast, disciplined V1.0 launch, the project scope is strictly segmented: **Version 1.0 is a pure terminal executable with zero UI/UX overhead.** All graphical interfaces (UI/UX) are explicitly deferred to **Version 2.0**:
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                   AXIOM VERSION 1.0                    │
+│             AXIOM VERSION 1.0 (PURE APPLICATION)       │
+│   • Pure Terminal-Based Executable (app.exe)           │
+│   • Zero UI/UX Overhead (No Web/GUI Dependencies)      │
 │   • Single Dedicated Model Architecture                │
 │   • End-User Inference Engine ("Use it")               │
 │   • Developer Training Pipeline (--train)              │
 │   • Binary Weight Persistence (weights.axiom)          │
-│   • 141 Tests Passing • Standalone Executables         │
+│   • 142 Tests Passing (100% Green) • Standalone Binary │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│                   AXIOM VERSION 1.1                    │
-│   • Workflow 2: Next.js Frontend + Backend API         │
-│   • Visual Real-Time Loss Curves in Browser            │
-│   • Web-Based Media & Data Uploads                     │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│                   AXIOM VERSION 2.0                    │
+│            AXIOM VERSION 2.0 (UI/UX & SCALE)           │
+│   • Dedicated UI/UX Interface (Desktop / Web GUI)      │
+│   • Real-Time Visual Loss Curves & Multimodal Display  │
 │   • Phase 5: BFC Userspace Caching Allocator           │
 │   • Phase 6: PagedAttention KV-Cache GPT Scaling       │
 │   • Phase 7: CUDA Graphs & ATen Dispatcher             │
