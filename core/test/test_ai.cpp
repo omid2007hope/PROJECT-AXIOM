@@ -8,6 +8,7 @@
 
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
+#include "../include/parser.hpp"
 #include "test_header.hpp"
 
 bool test_ai() {
@@ -213,6 +214,77 @@ bool test_ai() {
 
 	// Clean up test file
 	std::filesystem::remove(test_weights_path);
+
+	// ── [9] Forward Inference & Prediction Verification ───────────────────────
+	std::cout << "\n[9] Forward Inference & Prediction Verification\n";
+
+	// 1. Predict from direct std::vector<std::bfloat16_t> context window
+	std::vector<std::bfloat16_t> test_context(in_dim);
+	for (size_t i = 0; i < in_dim; ++i) {
+		test_context[i] = static_cast<std::bfloat16_t>(0.1f * (i % 5));
+	}
+
+	std::vector<float> prediction_output;
+	test_check(ai.predict(test_context, prediction_output), "ai.predict(context_vector) returns true", s_pass, s_fail);
+	test_check_eq(prediction_output.size(), out_dim, "Prediction output dimension == out_dim (4)", s_pass, s_fail);
+
+	bool prediction_valid = true;
+	for (float val : prediction_output) {
+		if (std::isnan(val) || std::isinf(val)) {
+			prediction_valid = false;
+			break;
+		}
+	}
+	test_check(prediction_valid, "Prediction output values are valid finite floats", s_pass, s_fail);
+
+	// 2. Parser Vocabulary & Nearest-Neighbor Decoding Verification
+	Input parser_input;
+	parser_input.embedding_dim = out_dim;
+	parser_input.text_dictionary["The"] = 1;
+	parser_input.text_dictionary["quick"] = 2;
+	parser_input.text_dictionary["brown"] = 3;
+	parser_input.text_dictionary["fox"] = 4;
+	parser_input.next_text_id = 5;
+
+	Parser test_parser(true, "database/test_embedded.bin", {});
+	test_parser.build_embedding_table(parser_input);
+
+	test_check(parser_input.embedding_table.size() >= 4, "Parser embedding table populated for vocabulary", s_pass, s_fail);
+
+	// Verify exact match decoding
+	const auto& fox_emb = parser_input.embedding_table[4];
+	std::vector<float> fox_float_vec(out_dim);
+	for (size_t d = 0; d < out_dim; ++d) {
+		fox_float_vec[d] = static_cast<float>(fox_emb[d]);
+	}
+	uint32_t decoded_id = test_parser.decode_embedding_to_token(parser_input, fox_float_vec);
+	test_check_eq(decoded_id, static_cast<uint32_t>(4), "Exact embedding vector decodes to token ID #4 ('fox')", s_pass, s_fail);
+
+	std::string decoded_str = test_parser.decode_prediction(parser_input, fox_float_vec);
+	test_check_eq(decoded_str, std::string("fox"), "Decoded string matches 'fox'", s_pass, s_fail);
+
+	// Verify nearest-neighbor with minor noise perturbation
+	std::vector<float> noisy_fox_vec = fox_float_vec;
+	noisy_fox_vec[0] += 0.001f;
+	noisy_fox_vec[1] -= 0.001f;
+	uint32_t noisy_decoded_id = test_parser.decode_embedding_to_token(parser_input, noisy_fox_vec);
+	test_check_eq(noisy_decoded_id, static_cast<uint32_t>(4), "Perturbed embedding robustly decodes to nearest token ID #4", s_pass, s_fail);
+
+	// Verify decoding model's live prediction
+	std::string live_prediction_word = test_parser.decode_prediction(parser_input, prediction_output);
+	test_check(!live_prediction_word.empty(), "Live prediction decodes to non-empty vocabulary word", s_pass, s_fail);
+
+	// 3. Prompt Tokenization & Context Window Generation
+	std::vector<uint32_t> prompt_tokens = test_parser.tokenize_prompt(parser_input, "The quick brown fox jumps");
+	test_check_eq(prompt_tokens.size(), static_cast<size_t>(5), "tokenize_prompt parses 5 tokens", s_pass, s_fail);
+	test_check_eq(parser_input.text_dictionary["jumps"], static_cast<uint32_t>(5), "New word 'jumps' assigned token ID #5", s_pass, s_fail);
+
+	std::vector<std::bfloat16_t> prompt_ctx = test_parser.tokens_to_context_window(parser_input, prompt_tokens, 128);
+	test_check_eq(prompt_ctx.size(), static_cast<size_t>(512), "tokens_to_context_window generates exact 512 bfloat16_t elements", s_pass, s_fail);
+
+	std::vector<float> prompt_pred;
+	test_check(ai.predict(prompt_ctx, prompt_pred), "ai.predict(prompt_ctx) succeeds on user prompt context", s_pass, s_fail);
+	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == 4", s_pass, s_fail);
 
 	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";

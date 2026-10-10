@@ -67,8 +67,16 @@ constexpr float weight_max = 0.1f;
 constexpr const char* database_folder = "database";
 constexpr const char* embedded_file = "embedded_data.bin";
 constexpr const char* asset_folder = "asset_sample";
+constexpr const char* weights_file = "weights.axiom";
 
 } // namespace config
+
+enum class AppMode {
+	Use,
+	Train,
+	Test,
+	Exit
+};
 
 // core/ folder, located from this source file (core/src/main.cpp)
 std::filesystem::path locate_core_dir() {
@@ -170,27 +178,34 @@ std::string fetch_argument(int count, char* argument[]) {
 	return count > 1 ? std::string(argument[1]) : std::string();
 }
 
-// Interactive menu. Fills `input` and returns true when it is ready to be
-// parsed, or false when there is nothing to train on.
-bool collect_user_input(Input& input) {
+// Interactive menu. Fills `input` and returns the selected AppMode.
+AppMode collect_user_input(Input& input) {
 	std::cout << "==========================\n"
 		  << "     Welcome to AXIOM     \n"
 		  << "==========================\n"
-		  << "[1] Use it\n"
-		  << "[2] Train it\n"
+		  << "[1] Use it (Inference)\n"
+		  << "[2] Train it (Training)\n"
+		  << "[3] Run Tests\n"
+		  << "[4] Exit\n"
 		  << "> ";
 
 	const int option = read_choice();
 
 	if (option == 1) {
-		// For later on
-		std::cout << "\n[!] 'Use it' is not available yet.\n";
-		return false;
+		return AppMode::Use;
+	}
+
+	if (option == 3) {
+		return AppMode::Test;
+	}
+
+	if (option == 4) {
+		return AppMode::Exit;
 	}
 
 	if (option != 2) {
 		std::cout << "\n[!] Invalid option.\n";
-		return false;
+		return AppMode::Exit;
 	}
 
 	std::cout << "\n--- Training Mode: ON ---\n\n";
@@ -217,7 +232,7 @@ bool collect_user_input(Input& input) {
 		input.user_voice_paths = Validate<std::vector<std::string>>("Enter Voice Path: ");
 	} else {
 		std::cout << "\n[!] Invalid data type.\n";
-		return false;
+		return AppMode::Exit;
 	}
 
 	// Text and numbers can be paired with media
@@ -229,16 +244,16 @@ bool collect_user_input(Input& input) {
 		if (media == 1) {
 			// For later
 			std::cout << "\n[!] Adding media is not available yet.\n";
-			return false;
+			return AppMode::Exit;
 		}
 
 		if (media != 2) {
 			std::cout << "\n[!] Invalid option.\n";
-			return false;
+			return AppMode::Exit;
 		}
 	}
 
-	return true;
+	return AppMode::Train;
 }
 
 // *****************************************************************************
@@ -310,14 +325,100 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 }
 
 // *****************************************************************************
-// Training loop (runs until the process is stopped)
+// Inference Engine ("Use it")
 // *****************************************************************************
-[[noreturn]] void run_training_loop(AI& ai,
-				    Optimizer& optimizer,
-				    Portion& portion,
-				    Elements& elements) {
+void run_inference_engine(AI& ai,
+			  Parser& parser,
+			  Input& input,
+			  const std::filesystem::path& weights_path) {
+	std::cout << "\n========================================================\n"
+		  << "             AXIOM INFERENCE ENGINE ('Use it')          \n"
+		  << "========================================================\n";
+
+	if (std::filesystem::exists(weights_path)) {
+		std::cout << "[..] Loading model weights from: " << weights_path.filename().string() << "\n";
+		if (ai.load_weights(weights_path.string())) {
+			std::cout << "[OK] Model weights successfully loaded into VRAM.\n\n";
+		} else {
+			std::cerr << "[!] Failed to load model weights. Using baseline weights.\n\n";
+		}
+	} else {
+		std::cout << "[!] Notice: '" << weights_path.filename().string()
+			  << "' not found.\n"
+			  << "[!] Running with baseline initialized weights.\n"
+			  << "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
+	}
+
+	parser.build_embedding_table(input);
+
+	std::cout << "Model Architecture: Single Dedicated Multimodal Perceptron\n"
+		  << "Context Window    : " << config::context_window_size << " tokens ("
+		  << (config::context_window_size * config::token_dim * sizeof(std::bfloat16_t))
+		  << " bytes BF16)\n"
+		  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
+		  << "Vocabulary Size   : " << input.embedding_table.size() << " tokens mapped\n"
+		  << "--------------------------------------------------------\n"
+		  << "Enter text or prompt to predict next token (type 'exit' to quit):\n";
+
+	std::string line;
+	while (true) {
+		std::cout << "\nPrompt > ";
+		if (!std::getline(std::cin, line)) {
+			break;
+		}
+
+		if (line.empty()) {
+			continue;
+		}
+
+		if (line == "exit" || line == "quit" || line == ":q") {
+			std::cout << "Exiting inference engine.\n";
+			break;
+		}
+
+		// Tokenize input prompt
+		std::vector<uint32_t> tokens = parser.tokenize_prompt(input, line);
+		std::cout << "[Tokens] (" << tokens.size() << " tokens): ";
+		for (size_t i = 0; i < tokens.size(); ++i) {
+			std::cout << tokens[i] << (i + 1 < tokens.size() ? ", " : "\n");
+		}
+
+		// Generate 128-token context window (512 BF16 floats)
+		std::vector<std::bfloat16_t> ctx_window =
+			parser.tokens_to_context_window(input, tokens, config::context_window_size);
+
+		// Run forward prediction on Tensor Cores
+		std::vector<float> prediction;
+		if (!ai.predict(ctx_window, prediction)) {
+			std::cerr << "[!] Forward prediction failed.\n";
+			continue;
+		}
+
+		// Decode prediction via nearest-neighbor L2 search
+		uint32_t pred_token_id = parser.decode_embedding_to_token(input, prediction);
+		std::string pred_token_str = parser.decode_prediction(input, prediction);
+
+		std::cout << std::fixed << std::setprecision(4)
+			  << "[Tensor Output] [" << prediction[0] << ", " << prediction[1]
+			  << ", " << prediction[2] << ", " << prediction[3] << "]\n"
+			  << "[Next Token ID] #" << pred_token_id << "\n"
+			  << "[Prediction]    \"" << pred_token_str << "\"\n";
+	}
+}
+
+// *****************************************************************************
+// Training loop
+// *****************************************************************************
+void run_training_loop(AI& ai,
+		       Optimizer& optimizer,
+		       Portion& portion,
+		       Elements& elements,
+		       const std::filesystem::path& weights_path) {
 	std::cout << "Beginning continuous training loop...\n";
-	std::cout << "Press 'R' at any time to reset AI weights and start fresh.\n";
+	std::cout << "Controls:\n"
+		  << "  [S] Save current model weights to " << weights_path.filename().string() << "\n"
+		  << "  [R] Reset AI brain to chaotic state\n"
+		  << "  [Q] Save and quit training loop\n\n";
 
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
@@ -339,29 +440,20 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 					std::cerr
 						<< "[!] Brain wipe failed: could not upload weights.\n\n";
 				}
+			} else if (ch == 's' || ch == 'S') {
+				std::cout << "\n[!] Manual Checkpoint Triggered! Saving weights...\n";
+				if (ai.save_weights(weights_path.string())) {
+					std::cout << "[OK] Model checkpoint saved to " << weights_path.filename().string() << "\n\n";
+				} else {
+					std::cerr << "[!] Failed to save weights.\n\n";
+				}
+			} else if (ch == 'q' || ch == 'Q') {
+				std::cout << "\n[!] Stopping training loop. Saving checkpoint...\n";
+				ai.save_weights(weights_path.string());
+				std::cout << "[OK] Checkpoint saved. Exiting training.\n";
+				break;
 			}
 		}
-
-		/* LEARN: Omid Teimory 2026 All rights reserved
-    Locks the Thread: It sets training_in_use to true so the CPU data-loader
-    thread doesn't collide with the GPU thread.
-
-    Preps the Data: It asks the optimizer to load the batch of data from
-    system RAM into the context window.
-
-    PCIe Transfer: It pushes that data across the motherboard into your RTX
-    4080's VRAM using upload_to_gpu().
-
-    Predicts (Forward Pass): It fires your custom CUDA forward_pass kernel
-    to push the data through the neural network and generate a prediction.
-
-    Learns (Backward Pass): It fires the CUDA backward_pass kernel to
-    calculate the errors and adjust the network's weights.
-
-    Swaps Buffers: It flips the buffer_index (e.g., from 0 to 1) so the CPU
-    can start loading the next batch of data while the GPU finishes its
-    current math.
-    */
 
 		// Feed forward & backward pass
 		const TrainStatus status = ai.train(optimizer, portion);
@@ -429,93 +521,84 @@ int main(int argc, char* argv[]) {
 		return run_tests() ? 0 : 1;
 	}
 
-	if (!arg.empty() && arg != "--train") {
-		std::cerr << "Usage: app.exe [--train | --test]\n"
-			  << "  (no argument)  interactive menu\n"
-			  << "  --train        train on the built-in sample data\n"
-			  << "  --test         run the test suites\n";
+	if (arg == "--help" || arg == "-h") {
+		std::cout << "========================================================\n"
+			  << "   PROJECT AXIOM v1.0 — Native C++23/CUDA AI Engine     \n"
+			  << "========================================================\n"
+			  << "Usage: app.exe [OPTION]\n\n"
+			  << "Options:\n"
+			  << "  (no argument)  Interactive console menu\n"
+			  << "  --use          Run direct forward inference ('Use it')\n"
+			  << "  --train        Train on built-in sample multimodal data\n"
+			  << "  --test         Run all automated test suites\n"
+			  << "  --help, -h     Show this help message\n\n";
+		return 0;
+	}
+
+	if (!arg.empty() && arg != "--train" && arg != "--use") {
+		std::cerr << "Unknown argument: " << arg << "\n"
+			  << "Usage: app.exe [--use | --train | --test | --help]\n";
 		return 1;
 	}
 
-	// Developer mode tokenizes the built-in samples; the menu uses real input
-	const bool developer_mode = (arg == "--train");
+	AppMode mode = AppMode::Train;
+	bool developer_mode = false;
+
+	if (arg == "--use") {
+		mode = AppMode::Use;
+		developer_mode = true;
+	} else if (arg == "--train") {
+		mode = AppMode::Train;
+		developer_mode = true;
+	}
 
 	// Everything below is configured here and handed down to the backend
 	const std::filesystem::path core_dir = locate_core_dir();
 	const std::filesystem::path embedded_path =
 		core_dir / config::database_folder / config::embedded_file;
+	const std::filesystem::path weights_path =
+		std::filesystem::exists(config::weights_file)
+			? std::filesystem::path(config::weights_file)
+			: (core_dir / config::weights_file);
 	const std::vector<std::filesystem::path> asset_dirs = {core_dir / config::asset_folder};
 
-	// These are needed later on
 	Parser parser(developer_mode, embedded_path, asset_dirs);
 	Input input;
 	input.embedding_dim = config::token_dim;
 	Test test = make_sample_data();
 
-	// Instantiate the required objects for the AI to train
+	// If no argument, present interactive menu
+	if (arg.empty()) {
+		mode = collect_user_input(input);
+		if (mode == AppMode::Exit) {
+			return 0;
+		}
+		if (mode == AppMode::Test) {
+			return run_tests() ? 0 : 1;
+		}
+		if (mode == AppMode::Use) {
+			developer_mode = true;
+			parser.developer_mode = true;
+		}
+	}
+
+	// Instantiate the required objects for the AI
 	Portion portion(config::ram_buffer_size, config::token_dim, config::context_window_size);
 	Optimizer optimizer(embedded_path, config::learning_rate);
-
-	if (developer_mode) {
-		std::cout << "--- Training AI ---\n";
-	} else if (!collect_user_input(input)) {
-		return 0;
-	}
 
 	// *********************************************************
 	// Phase 1: Parsing and Storage
 	// *********************************************************
-
-	// First thing first parser has top be fully executed!
-	// Read and tokenize all
+	std::cout << "[..] Parsing and tokenizing multimodal data...\n";
 	parser.tokenization(input, test);
-
-	// Embedded and Save them all
 	parser.embedding(input, test);
-
-	std::cout << "\n[OK] Data successfully generated at: " << embedded_path << "\n";
-
-	// *********************************************************
-	// Phase 2: Pinned Memory Allocation and Disk-to-RAM Stream
-	// *********************************************************
-
-	std::cout << "[..] Optimizing data and loading to RAM...\n";
-
-	// Allocate pinned host memory for ultra-fast DMA transfers
-	if (!portion.allocate_pinned()) {
-		std::cerr << "[!] Failed to allocate pinned host memory.\n";
-		return 1;
-	}
-
-	// Stream the initial chunk of parsed data from disk into the RAM buffer
-	optimizer.disk_to_ram(portion);
-
-	// The AI needs at least one full window plus its target to train on
-	if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
-		std::cerr << "[!] Not enough data in " << embedded_path
-			  << " to fill one context window.\n";
-		return 1;
-	}
-
-	print_hardware_telemetry(portion);
+	parser.build_embedding_table(input);
+	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
 
 	// *********************************************************
-	// Phase 3: AI Instantiation and GPU PCIe Transfer
+	// Phase 2: AI Instantiation and GPU Allocation
 	// *********************************************************
-
-	std::cout << "[..] Initializing AI model and uploading to VRAM...\n";
-
-	/* LEARN: Omid Teimory 2026 All rights reserved
-  AI is the type (your class).
-
-  ai is just the name we decided to give this specific variable. We could
-  have named it my_brain, model, or test_network.
-
-  (...) tells C++: "Create this variable, and instantly pass these numbers
-  into the AI(size_t in_dim, size_t out_dim, float weight_min, float
-  weight_max) constructor to set it up."
-  */
-
+	std::cout << "[..] Initializing AI model...\n";
 	Elements ai_elements;
 	AI ai(portion.all_elements,
 	      portion.target_elements,
@@ -523,11 +606,50 @@ int main(int argc, char* argv[]) {
 	      config::weight_max,
 	      ai_elements);
 
-	// Transfer the chaotic starting weights from CPU to GPU VRAM
 	if (!ai.upload_weights_to_gpu()) {
 		std::cerr << "[!] Failed to upload the AI weights to VRAM.\n";
 		return 1;
 	}
 
-	run_training_loop(ai, optimizer, portion, ai_elements);
+	// *********************************************************
+	// Phase 3: Mode Execution Dispatch
+	// *********************************************************
+	if (mode == AppMode::Use) {
+		run_inference_engine(ai, parser, input, weights_path);
+		return 0;
+	}
+
+	// Training Mode
+	if (developer_mode) {
+		std::cout << "--- Training AI ---\n";
+	}
+
+	std::cout << "[..] Optimizing data and loading to RAM...\n";
+	if (!portion.allocate_pinned()) {
+		std::cerr << "[!] Failed to allocate pinned host memory.\n";
+		return 1;
+	}
+
+	optimizer.disk_to_ram(portion);
+
+	if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
+		std::cerr << "[!] Not enough data in " << embedded_path
+			  << " to fill one context window.\n";
+		portion.free_pinned();
+		return 1;
+	}
+
+	// If pre-existing weights exist on disk, load them into VRAM before training
+	if (std::filesystem::exists(weights_path)) {
+		std::cout << "[..] Pre-existing weights found at " << weights_path.filename().string()
+			  << ". Loading checkpoint...\n";
+		ai.load_weights(weights_path.string());
+	}
+
+	print_hardware_telemetry(portion);
+
+	run_training_loop(ai, optimizer, portion, ai_elements, weights_path);
+
+	portion.free_pinned();
+	return 0;
 }

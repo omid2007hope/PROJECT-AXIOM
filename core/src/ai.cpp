@@ -273,3 +273,95 @@ bool AI::load_weights(const std::string& path) {
 	std::cout << "[AI Brain] Successfully loaded weights from " << path << " and synced to GPU.\n";
 	return true;
 }
+
+bool AI::predict(const Portion& portion, std::vector<float>& output_prediction) {
+	if (!portion.context_window_tokens[portion.buffer_index]) {
+		std::cerr << "[AI Brain] Pinned context buffer is unallocated in portion.\n";
+		return false;
+	}
+
+	synchronize_stream(&gpu_portion, portion.buffer_index);
+
+	const void* tgt_ptr = portion.target_tokens[portion.buffer_index]
+				      ? portion.target_tokens[portion.buffer_index]
+				      : portion.context_window_tokens[portion.buffer_index];
+
+	if (!upload_to_gpu(portion.context_window_tokens[portion.buffer_index],
+			   portion.all_elements,
+			   tgt_ptr,
+			   output_dim,
+			   &gpu_portion,
+			   portion.buffer_index)) {
+		std::cerr << "[AI Brain] Failed to upload context window to GPU for prediction.\n";
+		return false;
+	}
+
+	if (!forward_pass(&gpu_portion,
+			  &gpu_weights,
+			  &gpu_activations,
+			  input_dim,
+			  output_dim,
+			  portion.buffer_index)) {
+		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
+		return false;
+	}
+
+	std::vector<std::bfloat16_t> out_bf16(output_dim);
+	if (!download_output(&gpu_activations, out_bf16.data(), output_dim)) {
+		std::cerr << "[AI Brain] Failed to download prediction activations from GPU.\n";
+		return false;
+	}
+
+	output_prediction.resize(output_dim);
+	for (size_t i = 0; i < output_dim; ++i) {
+		output_prediction[i] = static_cast<float>(out_bf16[i]);
+	}
+
+	return true;
+}
+
+bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
+		 std::vector<float>& output_prediction) {
+	if (context_window.size() != input_dim) {
+		std::cerr << "[AI Brain] Input context dimension (" << context_window.size()
+			  << ") does not match model in_dim (" << input_dim << ").\n";
+		return false;
+	}
+
+	synchronize_stream(&gpu_portion, 0);
+
+	std::vector<std::bfloat16_t> dummy_tgt(output_dim, static_cast<std::bfloat16_t>(0.0f));
+
+	if (!upload_to_gpu(context_window.data(),
+			   context_window.size(),
+			   dummy_tgt.data(),
+			   dummy_tgt.size(),
+			   &gpu_portion,
+			   0)) {
+		std::cerr << "[AI Brain] Failed to upload context vector to GPU for prediction.\n";
+		return false;
+	}
+
+	if (!forward_pass(&gpu_portion,
+			  &gpu_weights,
+			  &gpu_activations,
+			  input_dim,
+			  output_dim,
+			  0)) {
+		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
+		return false;
+	}
+
+	std::vector<std::bfloat16_t> out_bf16(output_dim);
+	if (!download_output(&gpu_activations, out_bf16.data(), output_dim)) {
+		std::cerr << "[AI Brain] Failed to download prediction activations from GPU.\n";
+		return false;
+	}
+
+	output_prediction.resize(output_dim);
+	for (size_t i = 0; i < output_dim; ++i) {
+		output_prediction[i] = static_cast<float>(out_bf16[i]);
+	}
+
+	return true;
+}

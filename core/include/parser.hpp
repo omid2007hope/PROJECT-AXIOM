@@ -157,6 +157,26 @@ public:
 
 	// Standalone parser, isolated from AI!
 	std::vector<std::bfloat16_t> embedding(Input& input, Test& test);
+
+	// Decoder: finds the nearest token ID in the embedding space for a continuous prediction vector
+	uint32_t decode_embedding_to_token(const Input& input, const std::vector<float>& embedding_vector);
+
+	// Formats a discrete token ID back into its human-readable representation
+	std::string token_to_string(const Input& input, uint32_t token_id);
+
+	// Decodes continuous embedding prediction directly to human-readable string
+	std::string decode_prediction(const Input& input, const std::vector<float>& embedding_vector);
+
+	// Ensures the embedding lookup table is populated for all known tokens
+	void build_embedding_table(Input& input);
+
+	// Tokenizes a text prompt string into discrete token IDs, registering any unseen words
+	std::vector<uint32_t> tokenize_prompt(Input& input, const std::string& prompt);
+
+	// Converts a sequence of token IDs into a 128-token context window vector (size = context_tokens * embedding_dim)
+	std::vector<std::bfloat16_t> tokens_to_context_window(const Input& input,
+							       const std::vector<uint32_t>& tokens,
+							       size_t context_tokens = 128);
 };
 
 #endif

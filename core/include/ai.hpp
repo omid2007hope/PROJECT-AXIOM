@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <stdfloat>
 #include <string>
 #include <vector>
 
@@ -81,6 +82,10 @@ public:
 	// Weight persistence methods
 	bool save_weights(const std::string& path = "weights.axiom");
 	bool load_weights(const std::string& path = "weights.axiom");
+
+	// Forward Inference Engine (no gradient updates)
+	bool predict(const Portion& portion, std::vector<float>& output_prediction);
+	bool predict(const std::vector<std::bfloat16_t>& context_window, std::vector<float>& output_prediction);
 };
 
 #endif
