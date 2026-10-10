@@ -113,11 +113,16 @@ private:
 				uint32_t& next_id,
 				Input& input) {
 
-		std::filesystem::path c_standard_fileName(fileName);
+		std::string cleaned_name = fileName;
+		if (cleaned_name.size() >= 2 && cleaned_name.front() == '"' && cleaned_name.back() == '"') {
+			cleaned_name = cleaned_name.substr(1, cleaned_name.size() - 2);
+		}
+
+		std::filesystem::path c_standard_fileName(cleaned_name);
 
 		if (!c_standard_fileName.is_absolute()) {
 			for (const auto& dir : asset_dirs) {
-				const std::filesystem::path each_path = dir / fileName;
+				const std::filesystem::path each_path = dir / cleaned_name;
 				if (std::filesystem::exists(each_path)) {
 					c_standard_fileName = each_path;
 					std::cout << "Found in\n" << c_standard_fileName << "\n";
@@ -126,18 +131,41 @@ private:
 			}
 		}
 
-		std::ifstream parsed_data(c_standard_fileName, std::ios::binary);
+		auto tokenize_single_file = [&](const std::filesystem::path& path) {
+			std::ifstream parsed_data(path, std::ios::binary);
+			if (!parsed_data) {
+				std::cerr << "Failed to open " << path << "\n";
+				return false;
+			}
+			char byte;
+			while (parsed_data.get(byte)) {
+				add_assign_increase(static_cast<uint8_t>(byte), dictionary, next_id, input);
+			}
+			return true;
+		};
 
-		if (!parsed_data) {
+		std::error_code ec;
+		if (std::filesystem::is_directory(c_standard_fileName, ec)) {
+			bool found_any = false;
+			for (const auto& entry : std::filesystem::directory_iterator(c_standard_fileName, ec)) {
+				if (entry.is_regular_file(ec)) {
+					if (tokenize_single_file(entry.path())) {
+						found_any = true;
+					}
+				}
+			}
+			if (!found_any) {
+				std::cerr << "Failed to open or find files in " << c_standard_fileName << "\n";
+			}
+			return;
+		}
+
+		if (!std::filesystem::exists(c_standard_fileName, ec)) {
 			std::cerr << "Failed to open " << c_standard_fileName << "\n";
 			return;
 		}
 
-		// Stream directly from disk to avoid loading massive files into memory
-		char byte;
-		while (parsed_data.get(byte)) {
-			add_assign_increase(static_cast<uint8_t>(byte), dictionary, next_id, input);
-		}
+		tokenize_single_file(c_standard_fileName);
 	}
 
 public:

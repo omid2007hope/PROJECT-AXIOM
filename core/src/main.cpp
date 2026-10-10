@@ -184,6 +184,33 @@ T Validate(const std::string& c_out) {
 	}
 }
 
+// Validates a single file or directory path, preserving whitespace and stripping quotes
+std::vector<std::string> ValidatePaths(const std::string& c_out) {
+	std::string c_in;
+	while (true) {
+		std::cout << c_out << "\n";
+		if (!std::getline(std::cin, c_in)) {
+			std::cin.clear();
+			std::cerr << "\n[!] Input stream closed. Exiting.\n";
+			std::exit(1);
+		}
+		size_t start = c_in.find_first_not_of(" \t\r\n");
+		if (start == std::string::npos) {
+			std::cout << "[!] Invalid input. Please try again.\n";
+			continue;
+		}
+		size_t end = c_in.find_last_not_of(" \t\r\n");
+		std::string trimmed = c_in.substr(start, end - start + 1);
+		if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
+			trimmed = trimmed.substr(1, trimmed.size() - 2);
+		}
+		if (!trimmed.empty()) {
+			return {trimmed};
+		}
+		std::cout << "[!] Invalid input. Please try again.\n";
+	}
+}
+
 // fetch arguments
 std::string fetch_argument(int count, char* argument[]) {
 	return count > 1 ? std::string(argument[1]) : std::string();
@@ -241,11 +268,11 @@ AppMode collect_user_input(Input& input) {
 	} else if (type == 2) {
 		input.user_numbers = Validate<std::vector<double>>("Enter Number: ");
 	} else if (type == 3) {
-		input.user_image_paths = Validate<std::vector<std::string>>("Enter Image Path: ");
+		input.user_image_paths = ValidatePaths("Enter Image Path: ");
 	} else if (type == 4) {
-		input.user_video_paths = Validate<std::vector<std::string>>("Enter Video Path: ");
+		input.user_video_paths = ValidatePaths("Enter Video Path: ");
 	} else if (type == 5) {
-		input.user_voice_paths = Validate<std::vector<std::string>>("Enter Voice Path: ");
+		input.user_voice_paths = ValidatePaths("Enter Voice Path: ");
 	} else {
 		std::cout << "\n[!] Invalid data type.\n";
 		return AppMode::Exit;
@@ -595,6 +622,11 @@ bool run_tests() {
 
 // main function
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+	SetConsoleOutputCP(CP_UTF8);
+	SetConsoleCP(CP_UTF8);
+#endif
+
 	const std::string arg = fetch_argument(argc, argv);
 	const bool is_interactive = arg.empty();
 
@@ -686,6 +718,13 @@ int main(int argc, char* argv[]) {
 	// *********************************************************
 	std::cout << "[..] Parsing and tokenizing multimodal data...\n";
 	parser.tokenization(input, test);
+	if (input.tokenized_data.empty()) {
+		std::cerr << "[!] No data could be tokenized from the specified input.\n";
+		if (is_interactive) {
+			pause_exit();
+		}
+		return 1;
+	}
 	parser.embedding(input, test);
 	parser.build_embedding_table(input);
 	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
