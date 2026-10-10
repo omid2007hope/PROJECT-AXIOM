@@ -177,9 +177,9 @@ To guarantee a fast, disciplined V1.0 launch, the project scope is clearly segme
 ## 5. Master Action Checklist to V1.0
 
 ### Phase A: Persistence
-- [ ] Implement `AI::save_weights()` in `core/src/ai.cpp`
-- [ ] Implement `AI::load_weights()` in `core/src/ai.cpp`
-- [ ] Add unit test for weight serialization round-trip in `core/test/test_ai.cpp`
+- [x] Implement `AI::save_weights()` in `core/src/ai.cpp`
+- [x] Implement `AI::load_weights()` in `core/src/ai.cpp`
+- [x] Add unit test for weight serialization round-trip in `core/test/test_ai.cpp`
 
 ### Phase B: Inference & Interactive Loop
 - [ ] Implement forward-only inference method in `ai.cpp`
