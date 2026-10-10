@@ -32,6 +32,11 @@ extern "C" CUDA_API bool download_from_gpu(void* h_context,
 			return false;
 	}
 
+	if (gpu->stream[buffer_index]) {
+		if (!CUDA_CHECK(cudaStreamSynchronize((cudaStream_t)gpu->stream[buffer_index])))
+			return false;
+	}
+
 	return true;
 }
 

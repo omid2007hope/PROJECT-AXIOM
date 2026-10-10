@@ -39,7 +39,7 @@ private:
 	size_t input_dim;
 	size_t output_dim;
 
-	// Bounds of the uniform distr      ibution used to initialize the weights
+	// Bounds of the uniform distribution used to initialize the weights
 	float weight_min;
 	float weight_max;
 
@@ -47,6 +47,9 @@ private:
 	size_t pending_steps = 0;
 
 public:
+	AI(const AI&) = delete;
+	AI& operator=(const AI&) = delete;
+
 	// CPU Memory (High precision float for initialization and updates)
 	std::vector<float> h_weights;
 	std::vector<float> h_bias;

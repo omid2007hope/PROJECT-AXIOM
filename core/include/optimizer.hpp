@@ -124,15 +124,26 @@ struct Portion {
 		return true;
 	}
 
+	Portion(const Portion&) = delete;
+	Portion& operator=(const Portion&) = delete;
+
+	~Portion() {
+		free_pinned();
+	}
+
 	// Release pinned host memory. Safe to call even if allocate_pinned() was
 	// never called (pinned_free checks for nullptr internally).
 	void free_pinned() {
 		for (int i = 0; i < 2; ++i) {
-			pinned_free(context_window_tokens[i]);
-			context_window_tokens[i] = nullptr;
+			if (context_window_tokens[i]) {
+				pinned_free(context_window_tokens[i]);
+				context_window_tokens[i] = nullptr;
+			}
 
-			pinned_free(target_tokens[i]);
-			target_tokens[i] = nullptr;
+			if (target_tokens[i]) {
+				pinned_free(target_tokens[i]);
+				target_tokens[i] = nullptr;
+			}
 		}
 	}
 };

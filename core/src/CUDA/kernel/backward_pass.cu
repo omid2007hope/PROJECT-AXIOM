@@ -92,7 +92,8 @@ extern "C" CUDA_API bool backward_pass(const GpuPortion* gpu_portion,
 	if (!gpu_portion || !gpu_weights || !gpu_activations ||
 	    !gpu_portion->d_context_window[buffer_index] || !gpu_portion->d_target[buffer_index] ||
 	    !gpu_weights->d_weights || !gpu_weights->d_bias || !gpu_weights->d_weights_master ||
-	    !gpu_weights->d_bias_master || !gpu_activations->d_output || !gpu_activations->d_loss) {
+	    !gpu_weights->d_bias_master || !gpu_activations->d_output || !gpu_activations->d_loss ||
+	    input_dim == 0 || output_dim == 0) {
 		return false;
 	}
 

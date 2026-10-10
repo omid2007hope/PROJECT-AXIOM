@@ -125,7 +125,7 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 	// Safe Guard
 	if (!gpu_portion || !gpu_weights || !gpu_activations ||
 	    !gpu_portion->d_context_window[buffer_index] || !gpu_weights->d_weights ||
-	    !gpu_weights->d_bias) {
+	    !gpu_weights->d_bias || input_dim == 0 || output_dim == 0) {
 		return false;
 	}
 

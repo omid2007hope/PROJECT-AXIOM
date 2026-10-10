@@ -745,9 +745,11 @@ int main(int argc, char* argv[]) {
 	const std::filesystem::path embedded_path =
 		core_dir / config::database_folder / config::embedded_file;
 	const std::filesystem::path weights_path =
-		std::filesystem::exists(config::weights_file)
-			? std::filesystem::path(config::weights_file)
-			: (core_dir / config::weights_file);
+		std::filesystem::exists(core_dir / config::weights_file)
+			? (core_dir / config::weights_file)
+			: (std::filesystem::exists(config::weights_file)
+				   ? std::filesystem::path(config::weights_file)
+				   : (core_dir / config::weights_file));
 	const std::vector<std::filesystem::path> asset_dirs = {core_dir / config::asset_folder};
 
 	Parser parser(developer_mode, embedded_path, asset_dirs);

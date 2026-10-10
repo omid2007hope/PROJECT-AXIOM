@@ -90,7 +90,10 @@ private:
 	template <typename T>
 	void save_data(const std::vector<T>& data, const std::filesystem::path& full_path) {
 		// Create the output folder (and any subfolders) if they don't exist
-		std::filesystem::create_directories(full_path.parent_path());
+		if (!full_path.parent_path().empty()) {
+			std::error_code ec;
+			std::filesystem::create_directories(full_path.parent_path(), ec);
+		}
 
 		// Use full_path for the file stream
 		std::ofstream out_file(full_path, std::ios::binary | std::ios::trunc);

@@ -21,7 +21,7 @@ void Optimizer::disk_to_ram(Portion& portion) {
 			file_stream.open(data_path, std::ios::binary);
 			if (!file_stream) {
 				std::cerr << "Failed to open " << data_path << "\n";
-				portion.buffer_in_use = false; // release lock so callers can retry
+				portion.buffer_in_use.store(false, std::memory_order_release); // release lock so callers can retry
 				return;
 			}
 		}

@@ -137,13 +137,21 @@ public:
 
 		// Memory Bandwidth = (parameters * 2 bytes (BF16) * token_count) / time
 		double bytes_moved = static_cast<double>(total_model_parameters) * 2.0 * std::max(1, token_count);
-		double bandwidth_gb_s = (bytes_moved / 1e9) / (total_gpu_ms / 1000.0f);
-		float bandwidth_pct = static_cast<float>((bandwidth_gb_s / specs.peak_bandwidth_gb_s) * 100.0);
+		double bandwidth_gb_s = (total_gpu_ms > 0.0f)
+					? (bytes_moved / 1e9) / (total_gpu_ms / 1000.0f)
+					: 0.0;
+		float bandwidth_pct = (specs.peak_bandwidth_gb_s > 0.0)
+					? static_cast<float>((bandwidth_gb_s / specs.peak_bandwidth_gb_s) * 100.0)
+					: 0.0f;
 
 		// FLOPs = 2 * parameters * tokens (1 multiply, 1 add per weight)
 		double flops = 2.0 * static_cast<double>(total_model_parameters) * std::max(1, token_count);
-		double achieved_tflops = (flops / 1e12) / (total_gpu_ms / 1000.0f);
-		float mfu_pct = static_cast<float>((achieved_tflops / specs.peak_dense_tflops) * 100.0);
+		double achieved_tflops = (total_gpu_ms > 0.0f)
+					? (flops / 1e12) / (total_gpu_ms / 1000.0f)
+					: 0.0;
+		float mfu_pct = (specs.peak_dense_tflops > 0.0)
+					? static_cast<float>((achieved_tflops / specs.peak_dense_tflops) * 100.0)
+					: 0.0f;
 
 		std::string arch_tag = "sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
