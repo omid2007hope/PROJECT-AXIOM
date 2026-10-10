@@ -116,6 +116,15 @@ int read_choice() {
 	return choice;
 }
 
+// Pauses and waits for a key press before console window closes
+void pause_exit() {
+	std::cout << "\nPress any key to exit...\n";
+	while (_kbhit()) {
+		_getch();
+	}
+	_getch();
+}
+
 // Validates a single whitespace-free token
 template <typename E>
 bool parse_token(const std::string& token, E& value) {
@@ -587,6 +596,7 @@ bool run_tests() {
 // main function
 int main(int argc, char* argv[]) {
 	const std::string arg = fetch_argument(argc, argv);
+	const bool is_interactive = arg.empty();
 
 	if (arg == "--test") {
 		return run_tests() ? 0 : 1;
@@ -657,7 +667,9 @@ int main(int argc, char* argv[]) {
 			return 0;
 		}
 		if (mode == AppMode::Test) {
-			return run_tests() ? 0 : 1;
+			const bool ok = run_tests();
+			pause_exit();
+			return ok ? 0 : 1;
 		}
 		if (mode == AppMode::Use || mode == AppMode::Benchmark) {
 			developer_mode = true;
@@ -691,6 +703,9 @@ int main(int argc, char* argv[]) {
 
 	if (!ai.upload_weights_to_gpu()) {
 		std::cerr << "[!] Failed to upload the AI weights to VRAM.\n";
+		if (is_interactive) {
+			pause_exit();
+		}
 		return 1;
 	}
 
@@ -699,11 +714,17 @@ int main(int argc, char* argv[]) {
 	// *********************************************************
 	if (mode == AppMode::Use) {
 		run_inference_engine(ai, parser, input, weights_path);
+		if (is_interactive) {
+			pause_exit();
+		}
 		return 0;
 	}
 
 	if (mode == AppMode::Benchmark) {
 		run_hardware_benchmark(ai, parser, input);
+		if (is_interactive) {
+			pause_exit();
+		}
 		return 0;
 	}
 
@@ -715,6 +736,9 @@ int main(int argc, char* argv[]) {
 	std::cout << "[..] Optimizing data and loading to RAM...\n";
 	if (!portion.allocate_pinned()) {
 		std::cerr << "[!] Failed to allocate pinned host memory.\n";
+		if (is_interactive) {
+			pause_exit();
+		}
 		return 1;
 	}
 
@@ -724,6 +748,9 @@ int main(int argc, char* argv[]) {
 		std::cerr << "[!] Not enough data in " << embedded_path
 			  << " to fill one context window.\n";
 		portion.free_pinned();
+		if (is_interactive) {
+			pause_exit();
+		}
 		return 1;
 	}
 
@@ -739,5 +766,8 @@ int main(int argc, char* argv[]) {
 	run_training_loop(ai, optimizer, portion, ai_elements, weights_path, max_steps);
 
 	portion.free_pinned();
+	if (is_interactive) {
+		pause_exit();
+	}
 	return 0;
 }
