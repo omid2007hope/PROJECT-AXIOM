@@ -13,6 +13,7 @@
 #define NOMINMAX // keep <windows.h> from defining min()/max() macros
 
 #include <conio.h> // For _kbhit() and _getch()
+#include <io.h>    // For _isatty() and _fileno()
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -119,6 +120,9 @@ int read_choice() {
 
 // Pauses and waits for a key press before console window closes
 void pause_exit() {
+	if (!_isatty(_fileno(stdin))) {
+		return;
+	}
 	std::cout << "\nPress any key to exit...\n";
 	while (_kbhit()) {
 		_getch();
@@ -286,12 +290,27 @@ AppMode collect_user_input(Input& input) {
 		const int media = read_choice();
 
 		if (media == 1) {
-			// For later
-			std::cout << "\n[!] Adding media is not available yet.\n";
-			return AppMode::Exit;
+			std::cout << "\nSelect Media Type:\n"
+				  << "[1] Image\n"
+				  << "[2] Video\n"
+				  << "[3] Voice\n"
+				  << "> ";
+
+			const int media_type = read_choice();
+
+			if (media_type == 1) {
+				input.user_image_paths = ValidatePaths("Enter Image Path: ");
+			} else if (media_type == 2) {
+				input.user_video_paths = ValidatePaths("Enter Video Path: ");
+			} else if (media_type == 3) {
+				input.user_voice_paths = ValidatePaths("Enter Voice Path: ");
+			} else {
+				std::cout << "\n[!] Invalid media type.\n";
+				return AppMode::Exit;
+			}
 		}
 
-		if (media != 2) {
+		else if (media != 2) {
 			std::cout << "\n[!] Invalid option.\n";
 			return AppMode::Exit;
 		}
@@ -549,8 +568,23 @@ void run_training_loop(AI& ai,
 
 	while (true) {
 		// Check for interactive user commands without blocking
+		char ch = 0;
 		if (_kbhit()) {
-			char ch = _getch();
+			ch = _getch();
+		} else if (!_isatty(_fileno(stdin))) {
+			if (std::cin.peek() != EOF) {
+				char c;
+				if (std::cin.get(c)) {
+					ch = c;
+				}
+			} else if (max_steps == 0 && step >= 20) {
+				std::cout << "\n[!] Stream input EOF reached. Exiting training loop...\n";
+				ai.save_weights(weights_path.string());
+				break;
+			}
+		}
+
+		if (ch != 0) {
 			if (ch == 'r' || ch == 'R') {
 				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
 				ai.reset_weights(elements);
