@@ -1009,6 +1009,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
 	parser.embedding(input, test);
 	parser.build_embedding_table(input);
 	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
