@@ -10,8 +10,9 @@ core_dir = os.path.dirname(os.path.abspath(__file__))
 asset_sample_dir = os.path.join(core_dir, "asset_sample")
 archive_dir = os.path.join(asset_sample_dir, "archive")
 test_code_file = os.path.join(asset_sample_dir, "codebase_sample.txt")
-vocab_file = os.path.join(core_dir, "vocab.axiom")
-weights_file = os.path.join(core_dir, "weights.axiom")
+models_dir = os.path.join(core_dir, "database", "models")
+vocab_file = os.path.join(models_dir, "vocab.axiom")
+weights_file = os.path.join(models_dir, "weights.axiom")
 
 print("=" * 60)
 print("  PROJECT AXIOM: SELF-LEARNING C++ CODEBASE CONVERGENCE TEST")
@@ -81,6 +82,10 @@ namespace axiom {
         print(train_proc.stderr)
 
     assert train_proc.returncode == 0, f"Training failed with code {train_proc.returncode}"
+    if not os.path.exists(vocab_file):
+        vocab_file = os.path.join(core_dir, "vocab.axiom")
+    if not os.path.exists(weights_file):
+        weights_file = os.path.join(core_dir, "weights.axiom")
     assert os.path.exists(vocab_file), "vocab.axiom was not created!"
     assert os.path.exists(weights_file), "weights.axiom was not created!"
 

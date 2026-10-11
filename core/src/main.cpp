@@ -69,6 +69,7 @@ constexpr float weight_max = 0.1f;
 
 // Folder layout, relative to the core/ folder
 constexpr const char* database_folder = "database";
+constexpr const char* models_folder = "models";
 constexpr const char* embedded_file = "embedded_data.bin";
 constexpr const char* asset_folder = "asset_sample";
 constexpr const char* weights_file = "weights.axiom";
@@ -1246,6 +1247,11 @@ int main(int argc, char* argv[]) {
 	const std::filesystem::path embedded_path =
 		core_dir / config::database_folder / config::embedded_file;
 
+	const std::filesystem::path models_dir =
+		core_dir / config::database_folder / config::models_folder;
+	std::error_code models_ec;
+	std::filesystem::create_directories(models_dir, models_ec);
+
 	std::filesystem::path weights_path;
 	if (!custom_weights_path.empty()) {
 		if (std::filesystem::exists(custom_weights_path)) {
@@ -1256,12 +1262,15 @@ int main(int argc, char* argv[]) {
 			weights_path = custom_weights_path;
 		}
 	} else {
-		weights_path =
-			std::filesystem::exists(core_dir / config::weights_file)
-				? (core_dir / config::weights_file)
-				: (std::filesystem::exists(config::weights_file)
-					   ? std::filesystem::path(config::weights_file)
-					   : (core_dir / config::weights_file));
+		const std::filesystem::path default_weights = models_dir / config::weights_file;
+		const std::filesystem::path legacy_weights = core_dir / config::weights_file;
+		if (std::filesystem::exists(default_weights)) {
+			weights_path = default_weights;
+		} else if (std::filesystem::exists(legacy_weights)) {
+			weights_path = legacy_weights;
+		} else {
+			weights_path = default_weights;
+		}
 	}
 
 	std::filesystem::path vocab_path;
@@ -1274,12 +1283,15 @@ int main(int argc, char* argv[]) {
 			vocab_path = custom_vocab_path;
 		}
 	} else {
-		vocab_path =
-			std::filesystem::exists(core_dir / config::vocab_file)
-				? (core_dir / config::vocab_file)
-				: (std::filesystem::exists(config::vocab_file)
-					   ? std::filesystem::path(config::vocab_file)
-					   : (core_dir / config::vocab_file));
+		const std::filesystem::path default_vocab = models_dir / config::vocab_file;
+		const std::filesystem::path legacy_vocab = core_dir / config::vocab_file;
+		if (std::filesystem::exists(default_vocab)) {
+			vocab_path = default_vocab;
+		} else if (std::filesystem::exists(legacy_vocab)) {
+			vocab_path = legacy_vocab;
+		} else {
+			vocab_path = default_vocab;
+		}
 	}
 
 	const std::filesystem::path asset_dir =
