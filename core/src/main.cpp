@@ -815,7 +815,25 @@ void run_training_loop(AI& ai,
 	}
 }
 
-bool run_tests() {
+// After the tests, put the live brain back on its saved checkpoint, or into a
+// pristine chaotic state when no usable checkpoint exists yet.
+void restore_brain(AI& ai, Elements& elements, const std::filesystem::path& weights_path) {
+	if (std::filesystem::exists(weights_path) && ai.load_weights(weights_path.string())) {
+		std::cout << "[OK] Live brain restored from checkpoint: "
+			  << weights_path.filename().string() << "\n";
+		return;
+	}
+
+	ai.reset_weights(elements);
+	if (ai.upload_weights_to_gpu()) {
+		std::cout << "[OK] No checkpoint found: live brain reset to a pristine chaotic state.\n";
+	} else {
+		std::cerr << "[!] Could not upload the reset weights to VRAM.\n";
+	}
+}
+
+// embedded_path is the temporary file the tests generate; it is removed at the end.
+bool run_tests(const std::filesystem::path& embedded_path) {
 	bool all_ok = true;
 
 	std::cout << "--- test_path AI ---\n";
@@ -845,6 +863,12 @@ bool run_tests() {
 	std::cout << "--- test_inference AI ---\n";
 	all_ok &= test_inference();
 
+	// The tests are done with the generated embedding stream
+	std::error_code cleanup_ec;
+	if (std::filesystem::remove(embedded_path, cleanup_ec)) {
+		std::cout << "\n[OK] Test artifact removed: " << embedded_path.filename().string() << "\n";
+	}
+
 	std::cout << "\n============================================\n";
 	if (all_ok) {
 		std::cout << "  ALL TEST SUITES PASSED (100% GREEN)       \n";
@@ -855,6 +879,33 @@ bool run_tests() {
 
 	return all_ok;
 }
+
+// embedded_data.bin is only a bridge between the raw assets and the GPU. Once the
+// session ends, the knowledge lives in the saved weights and vocabulary, so the
+// bridge is deleted. Runs on every exit path; calling run() twice is harmless.
+struct EmbeddedDataCleanup {
+	Optimizer& optimizer;
+	Portion& portion;
+	const std::filesystem::path& path;
+
+	void run() {
+		// Windows cannot delete a file that is still open, and the next session
+		// must start reading from the top of a fresh file.
+		optimizer.close_stream();
+		portion.ram_buffer_tokens.clear();
+		portion.offset = 0;
+
+		std::error_code ec;
+		if (std::filesystem::remove(path, ec)) {
+			std::cout << "[OK] Temporary embedding stream removed: " << path.filename().string()
+				  << "\n";
+		}
+	}
+
+	~EmbeddedDataCleanup() {
+		run();
+	}
+};
 
 // Executes a full training pipeline session (interactive or CLI)
 bool execute_training_session(AI& ai,
@@ -935,6 +986,8 @@ bool execute_training_session(AI& ai,
 		}
 	}
 
+	EmbeddedDataCleanup embedded_cleanup {optimizer, portion, embedded_path};
+
 	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
 	parser.embedding(input, test);
 	parser.build_embedding_table(input);
@@ -974,6 +1027,7 @@ bool execute_training_session(AI& ai,
 	run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path, vocab_path, max_steps);
 
 	portion.free_pinned();
+	embedded_cleanup.run();
 
 	if (mode == AppMode::BulkTrain) {
 		std::cout << "\n========================================================\n"
@@ -1123,7 +1177,7 @@ int main(int argc, char* argv[]) {
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
 		if (a == "--test") {
-			return run_tests() ? 0 : 1;
+			return run_tests(locate_core_dir() / config::database_folder / config::embedded_file) ? 0 : 1;
 		}
 		if (a == "--help" || a == "-h") {
 			std::cout << "========================================================\n"
@@ -1330,7 +1384,9 @@ int main(int argc, char* argv[]) {
 
 	if (!is_interactive) {
 		if (mode == AppMode::Test) {
-			return run_tests() ? 0 : 1;
+			const bool tests_ok = run_tests(embedded_path);
+			restore_brain(ai, ai_elements, weights_path);
+			return tests_ok ? 0 : 1;
 		}
 		if (mode == AppMode::Use) {
 			run_inference_engine(ai, parser, input, weights_path, vocab_path);
@@ -1361,7 +1417,8 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (selected_mode == AppMode::Test) {
-			run_tests();
+			run_tests(embedded_path);
+			restore_brain(ai, ai_elements, weights_path);
 			pause_menu();
 			continue;
 		}
