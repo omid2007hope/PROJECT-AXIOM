@@ -36,6 +36,23 @@ bool test_tokenization() {
 	test_check(!bulk_input.image_dictionary.empty(), "bulk_tokenize_directory populates image namespace", s_pass, s_fail);
 	test_check(!bulk_input.video_dictionary.empty(), "bulk_tokenize_directory populates video namespace", s_pass, s_fail);
 	test_check(!bulk_input.voice_dictionary.empty(), "bulk_tokenize_directory populates voice namespace", s_pass, s_fail);
+	test_check_eq(bulk_parser.get_last_bulk_files().size(), files_processed, "bulk_parser tracks all processed bulk files", s_pass, s_fail);
+
+	// Test archive exclusion: files placed in archive/ are ignored
+	std::error_code ec;
+	const std::filesystem::path test_archive_dir = test_asset_dirs()[0] / "archive";
+	std::filesystem::create_directories(test_archive_dir, ec);
+	const std::filesystem::path dummy_archive_file = test_archive_dir / "ignored_dummy.txt";
+	{
+		std::ofstream dummy_out(dummy_archive_file);
+		dummy_out << "archived content should be ignored by bulk tokenizer";
+	}
+	Input archive_test_input;
+	archive_test_input.embedding_dim = input.embedding_dim;
+	size_t archive_test_processed = bulk_parser.bulk_tokenize_directory(test_asset_dirs()[0], archive_test_input);
+	test_check_eq(archive_test_processed, files_processed, "bulk_tokenize_directory strictly ignores archive folder", s_pass, s_fail);
+	std::filesystem::remove(dummy_archive_file, ec);
+	std::filesystem::remove(test_archive_dir, ec);
 
 	// Non-existent directory handling
 	Input missing_input;

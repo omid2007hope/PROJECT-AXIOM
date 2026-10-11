@@ -14,6 +14,7 @@
 
 #include <conio.h> // For _kbhit() and _getch()
 #include <io.h>    // For _isatty() and _fileno()
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -578,19 +579,30 @@ void run_training_loop(AI& ai,
 		if (_kbhit()) {
 			ch = _getch();
 		} else if (!_isatty(_fileno(stdin))) {
-			HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
-			DWORD bytesAvail = 0;
-			if (PeekNamedPipe(hStdin, NULL, 0, NULL, &bytesAvail, NULL)) {
-				if (bytesAvail > 0) {
-					char c;
-					if (std::cin.get(c)) {
+			while (std::cin.rdbuf()->in_avail() > 0) {
+				char c;
+				if (std::cin.get(c)) {
+					if (c == 'q' || c == 'Q' || c == 's' || c == 'S' || c == 'r' || c == 'R') {
 						ch = c;
+						break;
 					}
 				}
-			} else if (max_steps == 0 && step >= 20) {
-				std::cout << "\n[!] Stream input EOF reached. Exiting training loop...\n";
-				ai.save_weights(weights_path.string());
-				break;
+			}
+			if (ch == 0) {
+				HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+				DWORD bytesAvail = 0;
+				if (PeekNamedPipe(hStdin, NULL, 0, NULL, &bytesAvail, NULL)) {
+					if (bytesAvail > 0) {
+						char c;
+						if (std::cin.get(c)) {
+							ch = c;
+						}
+					} else if (max_steps == 0 && step >= 20) {
+						ch = 'q';
+					}
+				} else if (max_steps == 0 && step >= 20) {
+					ch = 'q';
+				}
 			}
 		}
 
@@ -695,6 +707,7 @@ bool run_tests() {
 
 // main function
 int main(int argc, char* argv[]) {
+	std::ios::sync_with_stdio(false);
 #ifdef _WIN32
 	SetConsoleOutputCP(CP_UTF8);
 	SetConsoleCP(CP_UTF8);
@@ -944,11 +957,80 @@ int main(int argc, char* argv[]) {
 		std::cout << "\n========================================================\n"
 			  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
 			  << "========================================================\n"
-			  << "[OK] Model weights safely saved to: " << weights_path.filename().string() << "\n"
-			  << "[i] You may now remove files from 'asset_sample',\n"
-			  << "    add new training data, and run Bulk Training again\n"
-			  << "    to continuously fine-tune the model.\n"
-			  << "========================================================\n";
+			  << "[OK] Model weights safely saved to: " << weights_path.filename().string() << "\n";
+
+		const auto& bulk_files = parser.get_last_bulk_files();
+		if (is_interactive && !bulk_files.empty()) {
+			std::cout << "\nProcessed Asset Management (" << bulk_files.size() << " file"
+				  << (bulk_files.size() == 1 ? "" : "s") << "):\n"
+				  << "  [1] Keep files in asset_sample/ (Default)\n"
+				  << "  [2] Archive processed files to asset_sample/archive/\n"
+				  << "  [3] Purge (Delete) processed files from asset_sample/\n"
+				  << "> ";
+
+			int cleanup_choice = read_choice();
+			if (cleanup_choice <= 0 || cleanup_choice > 3) {
+				cleanup_choice = 1;
+			}
+
+			if (cleanup_choice == 2) {
+				const std::filesystem::path archive_dir = (core_dir / config::asset_folder) / "archive";
+				std::error_code ec;
+				std::filesystem::create_directories(archive_dir, ec);
+				size_t archived_count = 0;
+				for (const auto& fpath : bulk_files) {
+					if (std::filesystem::exists(fpath, ec)) {
+						std::filesystem::path dest = archive_dir / fpath.filename();
+						if (std::filesystem::exists(dest, ec)) {
+							std::string stem = fpath.stem().string();
+							std::string ext = fpath.extension().string();
+							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
+						}
+						std::filesystem::rename(fpath, dest, ec);
+						if (ec) {
+							ec.clear();
+							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
+							if (!ec) {
+								std::filesystem::remove(fpath, ec);
+								++archived_count;
+							}
+						} else {
+							++archived_count;
+						}
+					}
+				}
+				std::cout << "[OK] Successfully archived " << archived_count
+					  << " file(s) to " << archive_dir.string() << "\n";
+			} else if (cleanup_choice == 3) {
+				std::cout << "\n[!] WARNING: This will permanently delete " << bulk_files.size()
+					  << " file(s) from " << (core_dir / config::asset_folder).string() << "!\n"
+					  << "Are you sure you want to proceed? (y/N): ";
+				char confirm = 0;
+				if (std::cin >> confirm) {
+					safeCin();
+				}
+				if (confirm == 'y' || confirm == 'Y') {
+					size_t purged_count = 0;
+					for (const auto& fpath : bulk_files) {
+						std::error_code ec;
+						if (std::filesystem::remove(fpath, ec)) {
+							++purged_count;
+						}
+					}
+					std::cout << "[OK] Successfully purged " << purged_count
+						  << " file(s) from asset_sample/.\n";
+				} else {
+					std::cout << "[i] Purge cancelled. Preserving all files in asset_sample/.\n";
+				}
+			} else {
+				std::cout << "[i] Keeping all processed files in asset_sample/.\n";
+			}
+		} else {
+			std::cout << "[i] You may now remove files from 'asset_sample',\n"
+				  << "    add new training data, and run Bulk Training again\n"
+				  << "    to continuously fine-tune the model.\n";
+		}
+		std::cout << "========================================================\n";
 	}
 
 	if (is_interactive) {

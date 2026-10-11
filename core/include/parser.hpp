@@ -69,6 +69,9 @@ private:
 	// Folders searched for relative media file names; decided by the caller.
 	std::vector<std::filesystem::path> asset_dirs;
 
+	// Files processed in the last bulk tokenization
+	std::vector<std::filesystem::path> last_bulk_files = {};
+
 	// ********************
 	// add to dictionaries
 	// ********************
@@ -135,17 +138,50 @@ private:
 		}
 
 		auto tokenize_single_file = [&](const std::filesystem::path& path) {
+			std::error_code ec;
+			uintmax_t fsize = std::filesystem::file_size(path, ec);
+			if (ec) fsize = 0;
 			std::ifstream parsed_data(path, std::ios::binary);
 			if (!parsed_data) {
 				std::cerr << "Failed to open " << path << "\n";
 				return false;
 			}
 			char buf[65536];
+			uintmax_t bytes_read = 0;
+			uintmax_t last_progress_bytes = 0;
+			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+
 			while (parsed_data.read(buf, sizeof(buf)) || parsed_data.gcount() > 0) {
 				std::streamsize n = parsed_data.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
 					add_assign_increase(static_cast<uint8_t>(buf[i]), dictionary, next_id, input);
 				}
+				bytes_read += static_cast<uintmax_t>(n);
+				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read == fsize)) {
+					last_progress_bytes = bytes_read;
+					const double pct = (fsize > 0)
+						? (static_cast<double>(bytes_read) / static_cast<double>(fsize)) * 100.0
+						: 100.0;
+					constexpr int bar_w = 24;
+					const int filled = static_cast<int>((pct / 100.0) * bar_w);
+					std::string bar = "[";
+					for (int b = 0; b < bar_w; ++b) {
+						if (b < filled) {
+							bar += '=';
+						} else if (b == filled && filled < bar_w) {
+							bar += '>';
+						} else {
+							bar += ' ';
+						}
+					}
+					bar += "]";
+					std::cout << "\r  [..] Ingesting " << path.filename().string() << " " << bar << " "
+						  << std::fixed << std::setprecision(1) << pct << "%"
+						  << std::flush;
+				}
+			}
+			if (show_progress) {
+				std::cout << "\r                                                                                \r";
 			}
 			return true;
 		};
@@ -191,6 +227,11 @@ public:
 
 	// Bulk directory parser: scans and tokenizes all files in a folder (Text, PDF, Images, Video, Audio, 3D Models)
 	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input);
+
+	// Returns the list of files processed in the most recent bulk tokenization run
+	const std::vector<std::filesystem::path>& get_last_bulk_files() const {
+		return last_bulk_files;
+	}
 
 	// Standalone parser, isolated from AI!
 	std::vector<std::bfloat16_t> embedding(Input& input, Test& test);

@@ -142,14 +142,35 @@ scenarios = [
         ]
     },
     {
-        "name": "14. Bulk Training: asset_sample [5]",
+        "name": "14. Bulk Training: asset_sample [5] (Default Keep)",
         "inputs": "5\nq\n",
         "expected": [
             "AXIOM BULK TRAINING MODE",
             "Target Directory",
             "Vocabulary prepared:",
             "Beginning continuous training loop...",
-            "[OK] Model weights safely saved to:"
+            "[OK] Model weights safely saved to:",
+            "Processed Asset Management"
+        ]
+    },
+    {
+        "name": "15. Bulk Training: Asset Management [1] Keep Files",
+        "inputs": "5\nq\n1\n",
+        "expected": [
+            "Processed Asset Management",
+            "[1] Keep files in asset_sample/ (Default)",
+            "[2] Archive processed files to asset_sample/archive/",
+            "[3] Purge (Delete) processed files from asset_sample/",
+            "Keeping all processed files in asset_sample/"
+        ]
+    },
+    {
+        "name": "16. Bulk Training: Asset Management [3] Purge -> Cancel [N]",
+        "inputs": "5\nq\n3\nn\n",
+        "expected": [
+            "Processed Asset Management",
+            "WARNING: This will permanently delete",
+            "Purge cancelled. Preserving all files in asset_sample/."
         ]
     }
 ]

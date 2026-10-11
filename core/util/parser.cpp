@@ -255,13 +255,45 @@ static std::string format_file_size(uintmax_t bytes) {
 		oss << bytes << " B";
 	} else if (bytes < 1024 * 1024) {
 		oss << std::fixed << std::setprecision(1) << (bytes / 1024.0) << " KB";
+	} else if (bytes < 1024ULL * 1024ULL * 1024ULL) {
+		oss << std::fixed << std::setprecision(1) << (bytes / (1024.0 * 1024.0)) << " MB";
 	} else {
-		oss << std::fixed << std::setprecision(1) << (bytes / 1024.0 / 1024.0) << " MB";
+		oss << std::fixed << std::setprecision(2) << (bytes / (1024.0 * 1024.0 * 1024.0)) << " GB";
 	}
 	return oss.str();
 }
 
+static void print_progress_bar(const std::string& filename,
+			       const std::string& action,
+			       uintmax_t current_bytes,
+			       uintmax_t total_bytes) {
+	const double pct = (total_bytes > 0)
+		? std::min(100.0, (static_cast<double>(current_bytes) / static_cast<double>(total_bytes)) * 100.0)
+		: 100.0;
+	constexpr int bar_width = 24;
+	const int filled = static_cast<int>((pct / 100.0) * bar_width);
+
+	std::string bar = "[";
+	for (int i = 0; i < bar_width; ++i) {
+		if (i < filled) {
+			bar += '=';
+		} else if (i == filled && filled < bar_width) {
+			bar += '>';
+		} else {
+			bar += ' ';
+		}
+	}
+	bar += "]";
+
+	std::cout << "\r  [..] " << action << " " << filename << " " << bar << " "
+		  << std::fixed << std::setprecision(1) << pct << "% ("
+		  << format_file_size(current_bytes) << " / " << format_file_size(total_bytes) << ")"
+		  << std::flush;
+}
+
 size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input) {
+	last_bulk_files.clear();
+
 	std::error_code ec;
 	if (!std::filesystem::exists(dir_path, ec) || !std::filesystem::is_directory(dir_path, ec)) {
 		std::cerr << "[!] Invalid or non-existent asset directory: " << dir_path << "\n";
@@ -271,6 +303,17 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 	std::vector<std::filesystem::path> files;
 	for (const auto& entry : std::filesystem::recursive_directory_iterator(dir_path, ec)) {
 		if (entry.is_regular_file(ec)) {
+			std::filesystem::path rel = entry.path().lexically_relative(dir_path);
+			bool in_archive = false;
+			for (const auto& part : rel) {
+				if (part == "archive") {
+					in_archive = true;
+					break;
+				}
+			}
+			if (in_archive) {
+				continue;
+			}
 			std::string fname = entry.path().filename().string();
 			if (!fname.empty() && fname.front() != '.') {
 				files.push_back(entry.path());
@@ -356,6 +399,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 				  << " (" << format_file_size(fsize) << ") -> Text: "
 				  << added << " tokens mapped\n";
 			++files_processed;
+			last_bulk_files.push_back(fpath);
 		} else if (is_image_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
@@ -363,17 +407,30 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 				continue;
 			}
 			char buf[65536];
+			uintmax_t bytes_read = 0;
+			uintmax_t last_progress_bytes = 0;
+			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
 					add_assign_increase(static_cast<uint8_t>(buf[i]), input.image_dictionary, input.next_image_id, input);
 				}
+				bytes_read += static_cast<uintmax_t>(n);
+				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read == fsize)) {
+					last_progress_bytes = bytes_read;
+					print_progress_bar(fpath.filename().string(), "Ingesting Image", bytes_read, fsize);
+				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
+			if (show_progress) {
+				std::cout << "\r                                                                                \r";
+			}
 			std::cout << "  [OK] " << fpath.filename().string()
 				  << " (" << format_file_size(fsize) << ") -> Image: "
 				  << added << " tokens mapped\n";
 			++files_processed;
+			last_bulk_files.push_back(fpath);
 		} else if (is_video_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
@@ -381,17 +438,30 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 				continue;
 			}
 			char buf[65536];
+			uintmax_t bytes_read = 0;
+			uintmax_t last_progress_bytes = 0;
+			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
 					add_assign_increase(static_cast<uint8_t>(buf[i]), input.video_dictionary, input.next_video_id, input);
 				}
+				bytes_read += static_cast<uintmax_t>(n);
+				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read == fsize)) {
+					last_progress_bytes = bytes_read;
+					print_progress_bar(fpath.filename().string(), "Tokenizing Video", bytes_read, fsize);
+				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
+			if (show_progress) {
+				std::cout << "\r                                                                                \r";
+			}
 			std::cout << "  [OK] " << fpath.filename().string()
 				  << " (" << format_file_size(fsize) << ") -> Video: "
 				  << added << " tokens mapped\n";
 			++files_processed;
+			last_bulk_files.push_back(fpath);
 		} else if (is_audio_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
@@ -399,37 +469,64 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 				continue;
 			}
 			char buf[65536];
+			uintmax_t bytes_read = 0;
+			uintmax_t last_progress_bytes = 0;
+			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
 					add_assign_increase(static_cast<uint8_t>(buf[i]), input.voice_dictionary, input.next_voice_id, input);
 				}
+				bytes_read += static_cast<uintmax_t>(n);
+				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read == fsize)) {
+					last_progress_bytes = bytes_read;
+					print_progress_bar(fpath.filename().string(), "Ingesting Audio", bytes_read, fsize);
+				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
+			if (show_progress) {
+				std::cout << "\r                                                                                \r";
+			}
 			std::cout << "  [OK] " << fpath.filename().string()
 				  << " (" << format_file_size(fsize) << ") -> Voice/Audio: "
 				  << added << " tokens mapped\n";
 			++files_processed;
+			last_bulk_files.push_back(fpath);
 		} else {
-			// PDF, 3D model, or arbitrary binary document
+			// PDF, 3D model, archive (.zip/.tar/.gz/.7z), or arbitrary binary document
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
 				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
 				continue;
 			}
 			char buf[65536];
+			uintmax_t bytes_read = 0;
+			uintmax_t last_progress_bytes = 0;
+			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+			const std::string action_label = is_3d_ext ? "Loading 3D Model" : (ext == ".pdf" ? "Parsing PDF" : "Extracting Asset");
+
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
 					add_assign_increase(static_cast<uint8_t>(buf[i]), input.image_dictionary, input.next_image_id, input);
 				}
+				bytes_read += static_cast<uintmax_t>(n);
+				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read == fsize)) {
+					last_progress_bytes = bytes_read;
+					print_progress_bar(fpath.filename().string(), action_label, bytes_read, fsize);
+				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
-			std::string tag = is_3d_ext ? "3D Model" : (ext == ".pdf" ? "PDF Document" : "Binary Asset");
+			std::string tag = is_3d_ext ? "3D Model" : (ext == ".pdf" ? "PDF Document" : "Binary/Archive Asset");
+			if (show_progress) {
+				std::cout << "\r                                                                                \r";
+			}
 			std::cout << "  [OK] " << fpath.filename().string()
 				  << " (" << format_file_size(fsize) << ") -> " << tag << ": "
 				  << added << " tokens mapped\n";
 			++files_processed;
+			last_bulk_files.push_back(fpath);
 		}
 	}
 

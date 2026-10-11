@@ -819,9 +819,15 @@ Use this scenario to feed hundreds or thousands of arbitrary files into the mode
    # Or targeted batch steps with automatic save
    .\app.exe --bulk 50000
    ```
-3. **Internal Execution:**
+3. **Internal Execution & Multi-Gigabyte Progress Reporting:**
    - Axiom recursively walks `core/asset_sample/`, sorting all files alphabetically for deterministic execution.
-   - Every file's format is automatically detected:
+   - Any `archive/` subfolder is automatically excluded from directory scans to avoid re-ingesting archived data.
+   - For files $\ge 5\text{ MB}$, multi-gigabyte video files, or large archive extractions, Axiom renders a live throttled percentage progress bar:
+     ```text
+     [..] Tokenizing Video Video.mp4 [======>                 ] 25.9% (2.0 MB / 7.7 MB)
+     [..] Tokenizing Video Video.mp4 [========================] 100.0% (7.7 MB / 7.7 MB)
+     ```
+   - Every file's format is automatically detected and mapped into dedicated modality namespaces:
      - ASCII text files are tokenized into vocabulary words (`[1, 9,999,999]`).
      - Image files stream byte-by-byte into visual tokens (`[20,000,000, 29,999,999]`).
      - Video files stream into temporal frame tokens (`[30,000,000, 39,999,999]`).
@@ -829,10 +835,20 @@ Use this scenario to feed hundreds or thousands of arbitrary files into the mode
      - PDFs and 3D models are parsed into spatial byte structures.
    - Embeddings are generated and saved to `database/embedded_data.bin`.
    - The model automatically detects pre-existing weights at [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) and loads them into VRAM so learning continues cumulatively!
-4. **The Clean, Repeat & Continuous Fine-Tuning Cycle:**
+4. **Interactive Asset Management (Keep / Archive / Purge):**
    - Press **`[S]`** anytime to checkpoint current weights, or **`[Q]`** to save and exit.
-   - Once trained, **delete the contents of `asset_sample/`**, drop in a new batch of 1,000 files, and run Option `[5]` again!
-   - The model retains everything learned in prior batches and adapts seamlessly to the new data.
+   - Once bulk training completes and model weights are verified, an interactive asset management prompt appears:
+     ```text
+     Processed Asset Management (N files):
+       [1] Keep files in asset_sample/ (Default)
+       [2] Archive processed files to asset_sample/archive/
+       [3] Purge (Delete) processed files from asset_sample/
+     > 
+     ```
+     - **`[1] Keep files` (Default):** Retains all files in `core/asset_sample/`. Non-interactive executions and piped scripts safely default to keeping files.
+     - **`[2] Archive processed files`:** Moves processed assets into `core/asset_sample/archive/`. Because `archive/` is automatically ignored in all subsequent runs, you can drop fresh data into `asset_sample/` without re-processing old files.
+     - **`[3] Purge (Delete) processed files`:** Emits an explicit safety warning (`[!] WARNING: This will permanently delete N file(s)... Are you sure? (y/N)`). Confirmation with `y` permanently frees disk space; any other input cancels the purge and keeps the files.
+   - The model retains everything learned in prior batches and adapts seamlessly to new data batches!
 
 ---
 

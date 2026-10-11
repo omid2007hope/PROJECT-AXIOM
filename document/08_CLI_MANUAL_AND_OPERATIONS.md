@@ -125,12 +125,28 @@ Axiom trains directly across multiple orthogonal modalities. Training can be ini
   * **Video (`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`):** Tokenized into temporal video byte tokens `[30,000,000, 39,999,999]`.
   * **Voice / Audio (`.ogg`, `.wav`, `.mp3`, `.flac`):** Tokenized into acoustic frequency tokens `[40,000,000, 49,999,999]`.
   * **PDFs, 3D Models & Documents (`.pdf`, `.obj`, `.stl`, `.glb`, `.bin`):** Automatically probed; ASCII meshes and notes map to text words, while binary models, PDFs, and CAD meshes map to the spatial byte namespace.
-* **Continuous Fine-Tuning & Repeat Workflow:**
-  1. Fill [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) with any number of training files (from 1 to 1,000+ files).
+* **Large File Progress Percentage Bar:**
+  For files $\ge 5\text{ MB}$, multi-gigabyte video files, or large archives, Axiom displays a live progress percentage bar throttled at 2 MB intervals:
+  ```text
+  [..] Tokenizing Video Video.mp4 [======>                 ] 25.9% (2.0 MB / 7.7 MB)
+  [..] Tokenizing Video Video.mp4 [========================] 100.0% (7.7 MB / 7.7 MB)
+  ```
+* **Continuous Fine-Tuning & Asset Management Workflow:**
+  1. Fill [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) with training files.
   2. Launch `.\app.exe` $\to$ Option `[5] Bulk Training (asset_sample)`.
   3. The model loads existing weights from [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) and trains on the mass dataset.
   4. Upon training completion or manual exit (`[Q]`), the new weights are saved atomically to [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom).
-  5. Delete or replace the files in `asset_sample/` with fresh data, run Option `[5]` again, and repeat indefinitely!
+  5. **Interactive Asset Management Prompt:**
+     ```text
+     Processed Asset Management (N files):
+       [1] Keep files in asset_sample/ (Default)
+       [2] Archive processed files to asset_sample/archive/
+       [3] Purge (Delete) processed files from asset_sample/
+     > 
+     ```
+     * **`[1] Keep` (Default):** Retains all files in `asset_sample/`.
+     * **`[2] Archive`:** Moves processed files into `core/asset_sample/archive/`. Axiom automatically ignores `archive/` in subsequent directory scans, allowing immediate drop-in of new batches without re-ingesting old files.
+     * **`[3] Purge`:** Prompts for safety confirmation (`Are you sure you want to proceed? (y/N)`). Entering `y` permanently deletes the processed files, while any other input cancels the purge safely.
 
 ---
 
