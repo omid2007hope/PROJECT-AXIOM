@@ -123,7 +123,7 @@ private:
 		// Write the entire vector to disk in one lightning-fast operation
 		out_file.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(T));
 		out_file.close();
-		std::cout << "Saved " << data.size() << " items to " << full_path << "\n";
+		std::cout << "Saved " << data.size() << " items to " << full_path << "\n" << std::flush;
 	}
 
 	// ********************

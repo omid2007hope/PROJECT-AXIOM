@@ -595,7 +595,7 @@ bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input&
 	}
 
 	std::cout << "[OK] Serialized " << vocab_size << " text tokens to "
-		  << filepath.filename().string() << "\n";
+		  << filepath.filename().string() << "\n" << std::flush;
 	return true;
 }
 
@@ -669,7 +669,7 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 	in.close();
 	build_embedding_table(input);
 	std::cout << "[OK] Loaded " << vocab_size << " vocabulary tokens from "
-		  << filepath.filename().string() << "\n";
+		  << filepath.filename().string() << "\n" << std::flush;
 	return true;
 }
 

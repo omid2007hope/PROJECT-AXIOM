@@ -48,7 +48,7 @@ void AI::reset_weights(Elements& e) {
 		h_bias[i] = 0.0f;
 	}
 
-	std::cout << "[AI Brain] Weights and Biases reset to chaotic state.\n";
+	std::cout << "[AI Brain] Weights and Biases reset to chaotic state.\n" << std::flush;
 }
 
 AI::~AI() {
@@ -217,7 +217,7 @@ bool AI::save_weights(const std::string& path) {
 	}
 
 	std::cout << "[AI Brain] Saved " << header.weight_count << " weights and "
-		  << header.bias_count << " biases to " << path << "\n";
+		  << header.bias_count << " biases to " << path << "\n" << std::flush;
 	return true;
 }
 
@@ -281,7 +281,7 @@ bool AI::load_weights(const std::string& path) {
 		return false;
 	}
 
-	std::cout << "[AI Brain] Successfully loaded weights from " << path << " and synced to GPU.\n";
+	std::cout << "[AI Brain] Successfully loaded weights from " << path << " and synced to GPU.\n" << std::flush;
 	return true;
 }
 

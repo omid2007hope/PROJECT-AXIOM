@@ -61,7 +61,7 @@ constexpr size_t context_window_size = 128;
 constexpr float learning_rate = 0.001f;
 
 // How many training steps pass between two loss reports
-constexpr size_t loss_report_interval = 10000;
+constexpr size_t loss_report_interval = 100;
 
 // Initial weights are drawn uniformly from [weight_min, weight_max]
 constexpr float weight_min = -0.1f;
@@ -183,7 +183,7 @@ void pause_menu() {
 	while (_kbhit()) {
 		_getch();
 	}
-	std::cout << "\nPress Enter to return to main menu...\n";
+	std::cout << "\nPress Enter to return to main menu...\n" << std::flush;
 	std::string dummy;
 	std::getline(std::cin, dummy);
 }
@@ -481,7 +481,7 @@ void print_hardware_telemetry(const Portion& portion) {
 		  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
 		  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
 		  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
-		  << "========================================================\n\n";
+		  << "========================================================\n\n" << std::flush;
 }
 
 // *****************************************************************************
@@ -511,7 +511,7 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 			  << std::noshowpos;
 	}
 
-	std::cout << "\n";
+	std::cout << "\n" << std::flush;
 }
 
 // *****************************************************************************
@@ -714,7 +714,7 @@ void run_training_loop(AI& ai,
 	std::cout << "Controls:\n"
 		  << "  [S] Save current model weights to " << weights_path.filename().string() << "\n"
 		  << "  [R] Reset AI brain to chaotic state\n"
-		  << "  [Q] Save and quit training loop\n\n";
+		  << "  [Q] Save and quit training loop\n\n" << std::flush;
 
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
@@ -793,7 +793,7 @@ void run_training_loop(AI& ai,
 
 		if (status == TrainStatus::Trained) {
 			++step;
-			if (step % config::loss_report_interval == 0 || (max_steps > 0 && step == max_steps)) {
+			if (step == 1 || step % config::loss_report_interval == 0 || (max_steps > 0 && step == max_steps)) {
 				print_loss(ai, step, first_loss);
 			}
 			if (max_steps > 0 && step >= max_steps) {
@@ -937,16 +937,16 @@ bool execute_training_session(AI& ai,
 	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
 	parser.embedding(input, test);
 	parser.build_embedding_table(input);
-	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
+	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n" << std::flush;
 
 	parser.save_vocabulary(vocab_path, input);
 
 	// Training Mode
 	if (developer_mode) {
-		std::cout << "--- Training AI ---\n";
+		std::cout << "--- Training AI ---\n" << std::flush;
 	}
 
-	std::cout << "[..] Optimizing data and loading to RAM...\n";
+	std::cout << "[..] Optimizing data and loading to RAM...\n" << std::flush;
 	if (!portion.allocate_pinned()) {
 		std::cerr << "[!] Failed to allocate pinned host memory.\n";
 		return false;
@@ -964,7 +964,7 @@ bool execute_training_session(AI& ai,
 	// If pre-existing weights exist on disk, load them into VRAM before training
 	if (std::filesystem::exists(weights_path)) {
 		std::cout << "[..] Pre-existing weights found at " << weights_path.filename().string()
-			  << ". Loading checkpoint...\n";
+			  << ". Loading checkpoint...\n" << std::flush;
 		ai.load_weights(weights_path.string());
 	}
 
