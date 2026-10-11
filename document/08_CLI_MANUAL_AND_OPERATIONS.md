@@ -17,9 +17,10 @@ The executable accepts standard UNIX-style command-line flags:
 | Flag | Argument | Description |
 | :--- | :--- | :--- |
 | **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) for zero-latency prompt evaluation with live HUD telemetry. |
-| **`--train`** | `[STEPS]` (Optional) | Executes the continuous training loop on `training_data.txt`. Takes an optional step count integer (defaults to continuous if omitted). |
+| **`--train`** | `[STEPS]` (Optional) | Executes the continuous training loop on sample prompt data. Takes an optional step count integer (defaults to continuous if omitted). |
+| **`--bulk`** | `[STEPS]` (Optional) | Automatically scans and trains on all assets inside `asset_sample` (Text, PDF, Images, Video, Audio, 3D models). Takes an optional step count limit. |
 | **`--benchmark`** | _None_ | Executes the bare-metal hardware profiler using `cudaEvent_t` driver timers, printing the 4-variable Hardware Saturation HUD. |
-| **`--test`** | _None_ | Runs the internal self-test validation routine. For the complete 200-test suite, run [`test.exe --test`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/test.exe). |
+| **`--test`** | _None_ | Runs the internal self-test validation routine. For the complete automated test suite, run [`test.exe --test`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/test.exe). |
 | **`--help`** | _None_ | Prints command-line argument documentation and version info to the console. |
 
 ### Interactive Main Menu (Default Execution)
@@ -33,7 +34,8 @@ If [`app.exe`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/app.exe) is launc
 [2] Train it (Training)
 [3] Run Tests
 [4] Benchmark Hardware (Telemetry HUD)
-[5] Exit
+[5] Bulk Training (asset_sample)
+[6] Exit
 > 
 ```
 
@@ -114,6 +116,21 @@ Axiom trains directly across multiple orthogonal modalities. Training can be ini
 #### 7. Scientific Sensor Fusion (Numbers + Media Pairing)
 * **Interactive Path:** Select `[2] Train it` $\to$ Select `[2] Number` $\to$ Enter readings $\to$ `Add media? [1] Yes` $\to$ Select media.
 * **Application:** Joint quantitative-perceptual modeling for robotic and scientific instrumentation.
+
+#### 8. Bulk Directory Training from `asset_sample` (Mass Ingestion & Repeat Cycle)
+* **Interactive Path:** Select `[5] Bulk Training (asset_sample)` from the main menu, or execute `.\app.exe --bulk` (with optional step limit: `.\app.exe --bulk 50000`).
+* **Ingestion Mechanics:** Axiom scans the entire [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) directory (including subdirectories) and ingests all files simultaneously regardless of format:
+  * **Text & Code (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.cpp`, notes):** Tokenized word-by-word into the language namespace `[1, 9,999,999]`.
+  * **Images (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`):** Tokenized into visual byte tokens `[20,000,000, 29,999,999]`.
+  * **Video (`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`):** Tokenized into temporal video byte tokens `[30,000,000, 39,999,999]`.
+  * **Voice / Audio (`.ogg`, `.wav`, `.mp3`, `.flac`):** Tokenized into acoustic frequency tokens `[40,000,000, 49,999,999]`.
+  * **PDFs, 3D Models & Documents (`.pdf`, `.obj`, `.stl`, `.glb`, `.bin`):** Automatically probed; ASCII meshes and notes map to text words, while binary models, PDFs, and CAD meshes map to the spatial byte namespace.
+* **Continuous Fine-Tuning & Repeat Workflow:**
+  1. Fill [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) with any number of training files (from 1 to 1,000+ files).
+  2. Launch `.\app.exe` $\to$ Option `[5] Bulk Training (asset_sample)`.
+  3. The model loads existing weights from [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) and trains on the mass dataset.
+  4. Upon training completion or manual exit (`[Q]`), the new weights are saved atomically to [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom).
+  5. Delete or replace the files in `asset_sample/` with fresh data, run Option `[5]` again, and repeat indefinitely!
 
 ---
 

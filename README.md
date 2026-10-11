@@ -661,7 +661,8 @@ Launching without arguments presents the full interactive terminal menu:
 [2] Train it (Training)
 [3] Run Tests
 [4] Benchmark Hardware (Telemetry HUD)
-[5] Exit
+[5] Bulk Training (asset_sample)
+[6] Exit
 > 
 ```
 
@@ -675,11 +676,12 @@ Project Axiom is designed to train and infer across multiple modalities with sil
 
 | Command / Option | Primary Use Case | Supported Data Modalities | Telemetry & Output |
 | :--- | :--- | :--- | :--- |
-| **`.\app.exe`** | Interactive Dashboard | All (Text, Numbers, Images, Video, Voice) | Real-time menus, training loss reports, HUDs |
+| **`.\app.exe`** | Interactive Dashboard | All (Text, Numbers, Images, Video, Voice, Bulk) | Real-time menus, training loss reports, HUDs |
 | **`.\app.exe --use`** | Low-latency inference | Text prompts (autoregressive 128 tokens) | TTFT, decode throughput (tok/s), predicted token ID & word |
-| **`.\app.exe --train [N]`** | Batch/continuous training | Built-in multimodal datasets + custom inputs | Step-by-step MSE loss reduction, % convergence |
+| **`.\app.exe --train [N]`** | Batch/continuous training | Interactive prompt / sample data | Step-by-step MSE loss reduction, % convergence |
+| **`.\app.exe --bulk [N]`** | Mass bulk dataset training | All files in `asset_sample` (Text, PDF, Img, Vid, Voice, 3D) | Auto-format detection, multi-file token counts, MSE loss |
 | **`.\app.exe --benchmark`** | Hardware profiling | Tensor sweeps & micro-inferences | 4-variable HUD (TTFT, tok/s, GB/s bus, % MFU) |
-| **`.\test.exe --test`** | Full validation | Unit & integration assertions across all layers | 9 test suites, 200 automated checks (100% Green) |
+| **`.\test.exe --test`** | Full validation | Unit & integration assertions across all layers | 9 test suites, 206 automated checks (100% Green) |
 
 ---
 
@@ -798,6 +800,39 @@ Use this scenario to align numerical telemetry (temperatures, radar distances, t
 5. Provide the media path (e.g., `asset_sample/Photo.jpeg`).
 6. **Internal Execution:**
    - Telemetry tokens are prepended to the media stream. The model learns joint representations between quantitative metrics and perceptual data.
+
+---
+
+#### Scenario H: Bulk Dataset Ingestion from `asset_sample` (Mass Files & Repeat Cycle)
+Use this scenario to feed hundreds or thousands of arbitrary files into the model at once without typing individual paths.
+1. Place any training files into [`core/asset_sample/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample):
+   - **Text & Notes:** `.txt`, `.md`, `.csv`, `.json`, `.py`, `.cpp`, `.log`, etc.
+   - **Images:** `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`, `.gif`
+   - **Videos:** `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`
+   - **Audio & Voice:** `.ogg`, `.wav`, `.mp3`, `.flac`, `.aac`
+   - **Documents & 3D Meshes:** `.pdf`, `.obj`, `.stl`, `.glb`, `.bin`, etc.
+2. Launch `.\app.exe` $\to$ Select Option **`[5] Bulk Training (asset_sample)`**, or execute:
+   ```powershell
+   # Continuous bulk training
+   .\app.exe --bulk
+
+   # Or targeted batch steps with automatic save
+   .\app.exe --bulk 50000
+   ```
+3. **Internal Execution:**
+   - Axiom recursively walks `core/asset_sample/`, sorting all files alphabetically for deterministic execution.
+   - Every file's format is automatically detected:
+     - ASCII text files are tokenized into vocabulary words (`[1, 9,999,999]`).
+     - Image files stream byte-by-byte into visual tokens (`[20,000,000, 29,999,999]`).
+     - Video files stream into temporal frame tokens (`[30,000,000, 39,999,999]`).
+     - Audio files stream into acoustic waveform tokens (`[40,000,000, 49,999,999]`).
+     - PDFs and 3D models are parsed into spatial byte structures.
+   - Embeddings are generated and saved to `database/embedded_data.bin`.
+   - The model automatically detects pre-existing weights at [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) and loads them into VRAM so learning continues cumulatively!
+4. **The Clean, Repeat & Continuous Fine-Tuning Cycle:**
+   - Press **`[S]`** anytime to checkpoint current weights, or **`[Q]`** to save and exit.
+   - Once trained, **delete the contents of `asset_sample/`**, drop in a new batch of 1,000 files, and run Option `[5]` again!
+   - The model retains everything learned in prior batches and adapts seamlessly to the new data.
 
 ---
 

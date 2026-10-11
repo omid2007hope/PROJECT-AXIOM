@@ -1,7 +1,10 @@
 #include "../include/parser.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -244,4 +247,191 @@ std::vector<std::bfloat16_t> Parser::tokens_to_context_window(const Input& input
 		}
 	}
 	return window;
+}
+
+static std::string format_file_size(uintmax_t bytes) {
+	std::ostringstream oss;
+	if (bytes < 1024) {
+		oss << bytes << " B";
+	} else if (bytes < 1024 * 1024) {
+		oss << std::fixed << std::setprecision(1) << (bytes / 1024.0) << " KB";
+	} else {
+		oss << std::fixed << std::setprecision(1) << (bytes / 1024.0 / 1024.0) << " MB";
+	}
+	return oss.str();
+}
+
+size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input) {
+	std::error_code ec;
+	if (!std::filesystem::exists(dir_path, ec) || !std::filesystem::is_directory(dir_path, ec)) {
+		std::cerr << "[!] Invalid or non-existent asset directory: " << dir_path << "\n";
+		return 0;
+	}
+
+	std::vector<std::filesystem::path> files;
+	for (const auto& entry : std::filesystem::recursive_directory_iterator(dir_path, ec)) {
+		if (entry.is_regular_file(ec)) {
+			std::string fname = entry.path().filename().string();
+			if (!fname.empty() && fname.front() != '.') {
+				files.push_back(entry.path());
+			}
+		}
+	}
+
+	if (files.empty()) {
+		std::cout << "[!] No files found in " << dir_path << "\n";
+		return 0;
+	}
+
+	std::sort(files.begin(), files.end());
+	std::cout << "\n[+] Discovered " << files.size() << " asset file(s) in " << dir_path.string() << ":\n";
+
+	size_t files_processed = 0;
+	for (const auto& fpath : files) {
+		std::string ext = fpath.extension().string();
+		for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+		uintmax_t fsize = std::filesystem::file_size(fpath, ec);
+		if (ec) fsize = 0;
+
+		const size_t initial_tokens = input.tokenized_data.size();
+
+		bool is_text_ext = (ext == ".txt" || ext == ".text" || ext == ".md" ||
+				    ext == ".markdown" || ext == ".json" || ext == ".csv" ||
+				    ext == ".log" || ext == ".c" || ext == ".cpp" ||
+				    ext == ".h" || ext == ".hpp" || ext == ".cu" ||
+				    ext == ".cuh" || ext == ".py" || ext == ".html" ||
+				    ext == ".htm" || ext == ".xml" || ext == ".yaml" ||
+				    ext == ".yml" || ext == ".ini" || ext == ".cfg" ||
+				    ext == ".conf" || ext == ".sql" || ext == ".rs" ||
+				    ext == ".go" || ext == ".java" || ext == ".ts" ||
+				    ext == ".js" || ext == ".sh" || ext == ".bat" ||
+				    ext == ".ps1");
+
+		bool is_image_ext = (ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
+				     ext == ".bmp" || ext == ".webp" || ext == ".gif" ||
+				     ext == ".tiff" || ext == ".tif" || ext == ".ico" ||
+				     ext == ".ppm" || ext == ".pgm" || ext == ".svg");
+
+		bool is_video_ext = (ext == ".mp4" || ext == ".mkv" || ext == ".avi" ||
+				     ext == ".mov" || ext == ".webm" || ext == ".wmv" ||
+				     ext == ".flv" || ext == ".m4v" || ext == ".mpg" ||
+				     ext == ".mpeg" || ext == ".3gp");
+
+		bool is_audio_ext = (ext == ".ogg" || ext == ".wav" || ext == ".mp3" ||
+				     ext == ".flac" || ext == ".aac" || ext == ".m4a" ||
+				     ext == ".wma" || ext == ".opus" || ext == ".aiff" ||
+				     ext == ".mid" || ext == ".midi");
+
+		bool is_3d_ext = (ext == ".obj" || ext == ".stl" || ext == ".gltf" ||
+				  ext == ".glb" || ext == ".ply" || ext == ".3ds" ||
+				  ext == ".fbx" || ext == ".dae" || ext == ".blend");
+
+		bool is_binary = false;
+		if (!is_text_ext && !is_image_ext && !is_video_ext && !is_audio_ext) {
+			std::ifstream probe(fpath, std::ios::binary);
+			char sample[1024];
+			probe.read(sample, sizeof(sample));
+			std::streamsize n_read = probe.gcount();
+			for (std::streamsize i = 0; i < n_read; ++i) {
+				if (sample[i] == '\0') {
+					is_binary = true;
+					break;
+				}
+			}
+		}
+
+		if (is_text_ext || (!is_image_ext && !is_video_ext && !is_audio_ext && !is_binary)) {
+			std::ifstream in(fpath);
+			if (!in) {
+				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				continue;
+			}
+			std::string word;
+			while (in >> word) {
+				add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
+			}
+			const size_t added = input.tokenized_data.size() - initial_tokens;
+			std::cout << "  [OK] " << fpath.filename().string()
+				  << " (" << format_file_size(fsize) << ") -> Text: "
+				  << added << " tokens mapped\n";
+			++files_processed;
+		} else if (is_image_ext) {
+			std::ifstream in(fpath, std::ios::binary);
+			if (!in) {
+				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				continue;
+			}
+			char buf[65536];
+			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
+				std::streamsize n = in.gcount();
+				for (std::streamsize i = 0; i < n; ++i) {
+					add_assign_increase(static_cast<uint8_t>(buf[i]), input.image_dictionary, input.next_image_id, input);
+				}
+			}
+			const size_t added = input.tokenized_data.size() - initial_tokens;
+			std::cout << "  [OK] " << fpath.filename().string()
+				  << " (" << format_file_size(fsize) << ") -> Image: "
+				  << added << " tokens mapped\n";
+			++files_processed;
+		} else if (is_video_ext) {
+			std::ifstream in(fpath, std::ios::binary);
+			if (!in) {
+				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				continue;
+			}
+			char buf[65536];
+			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
+				std::streamsize n = in.gcount();
+				for (std::streamsize i = 0; i < n; ++i) {
+					add_assign_increase(static_cast<uint8_t>(buf[i]), input.video_dictionary, input.next_video_id, input);
+				}
+			}
+			const size_t added = input.tokenized_data.size() - initial_tokens;
+			std::cout << "  [OK] " << fpath.filename().string()
+				  << " (" << format_file_size(fsize) << ") -> Video: "
+				  << added << " tokens mapped\n";
+			++files_processed;
+		} else if (is_audio_ext) {
+			std::ifstream in(fpath, std::ios::binary);
+			if (!in) {
+				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				continue;
+			}
+			char buf[65536];
+			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
+				std::streamsize n = in.gcount();
+				for (std::streamsize i = 0; i < n; ++i) {
+					add_assign_increase(static_cast<uint8_t>(buf[i]), input.voice_dictionary, input.next_voice_id, input);
+				}
+			}
+			const size_t added = input.tokenized_data.size() - initial_tokens;
+			std::cout << "  [OK] " << fpath.filename().string()
+				  << " (" << format_file_size(fsize) << ") -> Voice/Audio: "
+				  << added << " tokens mapped\n";
+			++files_processed;
+		} else {
+			// PDF, 3D model, or arbitrary binary document
+			std::ifstream in(fpath, std::ios::binary);
+			if (!in) {
+				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				continue;
+			}
+			char buf[65536];
+			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
+				std::streamsize n = in.gcount();
+				for (std::streamsize i = 0; i < n; ++i) {
+					add_assign_increase(static_cast<uint8_t>(buf[i]), input.image_dictionary, input.next_image_id, input);
+				}
+			}
+			const size_t added = input.tokenized_data.size() - initial_tokens;
+			std::string tag = is_3d_ext ? "3D Model" : (ext == ".pdf" ? "PDF Document" : "Binary Asset");
+			std::cout << "  [OK] " << fpath.filename().string()
+				  << " (" << format_file_size(fsize) << ") -> " << tag << ": "
+				  << added << " tokens mapped\n";
+			++files_processed;
+		}
+	}
+
+	return files_processed;
 }

@@ -7,8 +7,8 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 scenarios = [
     {
-        "name": "1. Main Menu Exit [5]",
-        "inputs": "5\n",
+        "name": "1. Main Menu Exit [6]",
+        "inputs": "6\n",
         "expected": ["Welcome to AXIOM", "> "]
     },
     {
@@ -139,6 +139,17 @@ scenarios = [
             "Vocabulary prepared:",
             "Beginning continuous training loop...",
             "[OK] Checkpoint saved. Exiting training."
+        ]
+    },
+    {
+        "name": "14. Bulk Training: asset_sample [5]",
+        "inputs": "5\nq\n",
+        "expected": [
+            "AXIOM BULK TRAINING MODE",
+            "Target Directory",
+            "Vocabulary prepared:",
+            "Beginning continuous training loop...",
+            "[OK] Model weights safely saved to:"
         ]
     }
 ]

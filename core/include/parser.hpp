@@ -140,9 +140,12 @@ private:
 				std::cerr << "Failed to open " << path << "\n";
 				return false;
 			}
-			char byte;
-			while (parsed_data.get(byte)) {
-				add_assign_increase(static_cast<uint8_t>(byte), dictionary, next_id, input);
+			char buf[65536];
+			while (parsed_data.read(buf, sizeof(buf)) || parsed_data.gcount() > 0) {
+				std::streamsize n = parsed_data.gcount();
+				for (std::streamsize i = 0; i < n; ++i) {
+					add_assign_increase(static_cast<uint8_t>(buf[i]), dictionary, next_id, input);
+				}
 			}
 			return true;
 		};
@@ -185,6 +188,9 @@ public:
 
 	// Standalone parser, isolated from AI!
 	std::vector<uint32_t> tokenization(Input& input, Test& test);
+
+	// Bulk directory parser: scans and tokenizes all files in a folder (Text, PDF, Images, Video, Audio, 3D Models)
+	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input);
 
 	// Standalone parser, isolated from AI!
 	std::vector<std::bfloat16_t> embedding(Input& input, Test& test);

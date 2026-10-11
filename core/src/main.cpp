@@ -77,6 +77,7 @@ constexpr const char* weights_file = "weights.axiom";
 enum class AppMode {
 	Use,
 	Train,
+	BulkTrain,
 	Test,
 	Benchmark,
 	Exit
@@ -230,7 +231,8 @@ AppMode collect_user_input(Input& input) {
 		  << "[2] Train it (Training)\n"
 		  << "[3] Run Tests\n"
 		  << "[4] Benchmark Hardware (Telemetry HUD)\n"
-		  << "[5] Exit\n"
+		  << "[5] Bulk Training (asset_sample)\n"
+		  << "[6] Exit\n"
 		  << "> ";
 
 	const int option = read_choice();
@@ -248,6 +250,10 @@ AppMode collect_user_input(Input& input) {
 	}
 
 	if (option == 5) {
+		return AppMode::BulkTrain;
+	}
+
+	if (option == 6) {
 		return AppMode::Exit;
 	}
 
@@ -572,10 +578,14 @@ void run_training_loop(AI& ai,
 		if (_kbhit()) {
 			ch = _getch();
 		} else if (!_isatty(_fileno(stdin))) {
-			if (std::cin.peek() != EOF) {
-				char c;
-				if (std::cin.get(c)) {
-					ch = c;
+			HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+			DWORD bytesAvail = 0;
+			if (PeekNamedPipe(hStdin, NULL, 0, NULL, &bytesAvail, NULL)) {
+				if (bytesAvail > 0) {
+					char c;
+					if (std::cin.get(c)) {
+						ch = c;
+					}
 				}
 			} else if (max_steps == 0 && step >= 20) {
 				std::cout << "\n[!] Stream input EOF reached. Exiting training loop...\n";
@@ -705,16 +715,17 @@ int main(int argc, char* argv[]) {
 			  << "Options:\n"
 			  << "  (no argument)  Interactive console menu\n"
 			  << "  --use          Run direct forward inference ('Use it')\n"
-			  << "  --train [N]    Train on built-in sample data (optional N steps limit)\n"
+			  << "  --train [N]    Train on sample data / prompt (optional N steps limit)\n"
+			  << "  --bulk [N]     Bulk train on all files in asset_sample (optional N steps)\n"
 			  << "  --benchmark    Run hardware saturation & telemetry benchmark\n"
 			  << "  --test         Run all automated test suites\n"
 			  << "  --help, -h     Show this help message\n\n";
 		return 0;
 	}
 
-	if (!arg.empty() && arg != "--train" && arg != "--use" && arg != "--benchmark") {
+	if (!arg.empty() && arg != "--train" && arg != "--use" && arg != "--benchmark" && arg != "--bulk" && arg != "--train-bulk") {
 		std::cerr << "Unknown argument: " << arg << "\n"
-			  << "Usage: app.exe [--use | --train | --benchmark | --test | --help]\n";
+			  << "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --help]\n";
 		return 1;
 	}
 
@@ -728,6 +739,16 @@ int main(int argc, char* argv[]) {
 	} else if (arg == "--benchmark") {
 		mode = AppMode::Benchmark;
 		developer_mode = true;
+	} else if (arg == "--bulk" || arg == "--train-bulk") {
+		mode = AppMode::BulkTrain;
+		developer_mode = false;
+		if (argc > 2) {
+			try {
+				max_steps = std::stoull(argv[2]);
+			} catch (...) {
+				max_steps = 0;
+			}
+		}
 	} else if (arg == "--train") {
 		mode = AppMode::Train;
 		developer_mode = true;
@@ -781,14 +802,46 @@ int main(int argc, char* argv[]) {
 	// *********************************************************
 	// Phase 1: Parsing and Storage
 	// *********************************************************
-	std::cout << "[..] Parsing and tokenizing multimodal data...\n";
-	parser.tokenization(input, test);
-	if (input.tokenized_data.empty()) {
-		std::cerr << "[!] No data could be tokenized from the specified input.\n";
-		if (is_interactive) {
-			pause_exit();
+	if (mode == AppMode::BulkTrain) {
+		const std::filesystem::path asset_dir = core_dir / config::asset_folder;
+		std::error_code ec;
+		if (!std::filesystem::exists(asset_dir, ec)) {
+			std::filesystem::create_directories(asset_dir, ec);
 		}
-		return 1;
+		std::cout << "\n========================================================\n"
+			  << "              AXIOM BULK TRAINING MODE                  \n"
+			  << "========================================================\n"
+			  << "Target Directory : " << asset_dir.string() << "\n\n";
+
+		std::cout << "[..] Scanning and tokenizing all assets in " << asset_dir.filename().string() << "...\n";
+		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input);
+		if (processed == 0 || input.tokenized_data.empty()) {
+			std::cerr << "\n[!] No training files could be parsed from " << asset_dir.string() << "\n"
+				  << "[i] Instructions:\n"
+				  << "    1. Place training files into the 'asset_sample' folder:\n"
+				  << "       - Text (.txt, .md, .csv, code files)\n"
+				  << "       - Images (.jpeg, .png, .bmp, .webp)\n"
+				  << "       - Videos (.mp4, .mkv, .avi)\n"
+				  << "       - Voice/Audio (.ogg, .wav, .mp3)\n"
+				  << "       - Documents (.pdf) & 3D models (.obj, .stl, etc.)\n"
+				  << "    2. Then run Bulk Training again.\n";
+			if (is_interactive) {
+				pause_exit();
+			}
+			return 1;
+		}
+		std::cout << "\n[OK] Bulk ingestion complete: " << input.tokenized_data.size()
+			  << " tokens collected across " << processed << " files.\n";
+	} else {
+		std::cout << "[..] Parsing and tokenizing multimodal data...\n";
+		parser.tokenization(input, test);
+		if (input.tokenized_data.empty()) {
+			std::cerr << "[!] No data could be tokenized from the specified input.\n";
+			if (is_interactive) {
+				pause_exit();
+			}
+			return 1;
+		}
 	}
 
 	// Repeat sequence if shorter than one full context window + target to enable continuous training
@@ -886,6 +939,18 @@ int main(int argc, char* argv[]) {
 	run_training_loop(ai, optimizer, portion, ai_elements, weights_path, max_steps);
 
 	portion.free_pinned();
+
+	if (mode == AppMode::BulkTrain) {
+		std::cout << "\n========================================================\n"
+			  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
+			  << "========================================================\n"
+			  << "[OK] Model weights safely saved to: " << weights_path.filename().string() << "\n"
+			  << "[i] You may now remove files from 'asset_sample',\n"
+			  << "    add new training data, and run Bulk Training again\n"
+			  << "    to continuously fine-tune the model.\n"
+			  << "========================================================\n";
+	}
+
 	if (is_interactive) {
 		pause_exit();
 	}
