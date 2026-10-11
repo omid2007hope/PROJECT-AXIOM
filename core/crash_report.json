@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-10-11T17:05:37.821998",
+  "timestamp": "2026-10-11T17:35:00.136137",
   "executable": "C:\\Users\\Omid\\X\\Code\\PROJECT-AXIOM\\core\\app.exe",
   "total_tests": 1000,
   "passed": 1000,
   "failed": 0,
-  "duration_sec": 376.84,
+  "duration_sec": 321.68,
   "category_summary": {
     "cli_standard": {
       "total": 13,
@@ -121,14 +121,9 @@
       "passed": 19,
       "failed": 0
     },
-    "random_menu_nav": {
-      "total": 219,
-      "passed": 219,
-      "failed": 0
-    },
-    "random_unicode_fuzz": {
-      "total": 191,
-      "passed": 191,
+    "random_cli_flag": {
+      "total": 209,
+      "passed": 209,
       "failed": 0
     },
     "random_stdin_fuzz": {
@@ -136,9 +131,14 @@
       "passed": 198,
       "failed": 0
     },
-    "random_cli_flag": {
-      "total": 186,
-      "passed": 186,
+    "random_unicode_fuzz": {
+      "total": 173,
+      "passed": 173,
+      "failed": 0
+    },
+    "random_menu_nav": {
+      "total": 214,
+      "passed": 214,
       "failed": 0
     }
   },
