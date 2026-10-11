@@ -414,6 +414,9 @@ void run_inference_engine(AI& ai,
 		} else {
 			std::cerr << "[!] Failed to load model weights. Using baseline weights.\n\n";
 		}
+	} else if (weights_path.filename().string() != config::weights_file) {
+		std::cerr << "[!] Specified weights file not found: " << weights_path.string() << "\n"
+			  << "[!] Running with baseline initialized weights.\n\n";
 	} else {
 		std::cout << "[!] Notice: '" << weights_path.filename().string()
 			  << "' not found.\n"
@@ -732,6 +735,11 @@ int main(int argc, char* argv[]) {
 
 	std::string primary_mode_arg;
 	std::filesystem::path custom_vocab_path;
+	std::filesystem::path custom_weights_path;
+	std::filesystem::path custom_data_dir;
+	float learning_rate = config::learning_rate;
+	bool auto_archive = false;
+	bool auto_purge = false;
 	size_t max_steps = 0;
 
 	for (int i = 1; i < argc; ++i) {
@@ -743,19 +751,34 @@ int main(int argc, char* argv[]) {
 			std::cout << "========================================================\n"
 				  << "   PROJECT AXIOM v1.0 — Native C++23/CUDA AI Engine     \n"
 				  << "========================================================\n"
-				  << "Usage: app.exe [OPTION] [--vocab <path>]\n\n"
-				  << "Options:\n"
+				  << "Usage: app.exe [OPTION] [FLAGS]\n\n"
+				  << "Execution Modes:\n"
 				  << "  (no argument)       Interactive console menu\n"
 				  << "  --use               Run direct forward inference ('Use it')\n"
 				  << "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
-				  << "  --bulk [N]          Bulk train on all files in asset_sample (optional N steps)\n"
+				  << "  --bulk [N]          Bulk train on all files in asset directory (optional N steps)\n"
 				  << "  --benchmark         Run hardware saturation & telemetry benchmark\n"
 				  << "  --test              Run all automated test suites\n"
-				  << "  --vocab <path>      Point to custom vocabulary file (default: vocab.axiom)\n"
-				  << "  --help, -h          Show this help message\n\n";
+				  << "  --help, -h          Show this operator manual\n\n"
+				  << "Configuration Flags:\n"
+				  << "  --weights <path>    Specify custom neural weights checkpoint (default: weights.axiom)\n"
+				  << "  --vocab <path>      Specify custom vocabulary dictionary (default: vocab.axiom)\n"
+				  << "  --lr <rate>         Set optimizer learning rate (default: 0.001)\n"
+				  << "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
+				  << "  --archive           Automatically archive processed files after bulk training\n"
+				  << "  --purge             Automatically purge processed files after bulk training\n\n";
 			return 0;
 		}
-		if (a == "--vocab") {
+		if (a == "--weights") {
+			if (i + 1 < argc) {
+				custom_weights_path = argv[++i];
+			} else {
+				std::cerr << "Error: --weights requires a file path argument.\n";
+				return 1;
+			}
+		} else if (a.rfind("--weights=", 0) == 0) {
+			custom_weights_path = a.substr(10);
+		} else if (a == "--vocab") {
 			if (i + 1 < argc) {
 				custom_vocab_path = argv[++i];
 			} else {
@@ -764,6 +787,42 @@ int main(int argc, char* argv[]) {
 			}
 		} else if (a.rfind("--vocab=", 0) == 0) {
 			custom_vocab_path = a.substr(8);
+		} else if (a == "--lr" || a == "--learning-rate") {
+			if (i + 1 < argc) {
+				try {
+					learning_rate = std::stof(argv[++i]);
+					if (learning_rate <= 0.0f) throw std::invalid_argument("non-positive");
+				} catch (...) {
+					std::cerr << "Error: --lr requires a positive float value.\n";
+					return 1;
+				}
+			} else {
+				std::cerr << "Error: --lr requires a float value.\n";
+				return 1;
+			}
+		} else if (a.rfind("--lr=", 0) == 0) {
+			try {
+				learning_rate = std::stof(a.substr(5));
+				if (learning_rate <= 0.0f) throw std::invalid_argument("non-positive");
+			} catch (...) {
+				std::cerr << "Error: --lr requires a positive float value.\n";
+				return 1;
+			}
+		} else if (a == "--data" || a == "--asset-dir") {
+			if (i + 1 < argc) {
+				custom_data_dir = argv[++i];
+			} else {
+				std::cerr << "Error: --data requires a directory path argument.\n";
+				return 1;
+			}
+		} else if (a.rfind("--data=", 0) == 0) {
+			custom_data_dir = a.substr(7);
+		} else if (a.rfind("--asset-dir=", 0) == 0) {
+			custom_data_dir = a.substr(12);
+		} else if (a == "--archive") {
+			auto_archive = true;
+		} else if (a == "--purge") {
+			auto_purge = true;
 		} else if (a == "--use" || a == "--benchmark") {
 			primary_mode_arg = a;
 		} else if (a == "--bulk" || a == "--train-bulk" || a == "--train") {
@@ -778,12 +837,12 @@ int main(int argc, char* argv[]) {
 			}
 		} else {
 			std::cerr << "Unknown argument: " << a << "\n"
-				  << "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --vocab <path> | --help]\n";
+				  << "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --weights <path> | --vocab <path> | --lr <rate> | --data <dir> | --archive | --purge | --help]\n";
 			return 1;
 		}
 	}
 
-	const bool is_interactive = primary_mode_arg.empty() && custom_vocab_path.empty();
+	const bool is_interactive = primary_mode_arg.empty() && custom_vocab_path.empty() && custom_weights_path.empty() && custom_data_dir.empty();
 
 	AppMode mode = AppMode::Train;
 	bool developer_mode = false;
@@ -800,7 +859,7 @@ int main(int argc, char* argv[]) {
 	} else if (primary_mode_arg == "--train") {
 		mode = AppMode::Train;
 		developer_mode = true;
-	} else if (!custom_vocab_path.empty() && primary_mode_arg.empty()) {
+	} else if ((!custom_vocab_path.empty() || !custom_weights_path.empty()) && primary_mode_arg.empty()) {
 		mode = AppMode::Use;
 		developer_mode = true;
 	}
@@ -809,12 +868,24 @@ int main(int argc, char* argv[]) {
 	const std::filesystem::path core_dir = locate_core_dir();
 	const std::filesystem::path embedded_path =
 		core_dir / config::database_folder / config::embedded_file;
-	const std::filesystem::path weights_path =
-		std::filesystem::exists(core_dir / config::weights_file)
-			? (core_dir / config::weights_file)
-			: (std::filesystem::exists(config::weights_file)
-				   ? std::filesystem::path(config::weights_file)
-				   : (core_dir / config::weights_file));
+
+	std::filesystem::path weights_path;
+	if (!custom_weights_path.empty()) {
+		if (std::filesystem::exists(custom_weights_path)) {
+			weights_path = custom_weights_path;
+		} else if (std::filesystem::exists(core_dir / custom_weights_path)) {
+			weights_path = core_dir / custom_weights_path;
+		} else {
+			weights_path = custom_weights_path;
+		}
+	} else {
+		weights_path =
+			std::filesystem::exists(core_dir / config::weights_file)
+				? (core_dir / config::weights_file)
+				: (std::filesystem::exists(config::weights_file)
+					   ? std::filesystem::path(config::weights_file)
+					   : (core_dir / config::weights_file));
+	}
 
 	std::filesystem::path vocab_path;
 	if (!custom_vocab_path.empty()) {
@@ -834,7 +905,16 @@ int main(int argc, char* argv[]) {
 					   : (core_dir / config::vocab_file));
 	}
 
-	const std::vector<std::filesystem::path> asset_dirs = {core_dir / config::asset_folder};
+	const std::filesystem::path asset_dir =
+		!custom_data_dir.empty()
+			? (std::filesystem::exists(custom_data_dir)
+				   ? custom_data_dir
+				   : (std::filesystem::exists(core_dir / custom_data_dir)
+					  ? (core_dir / custom_data_dir)
+					  : custom_data_dir))
+			: (core_dir / config::asset_folder);
+
+	const std::vector<std::filesystem::path> asset_dirs = {asset_dir};
 
 	Parser parser(developer_mode, embedded_path, asset_dirs);
 	Input input;
@@ -860,13 +940,20 @@ int main(int argc, char* argv[]) {
 
 	// Instantiate the required objects for the AI
 	Portion portion(config::ram_buffer_size, config::token_dim, config::context_window_size);
-	Optimizer optimizer(embedded_path, config::learning_rate);
+	Optimizer optimizer(embedded_path, learning_rate);
 
 	// *********************************************************
 	// Phase 1: Parsing and Storage
 	// *********************************************************
+	if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
+		if (std::filesystem::exists(vocab_path)) {
+			std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
+				  << ". Loading vocabulary checkpoint...\n";
+			parser.load_vocabulary(vocab_path, input);
+		}
+	}
+
 	if (mode == AppMode::BulkTrain) {
-		const std::filesystem::path asset_dir = core_dir / config::asset_folder;
 		std::error_code ec;
 		if (!std::filesystem::exists(asset_dir, ec)) {
 			std::filesystem::create_directories(asset_dir, ec);
@@ -881,7 +968,7 @@ int main(int argc, char* argv[]) {
 		if (processed == 0 || input.tokenized_data.empty()) {
 			std::cerr << "\n[!] No training files could be parsed from " << asset_dir.string() << "\n"
 				  << "[i] Instructions:\n"
-				  << "    1. Place training files into the 'asset_sample' folder:\n"
+				  << "    1. Place training files into the asset directory:\n"
 				  << "       - Text (.txt, .md, .csv, code files)\n"
 				  << "       - Images (.jpeg, .png, .bmp, .webp)\n"
 				  << "       - Videos (.mp4, .mkv, .avi)\n"
@@ -1014,7 +1101,47 @@ int main(int argc, char* argv[]) {
 			  << "[OK] Model weights safely saved to: " << weights_path.filename().string() << "\n";
 
 		const auto& bulk_files = parser.get_last_bulk_files();
-		if (is_interactive && !bulk_files.empty()) {
+		if (!bulk_files.empty() && (auto_archive || auto_purge)) {
+			if (auto_archive) {
+				const std::filesystem::path archive_dir = asset_dir / "archive";
+				std::error_code ec;
+				std::filesystem::create_directories(archive_dir, ec);
+				size_t archived_count = 0;
+				for (const auto& fpath : bulk_files) {
+					if (std::filesystem::exists(fpath, ec)) {
+						std::filesystem::path dest = archive_dir / fpath.filename();
+						if (std::filesystem::exists(dest, ec)) {
+							std::string stem = fpath.stem().string();
+							std::string ext = fpath.extension().string();
+							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
+						}
+						std::filesystem::rename(fpath, dest, ec);
+						if (ec) {
+							ec.clear();
+							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
+							if (!ec) {
+								std::filesystem::remove(fpath, ec);
+								++archived_count;
+							}
+						} else {
+							++archived_count;
+						}
+					}
+				}
+				std::cout << "[OK] Automatically archived " << archived_count
+					  << " file(s) to " << archive_dir.string() << "\n";
+			} else if (auto_purge) {
+				size_t purged_count = 0;
+				for (const auto& fpath : bulk_files) {
+					std::error_code ec;
+					if (std::filesystem::remove(fpath, ec)) {
+						++purged_count;
+					}
+				}
+				std::cout << "[OK] Automatically purged " << purged_count
+					  << " file(s) from " << asset_dir.string() << "\n";
+			}
+		} else if (is_interactive && !bulk_files.empty()) {
 			std::cout << "\nProcessed Asset Management (" << bulk_files.size() << " file"
 				  << (bulk_files.size() == 1 ? "" : "s") << "):\n"
 				  << "  [1] Keep files in asset_sample/ (Default)\n"

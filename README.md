@@ -912,13 +912,19 @@ Axiom executes a rigorous two-stage hardware benchmark:
 
 For automated training or deployment scripts without user interaction:
 ```powershell
-# Train for exactly 50,000 steps and save weights automatically:
+# Train on prompt/sample for exactly 50,000 steps and save weights automatically:
 .\app.exe --train 50000
+
+# Automated bulk training with custom weights, vocab, learning rate, and auto-archive:
+.\app.exe --bulk 50000 --weights run_01.axiom --vocab vocab_01.axiom --lr 0.002 --archive
+
+# Run forward inference paired with custom weights and vocab:
+.\app.exe --use --weights run_01.axiom --vocab vocab_01.axiom
 
 # Automated pipe injection (selecting Text mode, entering text, skipping media):
 "2`n1`nHello world training sentence`n2`n" | .\app.exe
 
-# Run the 200-test platinum validation suite headlessly:
+# Run the complete test harness:
 .\test.exe --test
 ```
 

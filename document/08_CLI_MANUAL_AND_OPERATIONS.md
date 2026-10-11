@@ -21,6 +21,12 @@ The executable accepts standard UNIX-style command-line flags:
 | **`--bulk`** | `[STEPS]` (Optional) | Automatically scans and trains on all assets inside `asset_sample` (Text, PDF, Images, Video, Audio, 3D models). Takes an optional step count limit. |
 | **`--benchmark`** | _None_ | Executes the bare-metal hardware profiler using `cudaEvent_t` driver timers, printing the 4-variable Hardware Saturation HUD. |
 | **`--test`** | _None_ | Runs the internal self-test validation routine. For the complete automated test suite, run [`test.exe --test`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/test.exe). |
+| **`--weights`** | `<path>` | Designates custom neural weights checkpoint path (supports `--weights <path>` or `--weights=<path>`). |
+| **`--vocab`** | `<path>` | Designates custom vocabulary dictionary path (supports `--vocab <path>` or `--vocab=<path>`). |
+| **`--lr`** | `<rate>` | Sets optimizer learning rate override (e.g., `--lr 0.002`). |
+| **`--data`** | `<dir>` | Sets custom bulk training directory override (e.g., `--data my_dataset`). |
+| **`--archive`** | _None_ | Automatically archives processed files into `archive/` after bulk training completion. |
+| **`--purge`** | _None_ | Automatically purges processed files from asset directory after bulk training completion. |
 | **`--help`** | _None_ | Prints command-line argument documentation and version info to the console. |
 
 ### Interactive Main Menu (Default Execution)
@@ -61,14 +67,17 @@ Prompt >
 
 - **Zero-Cloud Architecture:** The inference session executes entirely within local host RAM and GPU VRAM. Zero network packets are sent.
 - **Latency Profile:** Token predictions are generated in microsecond timeframes via direct Tensor Core kernel launches.
-- **Custom Vocabulary Files (`--vocab <path>`):**
-  By default, inference loads [`vocab.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/vocab.axiom). When testing experimental domain-specific corpora, point directly to custom dictionary files:
+- **Pairing Custom Weights and Vocabulary (`--weights` & `--vocab`):**
+  Axiom enables pairing custom weight checkpoints with custom vocabulary dictionaries simultaneously from the CLI. This allows evaluating domain-specific models trained on specialized corpora without clobbering root baseline files:
   ```powershell
-  # Inference with custom domain dictionary:
-  .\app.exe --use --vocab custom_domain.vocab
+  # Forward inference pairing custom checkpoint and vocabulary:
+  .\app.exe --use --weights experimental_run.axiom --vocab experimental_vocab.axiom
 
-  # Training with designated output vocabulary path:
-  .\app.exe --bulk 25000 --vocab custom_domain.vocab
+  # Equal-sign syntax supported across all commands:
+  .\app.exe --use --weights=checkpoints/v01_model.axiom --vocab=dicts/v01_dict.axiom
+
+  # Training with designated weights checkpoint, vocabulary output, and custom learning rate:
+  .\app.exe --bulk 50000 --weights run_01.axiom --vocab vocab_01.axiom --lr 0.002 --archive
   ```
 
 ---

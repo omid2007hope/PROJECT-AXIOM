@@ -223,7 +223,9 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	std::string word;
 	while (iss >> word) {
 		if (input.text_dictionary.find(word) == input.text_dictionary.end()) {
-			input.text_dictionary[word] = input.next_text_id++;
+			uint32_t new_id = input.next_text_id++;
+			input.text_dictionary[word] = new_id;
+			input.reverse_text_dictionary[new_id] = word;
 		}
 		tokens.push_back(input.text_dictionary[word]);
 	}
@@ -538,6 +540,16 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 }
 
 bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input& input) {
+	if (input.text_dictionary.empty()) {
+		if (std::filesystem::exists(filepath)) {
+			std::cout << "[i] Preserving existing vocabulary at " << filepath.filename().string()
+				  << " (no text tokens in current dataset).\n";
+			return true;
+		}
+		std::cout << "[i] Skipping vocabulary serialization: text dictionary is empty.\n";
+		return true;
+	}
+
 	// 1. Write to .tmp to prevent corruption during an aborted save
 	std::filesystem::path tmp_filepath = filepath.string() + ".tmp";
 	if (!tmp_filepath.parent_path().empty()) {
@@ -611,6 +623,13 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 		std::cerr << "[!] Fatal: Corrupt vocabulary size header in "
 			  << filepath.filename().string() << "\n";
 		return false;
+	}
+
+	if (vocab_size == 0) {
+		std::cout << "[i] Vocabulary file " << filepath.filename().string()
+			  << " contains 0 text tokens; preserving initialized vocabulary.\n";
+		in.close();
+		return true;
 	}
 
 	input.text_dictionary.clear();

@@ -110,10 +110,31 @@ bool test_tokenization() {
 	Input nonexist_input;
 	test_check(!parser.load_vocabulary("non_existent_vocab_file.axiom", nonexist_input), "load_vocabulary() fails cleanly on missing file", s_pass, s_fail);
 
+	// Empty text dictionary preserves pre-existing file on disk
+	uintmax_t orig_vocab_size = std::filesystem::file_size(test_vocab_file, ec);
+	Input empty_in;
+	test_check(parser.save_vocabulary(test_vocab_file, empty_in), "save_vocabulary() with empty input returns true without error", s_pass, s_fail);
+	test_check_eq(std::filesystem::file_size(test_vocab_file, ec), orig_vocab_size, "save_vocabulary() preserves existing file size on empty dictionary", s_pass, s_fail);
+
+	// 0-token vocabulary file preserves initialized in-memory dictionary
+	const std::filesystem::path zero_vocab_file = "test_zero.vocab";
+	{
+		std::ofstream zero_out(zero_vocab_file, std::ios::binary);
+		zero_out.write("AXVK", 4);
+		uint64_t zero_sz = 0;
+		zero_out.write(reinterpret_cast<const char*>(&zero_sz), sizeof(uint64_t));
+	}
+	Input preloaded_in;
+	preloaded_in.text_dictionary["preserved_token"] = 101;
+	preloaded_in.reverse_text_dictionary[101] = "preserved_token";
+	test_check(parser.load_vocabulary(zero_vocab_file, preloaded_in), "load_vocabulary() succeeds on 0-token file", s_pass, s_fail);
+	test_check_eq(preloaded_in.text_dictionary.size(), static_cast<size_t>(1), "load_vocabulary() preserves in-memory dictionary on 0-token file", s_pass, s_fail);
+
 	// Clean up test files
 	std::filesystem::remove(test_vocab_file, ec);
 	std::filesystem::remove(corrupt_vocab_file, ec);
 	std::filesystem::remove(trunc_vocab_file, ec);
+	std::filesystem::remove(zero_vocab_file, ec);
 
 	std::cout << "=== Tokenization & Modality Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
 	return s_fail == 0;

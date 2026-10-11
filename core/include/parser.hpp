@@ -9,6 +9,7 @@
 #include <iostream>
 #include <stdfloat>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -83,6 +84,9 @@ private:
 				 Input& input) {
 		if (dictionary.find(data) == dictionary.end()) {
 			dictionary[data] = next_id;
+			if constexpr (std::is_same_v<T, std::string>) {
+				input.reverse_text_dictionary[next_id] = data;
+			}
 			next_id += 1;
 		}
 		input.tokenized_data.push_back(dictionary[data]);
