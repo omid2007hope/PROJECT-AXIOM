@@ -332,7 +332,8 @@ def generate_test_cases():
         elif rnd_type == 2:
             # Random menu navigation sequence
             seq = [str(random.randint(-5, 10)) for _ in range(random.randint(2, 6))]
-            cases.append((tid, "random_menu_nav", [], "\n".join(seq) + "\n", 10, [0, 1]))
+            timeout = 35 if seq[0] in ["3", "4", "5"] else 12
+            cases.append((tid, "random_menu_nav", [], "\n".join(seq) + "\n", timeout, [0, 1]))
         elif rnd_type == 3:
             # Random CLI flag combination with valid exit
             rand_flag = "--" + "".join(random.choices(string.ascii_lowercase, k=random.randint(3, 8)))

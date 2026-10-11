@@ -85,9 +85,27 @@ enum class AppMode {
 	Exit
 };
 
-// core/ folder, located from this source file (core/src/main.cpp)
+// core/ folder, located from the executable binary with fallbacks
 std::filesystem::path locate_core_dir() {
-	return std::filesystem::absolute(__FILE__).parent_path().parent_path();
+#ifdef _WIN32
+	wchar_t buf[MAX_PATH];
+	DWORD len = GetModuleFileNameW(NULL, buf, MAX_PATH);
+	if (len > 0 && len < MAX_PATH) {
+		std::filesystem::path exe_dir = std::filesystem::path(buf).parent_path();
+		if (std::filesystem::exists(exe_dir / config::asset_folder)) {
+			return exe_dir;
+		}
+	}
+#endif
+	const std::filesystem::path cur = std::filesystem::current_path();
+	if (std::filesystem::exists(cur / config::asset_folder)) {
+		return cur;
+	}
+	if (std::filesystem::exists(cur / "core" / config::asset_folder)) {
+		return cur / "core";
+	}
+	std::filesystem::path p = std::filesystem::absolute(__FILE__).parent_path().parent_path();
+	return p.empty() ? cur : p;
 }
 
 // Raw data samples used by developer mode (--train)
@@ -105,6 +123,14 @@ Test make_sample_data() {
 // Console input
 // *****************************************************************************
 
+// Strips optional UTF-8 Byte Order Mark (0xEF, 0xBB, 0xBF) often prepended by PowerShell pipes
+inline void strip_utf8_bom(std::string& s) {
+	if (s.size() >= 3 && static_cast<unsigned char>(s[0]) == 0xEF &&
+	    static_cast<unsigned char>(s[1]) == 0xBB && static_cast<unsigned char>(s[2]) == 0xBF) {
+		s.erase(0, 3);
+	}
+}
+
 // ! Clears input stream errors and flushes invalid buffer characters
 void safeCin() {
 	if (!std::cin) {
@@ -113,12 +139,20 @@ void safeCin() {
 	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-// Reads a menu choice; returns 0 when the input is not a number
+// Reads a menu choice; returns 0 when the input is not a valid clean integer
 int read_choice() {
+	std::string line;
+	if (!std::getline(std::cin, line)) {
+		return 0;
+	}
+	strip_utf8_bom(line);
+	std::istringstream iss(line);
 	int choice = 0;
-	std::cin >> choice;
-	safeCin();
-	return choice;
+	char extra = 0;
+	if ((iss >> choice) && !(iss >> extra)) {
+		return choice;
+	}
+	return 0;
 }
 
 // Pauses and waits for a key press before console window closes
@@ -169,6 +203,7 @@ T Validate(const std::string& c_out) {
 			std::cerr << "\n[!] Input stream closed. Exiting.\n";
 			std::exit(1);
 		}
+		strip_utf8_bom(c_in);
 
 		T data;
 		Element value {};
@@ -202,6 +237,7 @@ std::vector<std::string> ValidatePaths(const std::string& c_out) {
 			std::cerr << "\n[!] Input stream closed. Exiting.\n";
 			std::exit(1);
 		}
+		strip_utf8_bom(c_in);
 		size_t start = c_in.find_first_not_of(" \t\r\n");
 		if (start == std::string::npos) {
 			std::cout << "[!] Invalid input. Please try again.\n";
@@ -450,6 +486,7 @@ void run_inference_engine(AI& ai,
 		if (!std::getline(std::cin, line)) {
 			break;
 		}
+		strip_utf8_bom(line);
 
 		if (line.empty()) {
 			continue;
@@ -1188,8 +1225,13 @@ int main(int argc, char* argv[]) {
 					  << " file(s) from " << (core_dir / config::asset_folder).string() << "!\n"
 					  << "Are you sure you want to proceed? (y/N): ";
 				char confirm = 0;
-				if (std::cin >> confirm) {
-					safeCin();
+				std::string confirm_line;
+				if (std::getline(std::cin, confirm_line)) {
+					strip_utf8_bom(confirm_line);
+					size_t first = confirm_line.find_first_not_of(" \t\r\n");
+					if (first != std::string::npos) {
+						confirm = confirm_line[first];
+					}
 				}
 				if (confirm == 'y' || confirm == 'Y') {
 					size_t purged_count = 0;

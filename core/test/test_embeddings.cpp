@@ -119,9 +119,7 @@ bool test_embeddings() {
 
 	// ── [6] embedded_data.bin written to disk ───────────────────────────────
 	std::cout << "\n[6] Disk output\n";
-	std::filesystem::path absolute_path(__FILE__);
-	std::filesystem::path bin =
-		absolute_path.parent_path().parent_path() / "database" / "embedded_data.bin";
+	std::filesystem::path bin = test_embedded_path();
 	check(std::filesystem::exists(bin), "database/embedded_data.bin exists");
 	if (std::filesystem::exists(bin)) {
 		size_t file_bytes = std::filesystem::file_size(bin);

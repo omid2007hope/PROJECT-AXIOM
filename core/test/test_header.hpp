@@ -19,10 +19,34 @@ inline void print_file_path() {
 // The utility layers decide nothing on their own, so each test hands them the
 // same kind of configuration main() does.
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 // core/ folder (this header lives in core/test/)
 inline std::filesystem::path test_core_dir() {
+#ifdef _WIN32
+	wchar_t buf[MAX_PATH];
+	DWORD len = GetModuleFileNameW(NULL, buf, MAX_PATH);
+	if (len > 0 && len < MAX_PATH) {
+		std::filesystem::path exe_dir = std::filesystem::path(buf).parent_path();
+		if (std::filesystem::exists(exe_dir / "asset_sample")) {
+			return exe_dir;
+		}
+	}
+#endif
+	const std::filesystem::path cur = std::filesystem::current_path();
+	if (std::filesystem::exists(cur / "asset_sample")) {
+		return cur;
+	}
+	if (std::filesystem::exists(cur / "core" / "asset_sample")) {
+		return cur / "core";
+	}
 	std::filesystem::path p = std::filesystem::absolute(__FILE__).parent_path().parent_path();
-	return p.empty() ? std::filesystem::current_path() : p;
+	return p.empty() ? cur : p;
 }
 
 inline std::filesystem::path test_embedded_path() {
