@@ -62,23 +62,60 @@ Prompt >
 
 ---
 
-## 3. Training Loop Operations (`--train [N]`)
+## 3. Training Loop Operations & Modality Scenarios
 
-Launching a training session:
+Axiom trains directly across multiple orthogonal modalities. Training can be initiated interactively through the dashboard (`.\app.exe` -> Option `[2]`), or directly via the command line:
+
 ```powershell
+# Continuous training loop:
+.\app.exe --train
+
+# Fixed-step batch training (e.g. 50,000 steps with automatic save):
 .\app.exe --train 50000
 ```
 
-The engine begins streaming tokens through the 4-tier pipeline, reporting progress, step counts, Mean Squared Error (MSE) loss, and throughput:
+### Detailed Modality Training Scenarios
 
-```
-[AXIOM] Initializing Training Loop (50,000 steps)...
-[AXIOM] Streaming data from: training_data.txt
-[TRAIN] Step: 1000/50000 | Loss: 0.08412 | LR: 0.01000 | Stream: ACTIVE
-[TRAIN] Step: 2000/50000 | Loss: 0.06120 | LR: 0.01000 | Stream: ACTIVE
-[TRAIN] Step: 3000/50000 | Loss: 0.04289 | LR: 0.01000 | Stream: ACTIVE
-...
-```
+#### 1. Pure Text Training
+* **Interactive Path:** Select `[2] Train it` $\to$ Select `[1] Text`.
+* **Input:** Type or paste arbitrary text strings (sentences, paragraphs, technical documentation).
+* **Tokenization:** Whitespace-delimited words are assigned unique token IDs in the range `[1, 9,999,999]`.
+* **Auto-Tiling:** Sequences shorter than 129 tokens are tiled seamlessly to fill the 128-token sliding context window.
+* **Storage & Ingestion:** Mapped to 4D BF16 vectors in `database/embedded_data.bin`, streamed to RAM, and pushed to VRAM.
+
+#### 2. Numerical & Telemetry Training
+* **Interactive Path:** Select `[2] Train it` $\to$ Select `[2] Number`.
+* **Input:** Space-separated positive floats or integers (e.g., `5.1 3.5 1.4 0.2 4.9 3.0 1.4`).
+* **Tokenization:** Values are converted into discrete tokens in the range `[10,000,000, 19,999,999]`.
+* **Application:** Ideal for sequential sensor telemetry, financial time-series, and quantitative metrics.
+
+#### 3. Image Byte-Stream Training (Computer Vision)
+* **Interactive Path:** Select `[2] Train it` $\to$ Select `[3] Image`.
+* **Input:** Path to an image file (e.g., `asset_sample/Photo.jpeg`, `"C:\Data\Image.png"`) or an entire directory folder.
+* **Tokenization:** Ingests raw binary bytes (`uint8_t` values 0–255) into the visual namespace `[20,000,000, 29,999,999]`.
+* **Application:** Trains the network on byte-level spatial distributions and image container representations.
+
+#### 4. Video Byte-Stream Training (Temporal Vision)
+* **Interactive Path:** Select `[2] Train it` $\to$ Select `[4] Video`.
+* **Input:** Video file path (e.g., `asset_sample/Video.mp4`).
+* **Tokenization:** Sequentially ingests video container and frame bytes into the video namespace `[30,000,000, 39,999,999]`.
+* **Application:** Learns temporal frame byte dynamics without requiring external video decoders or heavy dependencies.
+
+#### 5. Audio / Voice Byte-Stream Training (Acoustic Waveforms)
+* **Interactive Path:** Select `[2] Train it` $\to$ Select `[5] Voice`.
+* **Input:** Audio file path (e.g., `asset_sample/Voice.ogg`).
+* **Tokenization:** Maps acoustic waveform bytes to the voice namespace `[40,000,000, 49,999,999]`.
+* **Application:** Learns spectral and acoustic representations directly on silicon.
+
+#### 6. Cross-Modal Early Fusion (Text + Media Pairing)
+* **Interactive Path:** Select `[2] Train it` $\to$ Select `[1] Text` $\to$ Enter caption text $\to$ `Add media? [1] Yes` $\to$ Select Image, Video, or Voice $\to$ Enter media path.
+* **Mechanism:** Text tokens and media byte tokens are concatenated into a single continuous sequence. The 128-token sliding context window traverses the cross-modal seam, training the Perceptron on textual-visual or textual-acoustic associations.
+
+#### 7. Scientific Sensor Fusion (Numbers + Media Pairing)
+* **Interactive Path:** Select `[2] Train it` $\to$ Select `[2] Number` $\to$ Enter readings $\to$ `Add media? [1] Yes` $\to$ Select media.
+* **Application:** Joint quantitative-perceptual modeling for robotic and scientific instrumentation.
+
+---
 
 ### Runtime Training Hotkeys (Non-Blocking Keyboard Control)
 During the training loop, the engine continuously monitors non-blocking keyboard input via `_kbhit()` and `_getch()`. The developer can control execution dynamically without interrupting the compute pipeline:
@@ -159,26 +196,33 @@ Project Axiom employs a dual-compiler toolchain combining **MinGW-w64 GCC** (for
 # Navigate to the core source directory
 cd c:\Users\Omid\X\Code\PROJECT-AXIOM\core
 
-# 1. Compile all binaries (DLL, app.exe, test.exe)
+# 1. Compile all binaries (CUDA DLL, app.exe, test.exe)
 mingw32-make all
 
-# 2. Run the automated test suite
+# 2. Run the automated 200-test suite
 mingw32-make test
 
-# 3. Clean all build artifacts (.exe, .dll, .obj, .o)
+# 3. Clean all build products, link libraries, and scratch artifacts
 mingw32-make clean
 ```
 
+### Clean Target Artifact Purge
+Executing `mingw32-make clean` performs a deep cleanup of the build workspace without touching persistent checkpoints (`weights.axiom`):
+* **Binaries & Libraries:** Purges `app.exe`, `test.exe`, `cuda_transfer.dll`, `cuda_transfer.lib`, and `cuda_transfer.exp`.
+* **Object Files & Compiler Outputs:** Purges all intermediate `*.o`, `*.obj`, `*.exp`, `*.lib`, and `*.tmp` files.
+* **Transient Test Artifacts:** Cleans up `test_*.exe`, `test_*.axiom`, and `corrupt_*.axiom` created during test runs.
+* **Database Caches:** Flushes generated `database/*.bin` token datasets so subsequent training sessions can re-ingest fresh data.
+
 ### Build Pipeline Breakdown
-1. **`cuda_transfer.dll` Compilation:**
+1. **`cuda_transfer.dll` Compilation (NVIDIA NVCC):**
    ```powershell
-   nvcc -O3 -shared -Xcompiler "/O2 /MD" -arch=sm_89 -Iinclude -Ithird_party/cutlass/include src/tensor_cores.cu -o cuda_transfer.dll
+   nvcc -arch=sm_89 --std=c++17 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64" -I"$(CUDA_DIR)/include" -Ithird_party/cutlass/include --expt-relaxed-constexpr -Xcompiler "/Zc:preprocessor,/Zc:__cplusplus" -DBUILDING_CUDA_DLL -shared src/CUDA/gpu/*.cu src/CUDA/kernel/*.cu src/CUDA/util/*.cu -o cuda_transfer.dll
    ```
-2. **`app.exe` Host Compilation:**
+2. **`app.exe` Host Compilation (MinGW-w64 GCC):**
    ```powershell
-   g++ -std=c++23 -O3 -Iinclude src/main.cpp src/ai.cpp src/loader.cpp src/parser.cpp -L. -lcuda_transfer -o app.exe
+   g++ -Wall -std=c++23 -Iinclude src/*.cpp test/*.cpp util/*.cpp cuda_transfer.dll -o app.exe -lpsapi
    ```
-3. **`test.exe` Test Harness Compilation:**
+3. **`test.exe` Test Harness Compilation (MinGW-w64 GCC):**
    ```powershell
-   g++ -std=c++23 -O3 -Iinclude tests/test_main.cpp src/ai.cpp src/loader.cpp src/parser.cpp -L. -lcuda_transfer -o test.exe
+   g++ -Wall -std=c++23 -Iinclude src/*.cpp test/*.cpp util/*.cpp cuda_transfer.dll -o test.exe -lpsapi
    ```

@@ -52,7 +52,7 @@ $(TEST_TARGET): $(TEST_SRCS) $(CUDA_DLL)
 
 # ─── Clean ───────────────────────────────────────────────────────────────────
 clean:
-	-rm -f $(APP_TARGET) $(TEST_TARGET) $(CUDA_OBJ)
+	-rm -f $(APP_TARGET) $(TEST_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom database/*.bin
 
 # ─── Run tests ───────────────────────────────────────────────────────────────
 test: $(TEST_TARGET)

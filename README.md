@@ -17,7 +17,7 @@
 
 ---
 
-[**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Operations**](#-build-test--run) • [**Roadmap**](#-roadmap-v10-released--v20-future)
+[**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Maintenance**](#-build-test--maintenance) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Roadmap**](#-roadmap-v10-released--v20-future)
 
 ---
 
@@ -504,7 +504,22 @@ This automatically invokes:
 
 ---
 
-### 2. Run the Automated Test Suites (Platinum Guarantee)
+### 2. Deep Clean Build & Test Artifacts (`mingw32-make clean`)
+To purge all compiled binaries, intermediate objects, libraries, test artifacts, and generated datasets:
+```powershell
+mingw32-make clean
+```
+**Artifacts Purged by `clean`:**
+* **Executables:** `app.exe`, `test.exe`, and any temporary test executables (`test_*.exe`)
+* **Dynamic & Import Libraries:** `cuda_transfer.dll`, `cuda_transfer.lib`, `cuda_transfer.exp`
+* **Compiler Object Caches:** `*.o`, `*.obj`, `*.exp`, `*.lib`, `*.tmp`
+* **Test Scratch Checkpoints:** `test_*.axiom`, `corrupt_*.axiom`
+* **Generated Binary Datasets:** `database/*.bin` (e.g., `embedded_data.bin`)
+*(Note: Pre-trained production checkpoints such as `weights.axiom` are preserved.)*
+
+---
+
+### 3. Run the Automated Test Suites (Platinum Guarantee)
 Axiom includes **200 automated unit, integration, and resilience tests** across 9 comprehensive suites (100% Green, 0 failed):
 ```powershell
 .\test.exe --test
@@ -652,7 +667,210 @@ Launching without arguments presents the full interactive terminal menu:
 
 ---
 
-## 🔮 Roadmap: Version 1.0 (Released) & Version 2.0 (Future)
+## 📖 Complete Operator Manual & How-To-Use Guide
+
+Project Axiom is designed to train and infer across multiple modalities with silicon-native precision. This guide breaks down exact step-by-step instructions for every scenario, data type, and runtime mode.
+
+### 🧭 Operational Modes Matrix
+
+| Command / Option | Primary Use Case | Supported Data Modalities | Telemetry & Output |
+| :--- | :--- | :--- | :--- |
+| **`.\app.exe`** | Interactive Dashboard | All (Text, Numbers, Images, Video, Voice) | Real-time menus, training loss reports, HUDs |
+| **`.\app.exe --use`** | Low-latency inference | Text prompts (autoregressive 128 tokens) | TTFT, decode throughput (tok/s), predicted token ID & word |
+| **`.\app.exe --train [N]`** | Batch/continuous training | Built-in multimodal datasets + custom inputs | Step-by-step MSE loss reduction, % convergence |
+| **`.\app.exe --benchmark`** | Hardware profiling | Tensor sweeps & micro-inferences | 4-variable HUD (TTFT, tok/s, GB/s bus, % MFU) |
+| **`.\test.exe --test`** | Full validation | Unit & integration assertions across all layers | 9 test suites, 200 automated checks (100% Green) |
+
+---
+
+### 🎨 Detailed Modality Training Scenarios
+
+#### Scenario A: Training on Pure Text Data
+Use this scenario to train the neural network on language patterns, technical documentation, code snippets, or conversational text.
+1. Launch `.\app.exe` (or run `.\app.exe --train`).
+2. At the main menu, type `2` and press Enter for **`[2] Train it (Training)`**.
+3. At the data selection prompt, type `1` and press Enter for **`[1] Text`**.
+4. Enter your training text (single sentence, paragraph, or long corpus):
+   ```text
+   Enter Text:
+   Model FLOPs Utilization (MFU) Ceiling: In modern machine learning infrastructure, a realistic MFU target for a well-tuned, dense transformer is 40% to 55%.
+   ```
+5. When asked `Add media?`, select `2` for **`[2] No`**.
+6. **Internal Execution:**
+   - Text is split into words via whitespace and assigned unique token IDs in the range `[1, 9,999,999]`.
+   - If the input sequence is shorter than 129 tokens, Axiom's auto-tiling engine repeats the token stream continuously to satisfy the 128-token sliding context window.
+   - Deterministic 4D BF16 vectors are generated and written to `database/embedded_data.bin`.
+   - The continuous training loop starts on GPU Tensor Cores, reporting MSE loss drops every 10,000 steps.
+
+---
+
+#### Scenario B: Training on Numerical & Telemetry Data
+Use this scenario for scientific sensor data, financial tickers, mathematical streams, or telemetry metrics.
+1. Launch `.\app.exe` and select `[2] Train it`.
+2. At the data type menu, type `2` for **`[2] Number`**.
+3. Enter space-delimited numerical values (positive floats or integers):
+   ```text
+   Enter Number:
+   5.1 3.5 1.4 0.2 4.9 3.0 1.4 0.2 4.7 3.2 1.3 0.2 7.0 3.2 4.7 1.4
+   ```
+4. When asked `Add media?`, select `2` for **`[2] No`**.
+5. **Internal Execution:**
+   - Numerical values are tokenized into the discrete numeric namespace `[10,000,000, 19,999,999]`.
+   - The engine maps each unique number to a deterministic 4-dimensional vector, feeds it through the 4-tier pipeline, and learns sequential numeric dependencies.
+
+---
+
+#### Scenario C: Training on Image Assets (Computer Vision)
+Use this scenario to train the neural network directly on image visual bytes (JPEG, PNG, WebP, BMP).
+1. Launch `.\app.exe` and select `[2] Train it`.
+2. At the data type menu, type `3` for **`[3] Image`**.
+3. Enter the relative filename, relative path, or full path to the image file or image directory:
+   ```text
+   Enter Image Path:
+   asset_sample/Photo.jpeg
+   ```
+   *(Note: Quoted paths with spaces, e.g. `"C:\My Assets\Photo.jpeg"`, and directory paths are fully supported).*
+4. **Internal Execution:**
+   - Axiom resolves the file path against `asset_sample/` and the local filesystem.
+   - The image is ingested as raw binary bytes (`uint8_t` values 0–255), tokenized into the orthogonal visual namespace `[20,000,000, 29,999,999]`.
+   - The model trains on byte-level spatial distributions.
+
+---
+
+#### Scenario D: Training on Video Assets (Temporal Vision)
+Use this scenario to train on temporal visual data (MP4, MKV, AVI video byte streams).
+1. Launch `.\app.exe` and select `[2] Train it`.
+2. At the data type menu, type `4` for **`[4] Video`**.
+3. Enter the video path:
+   ```text
+   Enter Video Path:
+   asset_sample/Video.mp4
+   ```
+4. **Internal Execution:**
+   - The video stream is read sequentially from disk without syscall overhead.
+   - Codec, header, and frame byte sequences are assigned discrete IDs in the video namespace `[30,000,000, 39,999,999]`.
+   - The network trains autoregressively on temporal frame byte transitions.
+
+---
+
+#### Scenario E: Training on Audio / Voice Assets (Acoustic Waveforms)
+Use this scenario to train on voice recordings, music, or acoustic sensor waveforms (OGG, WAV, MP3).
+1. Launch `.\app.exe` and select `[2] Train it`.
+2. At the data type menu, type `5` for **`[5] Voice`**.
+3. Enter the audio file path:
+   ```text
+   Enter Voice Path:
+   asset_sample/Voice.ogg
+   ```
+4. **Internal Execution:**
+   - Acoustic waveform bytes are mapped into the dedicated voice namespace `[40,000,000, 49,999,999]`.
+   - The model learns acoustic spectral representations and audio sequence dynamics.
+
+---
+
+#### Scenario F: Multimodal Early Fusion (Text + Media Pairing)
+Use this scenario to teach the network associations between language descriptions and raw visual or acoustic data (e.g., image captioning, video description, or voice transcription).
+1. Launch `.\app.exe` and select `[2] Train it`.
+2. Select data type `[1] Text`.
+3. Enter your description text:
+   ```text
+   Enter Text:
+   High-resolution tactical reconnaissance photograph of forward perimeter airfield.
+   ```
+4. When asked `Add media?`, select `1` for **`[1] Yes`**.
+5. At the media type menu, choose your modality:
+   - `[1] Image` $\to$ Enter `asset_sample/Photo.jpeg`
+   - `[2] Video` $\to$ Enter `asset_sample/Video.mp4`
+   - `[3] Voice` $\to$ Enter `asset_sample/Voice.ogg`
+6. **Internal Execution (Early Fusion Pipeline):**
+   - Text tokens (`IDs < 10,000,000`) and media byte tokens are concatenated into a contiguous unified sequence.
+   - The 128-token context window slides directly across the cross-modal boundary.
+   - The network's weights update to predict media representations from textual prefixes (and vice versa).
+
+---
+
+#### Scenario G: Scientific Sensor Fusion (Numbers + Media Pairing)
+Use this scenario to align numerical telemetry (temperatures, radar distances, time-stamps) with sensor feeds.
+1. Launch `.\app.exe` and select `[2] Train it`.
+2. Select data type `[2] Number`.
+3. Enter numeric readings: `101.3 298.15 45.2 0.98 12.4`
+4. Select `Add media? [1] Yes` and choose Image, Video, or Voice.
+5. Provide the media path (e.g., `asset_sample/Photo.jpeg`).
+6. **Internal Execution:**
+   - Telemetry tokens are prepended to the media stream. The model learns joint representations between quantitative metrics and perceptual data.
+
+---
+
+### ⌨️ Runtime Training Controls & Session Lifecycle
+
+During training, Axiom's continuous engine listens for non-blocking keyboard interrupts (`_kbhit()` / `_getch()`):
+
+| Hotkey | Action | Mechanism |
+| :---: | :--- | :--- |
+| **`[S]`** | **Atomic Save Checkpoint** | Drains GPU streams, downloads FP32 master weights, writes atomically to `weights.axiom.tmp`, and replaces `weights.axiom`. |
+| **`[R]`** | **Chaos Reset (Wipe Brain)** | Re-initializes all weights on CPU via Mersenne Twister (`std::mt19937`), pushes chaotic weights to VRAM in $<1\text{ ms}$, and restarts loss tracking. |
+| **`[Q]`** | **Save & Clean Exit** | Performs atomic checkpoint write, releases pinned host RAM buffers, neutralizes GPU pointers, and exits cleanly. |
+
+**Monitoring Convergence:**
+Every 10,000 steps, Axiom reports live loss metrics:
+```text
+[Step 10000] loss 0.084120  (-92.3% vs first)
+[Step 20000] loss 0.041050  (-96.2% vs first)
+```
+A falling loss number and negative percentage prove that the model weights are converging on the training patterns.
+
+---
+
+### 🔍 Interactive Inference Session ("Use it")
+
+To run inference and test what the model has learned:
+1. Run `.\app.exe --use` (or select Option `[1]` from the main menu).
+2. Axiom automatically discovers and loads `weights.axiom` into VRAM.
+3. Enter your prompt text:
+   ```text
+   Prompt > The quick brown fox
+   [Tokens] (4 tokens): 1, 2, 3, 4
+   [Tensor Output] [0.0000, 0.0000, 0.1279, 0.0000]
+   [Next Token ID] #5
+   [Prediction]    "jumps"
+   ```
+4. **Telemetry HUD Breakdown:**
+   - **Prefill Latency (TTFT):** Time-To-First-Token in milliseconds (sub-millisecond on Tensor Cores).
+   - **Decode Throughput:** Generation speed in tokens per second (typically 5,000 to 11,000+ tok/s).
+   - **Memory Bus Saturation:** Real-time bandwidth utilized during token dispatch.
+   - **Compute Efficiency (MFU):** Percentage of theoretical hardware capacity utilized.
+5. Type `exit`, `quit`, or `:q` to return or exit.
+
+---
+
+### 📊 Hardware Saturation Telemetry Benchmark (`--benchmark`)
+
+To profile and verify that your GPU's Tensor Cores and memory bus are performing at peak efficiency:
+```powershell
+.\app.exe --benchmark
+```
+Axiom executes a rigorous two-stage hardware benchmark:
+1. **Benchmark 1/2 (Inference Dispatch Latency):** Measures 100 rapid hardware-timed forward passes of the micro-perceptron model.
+2. **Benchmark 2/2 (CUTLASS EVT Kernel Saturation):** Allocates a transformer-scale 34 MB tensor problem ($M=128, N=4096, K=4096$) and executes 50 hardware-timed fused GEMM + Bias + ReLU passes directly across all Streaming Multiprocessors.
+   - On an **RTX 4080 Laptop GPU**, this demonstrates **>50% MFU** and **>300 GB/s** sustained bandwidth saturation.
+
+---
+
+### 🤖 Headless Scripting & Automated CI/CD Pipelines
+
+For automated training or deployment scripts without user interaction:
+```powershell
+# Train for exactly 50,000 steps and save weights automatically:
+.\app.exe --train 50000
+
+# Automated pipe injection (selecting Text mode, entering text, skipping media):
+"2`n1`nHello world training sentence`n2`n" | .\app.exe
+
+# Run the 200-test platinum validation suite headlessly:
+.\test.exe --test
+```
+
+---
 
 ### 🚀 Version 1.0 (Released & Validated • Pure Terminal Application)
 - [x] **Unified Multimodal Tokenization:** Orthogonal $10,000,000$-element namespace offsets for Text, Numbers, Images, Video, and Voice.
