@@ -59,6 +59,62 @@ bool test_tokenization() {
 	size_t missing_processed = bulk_parser.bulk_tokenize_directory("non_existent_folder_xyz", missing_input);
 	test_check_eq(missing_processed, static_cast<size_t>(0), "bulk_tokenize_directory safely returns 0 on missing dir", s_pass, s_fail);
 
+	// Vocabulary serialization & persistence roundtrip tests
+	const std::filesystem::path test_vocab_file = "test_serialization.vocab";
+	test_check(parser.save_vocabulary(test_vocab_file, input), "parser.save_vocabulary() succeeds", s_pass, s_fail);
+	test_check(std::filesystem::exists(test_vocab_file), "Serialized vocabulary file exists on disk", s_pass, s_fail);
+
+	Input restored_input;
+	restored_input.embedding_dim = input.embedding_dim;
+	test_check(parser.load_vocabulary(test_vocab_file, restored_input), "parser.load_vocabulary() succeeds", s_pass, s_fail);
+	test_check_eq(restored_input.text_dictionary.size(), input.text_dictionary.size(), "Loaded text_dictionary size matches original", s_pass, s_fail);
+	test_check_eq(restored_input.reverse_text_dictionary.size(), input.text_dictionary.size(), "reverse_text_dictionary populated with all tokens", s_pass, s_fail);
+
+	bool all_tokens_match = true;
+	for (const auto& [word, id] : input.text_dictionary) {
+		auto it = restored_input.text_dictionary.find(word);
+		if (it == restored_input.text_dictionary.end() || it->second != id) {
+			all_tokens_match = false;
+			break;
+		}
+		auto rev_it = restored_input.reverse_text_dictionary.find(id);
+		if (rev_it == restored_input.reverse_text_dictionary.end() || rev_it->second != word) {
+			all_tokens_match = false;
+			break;
+		}
+	}
+	test_check(all_tokens_match, "Every token and reverse mapping restored bit-for-bit", s_pass, s_fail);
+	test_check_eq(restored_input.embedding_table.size(), restored_input.text_dictionary.size(), "Embedding table automatically reconstructed on load", s_pass, s_fail);
+
+	// Rejection of invalid magic bytes
+	const std::filesystem::path corrupt_vocab_file = "test_corrupt.vocab";
+	{
+		std::ofstream corrupt_out(corrupt_vocab_file, std::ios::binary);
+		corrupt_out.write("BADK", 4);
+		uint64_t dummy_sz = 10;
+		corrupt_out.write(reinterpret_cast<const char*>(&dummy_sz), sizeof(uint64_t));
+	}
+	Input corrupt_input;
+	test_check(!parser.load_vocabulary(corrupt_vocab_file, corrupt_input), "load_vocabulary() rejects invalid magic bytes", s_pass, s_fail);
+
+	// Rejection of truncated vocab file
+	const std::filesystem::path trunc_vocab_file = "test_trunc.vocab";
+	{
+		std::ofstream trunc_out(trunc_vocab_file, std::ios::binary);
+		trunc_out.write("AX", 2); // only 2 bytes instead of 4+8
+	}
+	Input trunc_input;
+	test_check(!parser.load_vocabulary(trunc_vocab_file, trunc_input), "load_vocabulary() rejects truncated file header", s_pass, s_fail);
+
+	// Rejection of non-existent file
+	Input nonexist_input;
+	test_check(!parser.load_vocabulary("non_existent_vocab_file.axiom", nonexist_input), "load_vocabulary() fails cleanly on missing file", s_pass, s_fail);
+
+	// Clean up test files
+	std::filesystem::remove(test_vocab_file, ec);
+	std::filesystem::remove(corrupt_vocab_file, ec);
+	std::filesystem::remove(trunc_vocab_file, ec);
+
 	std::cout << "=== Tokenization & Modality Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
 	return s_fail == 0;
 }

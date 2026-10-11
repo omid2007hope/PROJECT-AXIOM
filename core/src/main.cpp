@@ -72,6 +72,7 @@ constexpr const char* database_folder = "database";
 constexpr const char* embedded_file = "embedded_data.bin";
 constexpr const char* asset_folder = "asset_sample";
 constexpr const char* weights_file = "weights.axiom";
+constexpr const char* vocab_file = "vocab.axiom";
 
 } // namespace config
 
@@ -400,7 +401,8 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 void run_inference_engine(AI& ai,
 			  Parser& parser,
 			  Input& input,
-			  const std::filesystem::path& weights_path) {
+			  const std::filesystem::path& weights_path,
+			  const std::filesystem::path& vocab_path) {
 	std::cout << "\n========================================================\n"
 		  << "             AXIOM INFERENCE ENGINE ('Use it')          \n"
 		  << "========================================================\n";
@@ -417,6 +419,13 @@ void run_inference_engine(AI& ai,
 			  << "' not found.\n"
 			  << "[!] Running with baseline initialized weights.\n"
 			  << "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
+	}
+
+	if (std::filesystem::exists(vocab_path)) {
+		std::cout << "[..] Loading vocabulary from: " << vocab_path.filename().string() << "\n";
+		if (parser.load_vocabulary(vocab_path, input)) {
+			std::cout << "[OK] Vocabulary successfully restored (" << input.text_dictionary.size() << " tokens).\n\n";
+		}
 	}
 
 	parser.build_embedding_table(input);
@@ -561,7 +570,10 @@ void run_training_loop(AI& ai,
 		       Optimizer& optimizer,
 		       Portion& portion,
 		       Elements& elements,
+		       Parser& parser,
+		       const Input& input,
 		       const std::filesystem::path& weights_path,
+		       const std::filesystem::path& vocab_path,
 		       size_t max_steps = 0) {
 	std::cout << "Beginning continuous training loop...\n";
 	std::cout << "Controls:\n"
@@ -622,6 +634,7 @@ void run_training_loop(AI& ai,
 			} else if (ch == 's' || ch == 'S') {
 				std::cout << "\n[!] Manual Checkpoint Triggered! Saving weights...\n";
 				if (ai.save_weights(weights_path.string())) {
+					parser.save_vocabulary(vocab_path, input);
 					std::cout << "[OK] Model checkpoint saved to " << weights_path.filename().string() << "\n\n";
 				} else {
 					std::cerr << "[!] Failed to save weights.\n\n";
@@ -629,6 +642,7 @@ void run_training_loop(AI& ai,
 			} else if (ch == 'q' || ch == 'Q') {
 				std::cout << "\n[!] Stopping training loop. Saving checkpoint...\n";
 				ai.save_weights(weights_path.string());
+				parser.save_vocabulary(vocab_path, input);
 				std::cout << "[OK] Checkpoint saved. Exiting training.\n";
 				break;
 			}
@@ -651,6 +665,7 @@ void run_training_loop(AI& ai,
 				std::cout << "\n[!] Target training steps reached (" << max_steps
 					  << "). Saving model weights...\n";
 				ai.save_weights(weights_path.string());
+				parser.save_vocabulary(vocab_path, input);
 				std::cout << "[OK] Model checkpoint saved to " << weights_path.filename().string() << "\n";
 				break;
 			}
@@ -784,6 +799,12 @@ int main(int argc, char* argv[]) {
 			: (std::filesystem::exists(config::weights_file)
 				   ? std::filesystem::path(config::weights_file)
 				   : (core_dir / config::weights_file));
+	const std::filesystem::path vocab_path =
+		std::filesystem::exists(core_dir / config::vocab_file)
+			? (core_dir / config::vocab_file)
+			: (std::filesystem::exists(config::vocab_file)
+				   ? std::filesystem::path(config::vocab_file)
+				   : (core_dir / config::vocab_file));
 	const std::vector<std::filesystem::path> asset_dirs = {core_dir / config::asset_folder};
 
 	Parser parser(developer_mode, embedded_path, asset_dirs);
@@ -876,6 +897,10 @@ int main(int argc, char* argv[]) {
 	parser.build_embedding_table(input);
 	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
 
+	if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
+		parser.save_vocabulary(vocab_path, input);
+	}
+
 	// *********************************************************
 	// Phase 2: AI Instantiation and GPU Allocation
 	// *********************************************************
@@ -899,7 +924,7 @@ int main(int argc, char* argv[]) {
 	// Phase 3: Mode Execution Dispatch
 	// *********************************************************
 	if (mode == AppMode::Use) {
-		run_inference_engine(ai, parser, input, weights_path);
+		run_inference_engine(ai, parser, input, weights_path, vocab_path);
 		if (is_interactive) {
 			pause_exit();
 		}
@@ -949,7 +974,7 @@ int main(int argc, char* argv[]) {
 
 	print_hardware_telemetry(portion);
 
-	run_training_loop(ai, optimizer, portion, ai_elements, weights_path, max_steps);
+	run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path, vocab_path, max_steps);
 
 	portion.free_pinned();
 

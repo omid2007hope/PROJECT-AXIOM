@@ -28,6 +28,7 @@ struct Test {
 struct Input {
 	// Global Vocabulary Dictionaries (The Discrete VQ-VAEs)
 	std::unordered_map<std::string, uint32_t> text_dictionary = {};
+	std::unordered_map<uint32_t, std::string> reverse_text_dictionary = {};
 	std::unordered_map<double, uint32_t> number_dictionary = {};
 	std::unordered_map<uint8_t, uint32_t> image_dictionary = {};
 	std::unordered_map<uint8_t, uint32_t> video_dictionary = {};
@@ -255,6 +256,10 @@ public:
 	std::vector<std::bfloat16_t> tokens_to_context_window(const Input& input,
 							       const std::vector<uint32_t>& tokens,
 							       size_t context_tokens = 128);
+
+	// Vocabulary serialization & persistence (Flat binary AXVK format)
+	bool save_vocabulary(const std::filesystem::path& filepath, const Input& input);
+	bool load_vocabulary(const std::filesystem::path& filepath, Input& input);
 };
 
 #endif

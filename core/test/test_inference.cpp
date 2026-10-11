@@ -139,6 +139,7 @@ bool test_inference() {
 
 	// 3.1 Text Modality
 	input.text_dictionary["Axiom"] = 42;
+	input.reverse_text_dictionary[42] = "Axiom";
 	test_check_eq(parser.token_to_string(input, 42), std::string("Axiom"), "Text token #42 decodes to 'Axiom'", s_pass, s_fail);
 	test_check_eq(parser.token_to_string(input, 999), std::string("[Text #999]"), "Unmapped text ID decodes to '[Text #999]'", s_pass, s_fail);
 

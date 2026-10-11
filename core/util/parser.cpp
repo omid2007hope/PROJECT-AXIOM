@@ -155,6 +155,10 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 	// 1. Text Modality (1 to 9,999,999)
 	if (token_id < 10000000) {
+		auto it = input.reverse_text_dictionary.find(token_id);
+		if (it != input.reverse_text_dictionary.end()) {
+			return it->second;
+		}
 		for (const auto& [word, id] : input.text_dictionary) {
 			if (id == token_id) return word;
 		}
@@ -532,3 +536,122 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 
 	return files_processed;
 }
+
+bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input& input) {
+	// 1. Write to .tmp to prevent corruption during an aborted save
+	std::filesystem::path tmp_filepath = filepath.string() + ".tmp";
+	if (!tmp_filepath.parent_path().empty()) {
+		std::error_code ec;
+		std::filesystem::create_directories(tmp_filepath.parent_path(), ec);
+	}
+	std::ofstream out(tmp_filepath, std::ios::binary);
+	if (!out) {
+		std::cerr << "[!] Failed to open temporary vocabulary file for writing: "
+			  << tmp_filepath.string() << "\n";
+		return false;
+	}
+
+	// 2. Write Magic Header (Axiom Vocab Key: 'A', 'X', 'V', 'K')
+	const char magic[4] = {'A', 'X', 'V', 'K'};
+	out.write(magic, 4);
+
+	// 3. Write Dictionary Size
+	uint64_t vocab_size = static_cast<uint64_t>(input.text_dictionary.size());
+	out.write(reinterpret_cast<const char*>(&vocab_size), sizeof(uint64_t));
+
+	// 4. Stream Key-Value Pairs [Length] [Bytes] [ID]
+	for (const auto& [word, id] : input.text_dictionary) {
+		uint32_t word_len = static_cast<uint32_t>(word.size());
+		out.write(reinterpret_cast<const char*>(&word_len), sizeof(uint32_t));
+		out.write(word.data(), word_len);
+		out.write(reinterpret_cast<const char*>(&id), sizeof(uint32_t));
+	}
+
+	out.close();
+	if (!out) {
+		std::cerr << "[!] Write failure during vocabulary serialization.\n";
+		return false;
+	}
+
+	// 5. Atomic Rename (.tmp -> target)
+	std::error_code ec;
+	std::filesystem::rename(tmp_filepath, filepath, ec);
+	if (ec) {
+		ec.clear();
+		std::filesystem::copy_file(tmp_filepath, filepath,
+					   std::filesystem::copy_options::overwrite_existing, ec);
+		std::filesystem::remove(tmp_filepath, ec);
+	}
+
+	std::cout << "[OK] Serialized " << vocab_size << " text tokens to "
+		  << filepath.filename().string() << "\n";
+	return true;
+}
+
+bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input) {
+	std::ifstream in(filepath, std::ios::binary);
+	if (!in) {
+		std::cerr << "[!] Failed to open vocabulary file: " << filepath.string() << "\n";
+		return false;
+	}
+
+	// 1. Validate Magic Header
+	char magic[4] = {};
+	in.read(magic, 4);
+	if (in.gcount() != 4 || magic[0] != 'A' || magic[1] != 'X' || magic[2] != 'V' || magic[3] != 'K') {
+		std::cerr << "[!] Fatal: Invalid magic bytes in vocab file: "
+			  << filepath.filename().string() << " (expected 'AXVK')\n";
+		return false;
+	}
+
+	// 2. Read Size and Allocate
+	uint64_t vocab_size = 0;
+	in.read(reinterpret_cast<char*>(&vocab_size), sizeof(uint64_t));
+	if (!in) {
+		std::cerr << "[!] Fatal: Corrupt vocabulary size header in "
+			  << filepath.filename().string() << "\n";
+		return false;
+	}
+
+	input.text_dictionary.clear();
+	input.reverse_text_dictionary.clear();
+	input.text_dictionary.reserve(vocab_size);
+	input.reverse_text_dictionary.reserve(vocab_size);
+
+	// 3. Reconstruct Dictionaries
+	for (uint64_t i = 0; i < vocab_size; ++i) {
+		uint32_t word_len = 0;
+		in.read(reinterpret_cast<char*>(&word_len), sizeof(uint32_t));
+		if (!in) {
+			std::cerr << "[!] Incomplete vocabulary entry length at index " << i << "\n";
+			return false;
+		}
+
+		std::string word(word_len, '\0');
+		in.read(word.data(), word_len);
+		if (!in) {
+			std::cerr << "[!] Incomplete vocabulary word data at index " << i << "\n";
+			return false;
+		}
+
+		uint32_t id = 0;
+		in.read(reinterpret_cast<char*>(&id), sizeof(uint32_t));
+		if (!in) {
+			std::cerr << "[!] Incomplete vocabulary token ID at index " << i << "\n";
+			return false;
+		}
+
+		input.text_dictionary[word] = id;
+		input.reverse_text_dictionary[id] = word;
+		if (id >= input.next_text_id) {
+			input.next_text_id = id + 1;
+		}
+	}
+
+	in.close();
+	build_embedding_table(input);
+	std::cout << "[OK] Loaded " << vocab_size << " vocabulary tokens from "
+		  << filepath.filename().string() << "\n";
+	return true;
+}
+
