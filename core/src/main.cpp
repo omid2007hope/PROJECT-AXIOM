@@ -142,15 +142,19 @@ void safeCin() {
 // Reads a menu choice; returns 0 when the input is not a valid clean integer
 int read_choice() {
 	std::string line;
-	if (!std::getline(std::cin, line)) {
+	while (std::getline(std::cin, line)) {
+		strip_utf8_bom(line);
+		size_t start = line.find_first_not_of(" \t\r\n");
+		if (start == std::string::npos) {
+			continue;
+		}
+		std::istringstream iss(line.substr(start));
+		int choice = 0;
+		char extra = 0;
+		if ((iss >> choice) && !(iss >> extra)) {
+			return choice;
+		}
 		return 0;
-	}
-	strip_utf8_bom(line);
-	std::istringstream iss(line);
-	int choice = 0;
-	char extra = 0;
-	if ((iss >> choice) && !(iss >> extra)) {
-		return choice;
 	}
 	return 0;
 }
@@ -165,6 +169,23 @@ void pause_exit() {
 		_getch();
 	}
 	_getch();
+}
+
+// Pauses before returning to the main menu in interactive mode
+void pause_menu() {
+	if (!_isatty(_fileno(stdin))) {
+		std::string dummy;
+		if (std::cin && !std::cin.eof()) {
+			std::getline(std::cin, dummy);
+		}
+		return;
+	}
+	while (_kbhit()) {
+		_getch();
+	}
+	std::cout << "\nPress Enter to return to main menu...\n";
+	std::string dummy;
+	std::getline(std::cin, dummy);
 }
 
 // Validates a single whitespace-free token
@@ -204,6 +225,19 @@ T Validate(const std::string& c_out) {
 			std::exit(1);
 		}
 		strip_utf8_bom(c_in);
+
+		// If more lines from a multi-line paste are already queued in the console buffer, absorb them
+		if constexpr (std::is_same_v<Element, std::string>) {
+			while (_isatty(_fileno(stdin)) && _kbhit()) {
+				std::string next_line;
+				if (std::getline(std::cin, next_line)) {
+					strip_utf8_bom(next_line);
+					c_in += " " + next_line;
+				} else {
+					break;
+				}
+			}
+		}
 
 		T data;
 		Element value {};
@@ -262,55 +296,83 @@ std::string fetch_argument(int count, char* argument[]) {
 
 // Interactive menu. Fills `input` and returns the selected AppMode.
 AppMode collect_user_input(Input& input) {
-	std::cout << "======================================\n"
-		  << "           Welcome to AXIOM           \n"
-		  << "======================================\n"
-		  << "[1] Use it (Inference)\n"
-		  << "[2] Train it (Training)\n"
-		  << "[3] Run Tests\n"
-		  << "[4] Benchmark Hardware (Telemetry HUD)\n"
-		  << "[5] Bulk Training (asset_sample)\n"
-		  << "[6] Exit\n"
-		  << "> ";
+	int option = 0;
+	while (true) {
+		std::cout << "======================================\n"
+			  << "           Welcome to AXIOM           \n"
+			  << "======================================\n"
+			  << "[1] Use it (Inference)\n"
+			  << "[2] Train it (Training)\n"
+			  << "[3] Run Tests\n"
+			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
+			  << "[5] Bulk Training (asset_sample)\n"
+			  << "[6] Exit\n"
+			  << "> ";
 
-	const int option = read_choice();
+		option = read_choice();
 
-	if (option == 1) {
-		return AppMode::Use;
-	}
+		if (!std::cin || std::cin.eof()) {
+			return AppMode::Exit;
+		}
 
-	if (option == 3) {
-		return AppMode::Test;
-	}
+		if (option == 1) {
+			return AppMode::Use;
+		}
 
-	if (option == 4) {
-		return AppMode::Benchmark;
-	}
+		if (option == 3) {
+			return AppMode::Test;
+		}
 
-	if (option == 5) {
-		return AppMode::BulkTrain;
-	}
+		if (option == 4) {
+			return AppMode::Benchmark;
+		}
 
-	if (option == 6) {
-		return AppMode::Exit;
-	}
+		if (option == 5) {
+			return AppMode::BulkTrain;
+		}
 
-	if (option != 2) {
-		std::cout << "\n[!] Invalid option.\n";
-		return AppMode::Exit;
+		if (option == 6) {
+			return AppMode::Exit;
+		}
+
+		if (option != 2) {
+			std::cout << "\n[!] Invalid option.\n";
+			if (!_isatty(_fileno(stdin))) {
+				return AppMode::Exit;
+			}
+			continue;
+		}
+
+		break;
 	}
 
 	std::cout << "\n--- Training Mode: ON ---\n\n";
 
-	std::cout << "Select Data Type:\n"
-		  << "[1] Text\n"
-		  << "[2] Number\n"
-		  << "[3] Image\n"
-		  << "[4] Video\n"
-		  << "[5] Voice\n"
-		  << "> ";
+	int type = 0;
+	while (true) {
+		std::cout << "Select Data Type:\n"
+			  << "[1] Text\n"
+			  << "[2] Number\n"
+			  << "[3] Image\n"
+			  << "[4] Video\n"
+			  << "[5] Voice\n"
+			  << "> ";
 
-	const int type = read_choice();
+		type = read_choice();
+
+		if (!std::cin || std::cin.eof()) {
+			return AppMode::Exit;
+		}
+
+		if (type >= 1 && type <= 5) {
+			break;
+		}
+
+		std::cout << "\n[!] Invalid data type.\n";
+		if (!_isatty(_fileno(stdin))) {
+			return AppMode::Exit;
+		}
+	}
 
 	if (type == 1) {
 		input.user_text = Validate<std::vector<std::string>>("Enter Text: ");
@@ -322,25 +384,54 @@ AppMode collect_user_input(Input& input) {
 		input.user_video_paths = ValidatePaths("Enter Video Path: ");
 	} else if (type == 5) {
 		input.user_voice_paths = ValidatePaths("Enter Voice Path: ");
-	} else {
-		std::cout << "\n[!] Invalid data type.\n";
-		return AppMode::Exit;
 	}
 
 	// Text and numbers can be paired with media
 	if (type == 1 || type == 2) {
-		std::cout << "\nAdd media?\n[1] Yes\n[2] No\n> ";
+		int media = 0;
+		while (true) {
+			std::cout << "\nAdd media?\n[1] Yes\n[2] No\n> ";
 
-		const int media = read_choice();
+			media = read_choice();
+
+			if (!std::cin || std::cin.eof()) {
+				return AppMode::Exit;
+			}
+
+			if (media == 1 || media == 2) {
+				break;
+			}
+
+			std::cout << "\n[!] Invalid option.\n";
+			if (!_isatty(_fileno(stdin))) {
+				return AppMode::Exit;
+			}
+		}
 
 		if (media == 1) {
-			std::cout << "\nSelect Media Type:\n"
-				  << "[1] Image\n"
-				  << "[2] Video\n"
-				  << "[3] Voice\n"
-				  << "> ";
+			int media_type = 0;
+			while (true) {
+				std::cout << "\nSelect Media Type:\n"
+					  << "[1] Image\n"
+					  << "[2] Video\n"
+					  << "[3] Voice\n"
+					  << "> ";
 
-			const int media_type = read_choice();
+				media_type = read_choice();
+
+				if (!std::cin || std::cin.eof()) {
+					return AppMode::Exit;
+				}
+
+				if (media_type >= 1 && media_type <= 3) {
+					break;
+				}
+
+				std::cout << "\n[!] Invalid media type.\n";
+				if (!_isatty(_fileno(stdin))) {
+					return AppMode::Exit;
+				}
+			}
 
 			if (media_type == 1) {
 				input.user_image_paths = ValidatePaths("Enter Image Path: ");
@@ -348,15 +439,7 @@ AppMode collect_user_input(Input& input) {
 				input.user_video_paths = ValidatePaths("Enter Video Path: ");
 			} else if (media_type == 3) {
 				input.user_voice_paths = ValidatePaths("Enter Voice Path: ");
-			} else {
-				std::cout << "\n[!] Invalid media type.\n";
-				return AppMode::Exit;
 			}
-		}
-
-		else if (media != 2) {
-			std::cout << "\n[!] Invalid option.\n";
-			return AppMode::Exit;
 		}
 	}
 
@@ -488,6 +571,16 @@ void run_inference_engine(AI& ai,
 		}
 		strip_utf8_bom(line);
 
+		while (_isatty(_fileno(stdin)) && _kbhit()) {
+			std::string next_line;
+			if (std::getline(std::cin, next_line)) {
+				strip_utf8_bom(next_line);
+				line += " " + next_line;
+			} else {
+				break;
+			}
+		}
+
 		if (line.empty()) {
 			continue;
 		}
@@ -521,7 +614,7 @@ void run_inference_engine(AI& ai,
 
 		// Decode prediction via nearest-neighbor L2 search
 		uint32_t pred_token_id = parser.decode_embedding_to_token(input, prediction);
-		std::string pred_token_str = parser.decode_prediction(input, prediction);
+		std::string pred_token_str = parser.token_to_string(input, pred_token_id);
 
 		std::cout << std::fixed << std::setprecision(4)
 			  << "[Tensor Output] [" << prediction[0] << ", " << prediction[1]
@@ -762,6 +855,253 @@ bool run_tests() {
 	return all_ok;
 }
 
+// Executes a full training pipeline session (interactive or CLI)
+bool execute_training_session(AI& ai,
+			      Optimizer& optimizer,
+			      Portion& portion,
+			      Elements& ai_elements,
+			      Parser& parser,
+			      Input& input,
+			      Test& test,
+			      const std::filesystem::path& weights_path,
+			      const std::filesystem::path& vocab_path,
+			      const std::filesystem::path& embedded_path,
+			      const std::filesystem::path& asset_dir,
+			      const std::filesystem::path& core_dir,
+			      AppMode mode,
+			      bool developer_mode,
+			      size_t max_steps,
+			      bool is_interactive,
+			      bool auto_archive,
+			      bool auto_purge) {
+	parser.developer_mode = developer_mode;
+
+	if (std::filesystem::exists(vocab_path)) {
+		std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
+			  << ". Loading vocabulary checkpoint...\n";
+		parser.load_vocabulary(vocab_path, input);
+	}
+
+	if (mode == AppMode::BulkTrain) {
+		std::error_code ec;
+		if (!std::filesystem::exists(asset_dir, ec)) {
+			std::filesystem::create_directories(asset_dir, ec);
+		}
+		std::cout << "\n========================================================\n"
+			  << "              AXIOM BULK TRAINING MODE                  \n"
+			  << "========================================================\n"
+			  << "Target Directory : " << asset_dir.string() << "\n\n";
+
+		std::cout << "[..] Scanning and tokenizing all assets in " << asset_dir.filename().string() << "...\n";
+		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input);
+		if (processed == 0 || input.tokenized_data.empty()) {
+			std::cerr << "\n[!] No training files could be parsed from " << asset_dir.string() << "\n"
+				  << "[i] Instructions:\n"
+				  << "    1. Place training files into the asset directory:\n"
+				  << "       - Text (.txt, .md, .csv, code files)\n"
+				  << "       - Images (.jpeg, .png, .bmp, .webp)\n"
+				  << "       - Videos (.mp4, .mkv, .avi)\n"
+				  << "       - Voice/Audio (.ogg, .wav, .mp3)\n"
+				  << "       - Documents (.pdf) & 3D models (.obj, .stl, etc.)\n"
+				  << "    2. Then run Bulk Training again.\n";
+			return false;
+		}
+		std::cout << "\n[OK] Bulk ingestion complete: " << input.tokenized_data.size()
+			  << " tokens collected across " << processed << " files.\n";
+	} else {
+		std::cout << "[..] Parsing and tokenizing multimodal data...\n";
+		parser.tokenization(input, test);
+		if (input.tokenized_data.empty()) {
+			std::cerr << "[!] No data could be tokenized from the specified input.\n";
+			return false;
+		}
+	}
+
+	// Repeat sequence if shorter than one full context window + target to enable continuous training
+	const size_t min_training_tokens = config::context_window_size + 1;
+	if (input.tokenized_data.size() < min_training_tokens) {
+		std::cout << "[..] Dataset sequence (" << input.tokenized_data.size()
+			  << " tokens) is shorter than context window (" << config::context_window_size
+			  << " tokens). Repeating sequence to enable continuous autoregressive training...\n";
+		const size_t orig_sz = input.tokenized_data.size();
+		const size_t target_tokens = config::context_window_size * 8;
+		input.tokenized_data.reserve(target_tokens);
+		while (input.tokenized_data.size() < target_tokens) {
+			for (size_t i = 0; i < orig_sz && input.tokenized_data.size() < target_tokens; ++i) {
+				const uint32_t tok_val = input.tokenized_data[i];
+				input.tokenized_data.push_back(tok_val);
+			}
+		}
+	}
+
+	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
+	parser.embedding(input, test);
+	parser.build_embedding_table(input);
+	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
+
+	parser.save_vocabulary(vocab_path, input);
+
+	// Training Mode
+	if (developer_mode) {
+		std::cout << "--- Training AI ---\n";
+	}
+
+	std::cout << "[..] Optimizing data and loading to RAM...\n";
+	if (!portion.allocate_pinned()) {
+		std::cerr << "[!] Failed to allocate pinned host memory.\n";
+		return false;
+	}
+
+	optimizer.disk_to_ram(portion);
+
+	if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
+		std::cerr << "[!] Not enough data in " << embedded_path
+			  << " to fill one context window.\n";
+		portion.free_pinned();
+		return false;
+	}
+
+	// If pre-existing weights exist on disk, load them into VRAM before training
+	if (std::filesystem::exists(weights_path)) {
+		std::cout << "[..] Pre-existing weights found at " << weights_path.filename().string()
+			  << ". Loading checkpoint...\n";
+		ai.load_weights(weights_path.string());
+	}
+
+	print_hardware_telemetry(portion);
+
+	run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path, vocab_path, max_steps);
+
+	portion.free_pinned();
+
+	if (mode == AppMode::BulkTrain) {
+		std::cout << "\n========================================================\n"
+			  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
+			  << "========================================================\n"
+			  << "[OK] Model weights safely saved to: " << weights_path.filename().string() << "\n";
+
+		const auto& bulk_files = parser.get_last_bulk_files();
+		if (!bulk_files.empty() && (auto_archive || auto_purge)) {
+			if (auto_archive) {
+				const std::filesystem::path archive_dir = asset_dir / "archive";
+				std::error_code ec;
+				std::filesystem::create_directories(archive_dir, ec);
+				size_t archived_count = 0;
+				for (const auto& fpath : bulk_files) {
+					if (std::filesystem::exists(fpath, ec)) {
+						std::filesystem::path dest = archive_dir / fpath.filename();
+						if (std::filesystem::exists(dest, ec)) {
+							std::string stem = fpath.stem().string();
+							std::string ext = fpath.extension().string();
+							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
+						}
+						std::filesystem::rename(fpath, dest, ec);
+						if (ec) {
+							ec.clear();
+							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
+							if (!ec) {
+								std::filesystem::remove(fpath, ec);
+								++archived_count;
+							}
+						} else {
+							++archived_count;
+						}
+					}
+				}
+				std::cout << "[OK] Automatically archived " << archived_count
+					  << " file(s) to " << archive_dir.string() << "\n";
+			} else if (auto_purge) {
+				size_t purged_count = 0;
+				for (const auto& fpath : bulk_files) {
+					std::error_code ec;
+					if (std::filesystem::remove(fpath, ec)) {
+						++purged_count;
+					}
+				}
+				std::cout << "[OK] Automatically purged " << purged_count
+					  << " file(s) from " << asset_dir.string() << "\n";
+			}
+		} else if (is_interactive && !bulk_files.empty()) {
+			std::cout << "\nProcessed Asset Management (" << bulk_files.size() << " file"
+				  << (bulk_files.size() == 1 ? "" : "s") << "):\n"
+				  << "  [1] Keep files in asset_sample/ (Default)\n"
+				  << "  [2] Archive processed files to asset_sample/archive/\n"
+				  << "  [3] Purge (Delete) processed files from asset_sample/\n"
+				  << "> ";
+
+			int cleanup_choice = read_choice();
+			if (cleanup_choice <= 0 || cleanup_choice > 3) {
+				cleanup_choice = 1;
+			}
+
+			if (cleanup_choice == 2) {
+				const std::filesystem::path archive_dir = (core_dir / config::asset_folder) / "archive";
+				std::error_code ec;
+				std::filesystem::create_directories(archive_dir, ec);
+				size_t archived_count = 0;
+				for (const auto& fpath : bulk_files) {
+					if (std::filesystem::exists(fpath, ec)) {
+						std::filesystem::path dest = archive_dir / fpath.filename();
+						if (std::filesystem::exists(dest, ec)) {
+							std::string stem = fpath.stem().string();
+							std::string ext = fpath.extension().string();
+							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
+						}
+						std::filesystem::rename(fpath, dest, ec);
+						if (ec) {
+							ec.clear();
+							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
+							if (!ec) {
+								std::filesystem::remove(fpath, ec);
+								++archived_count;
+							}
+						} else {
+							++archived_count;
+						}
+					}
+				}
+				std::cout << "[OK] Successfully archived " << archived_count
+					  << " file(s) to " << archive_dir.string() << "\n";
+			} else if (cleanup_choice == 3) {
+				std::cout << "\n[!] WARNING: This will permanently delete " << bulk_files.size()
+					  << " file(s) from " << (core_dir / config::asset_folder).string() << "!\n"
+					  << "Are you sure you want to proceed? (y/N): ";
+				char confirm = 0;
+				std::string confirm_line;
+				if (std::getline(std::cin, confirm_line)) {
+					strip_utf8_bom(confirm_line);
+					size_t first = confirm_line.find_first_not_of(" \t\r\n");
+					if (first != std::string::npos) {
+						confirm = confirm_line[first];
+					}
+				}
+				if (confirm == 'y' || confirm == 'Y') {
+					size_t purged_count = 0;
+					for (const auto& fpath : bulk_files) {
+						std::error_code ec;
+						if (std::filesystem::remove(fpath, ec)) {
+							++purged_count;
+						}
+					}
+					std::cout << "[OK] Successfully purged " << purged_count
+						  << " file(s) from asset_sample/.\n";
+				} else {
+					std::cout << "[i] Purge cancelled. Preserving all files in asset_sample/.\n";
+				}
+			} else {
+				std::cout << "[i] Keeping all processed files in asset_sample/.\n";
+			}
+		} else {
+			std::cout << "[i] You may now remove files from 'asset_sample',\n"
+				  << "    add new training data, and run Bulk Training again\n"
+				  << "    to continuously fine-tune the model.\n";
+		}
+		std::cout << "========================================================\n";
+	}
+
+	return true;
+}
+
 // main function
 int main(int argc, char* argv[]) {
 	std::ios::sync_with_stdio(false);
@@ -958,107 +1298,9 @@ int main(int argc, char* argv[]) {
 	input.embedding_dim = config::token_dim;
 	Test test = make_sample_data();
 
-	// If no argument, present interactive menu
-	if (is_interactive) {
-		mode = collect_user_input(input);
-		if (mode == AppMode::Exit) {
-			return 0;
-		}
-		if (mode == AppMode::Test) {
-			const bool ok = run_tests();
-			pause_exit();
-			return ok ? 0 : 1;
-		}
-		if (mode == AppMode::Use || mode == AppMode::Benchmark) {
-			developer_mode = true;
-			parser.developer_mode = true;
-		}
-	}
-
 	// Instantiate the required objects for the AI
 	Portion portion(config::ram_buffer_size, config::token_dim, config::context_window_size);
 	Optimizer optimizer(embedded_path, learning_rate);
-
-	// *********************************************************
-	// Phase 1: Parsing and Storage
-	// *********************************************************
-	if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
-		if (std::filesystem::exists(vocab_path)) {
-			std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
-				  << ". Loading vocabulary checkpoint...\n";
-			parser.load_vocabulary(vocab_path, input);
-		}
-	}
-
-	if (mode == AppMode::BulkTrain) {
-		std::error_code ec;
-		if (!std::filesystem::exists(asset_dir, ec)) {
-			std::filesystem::create_directories(asset_dir, ec);
-		}
-		std::cout << "\n========================================================\n"
-			  << "              AXIOM BULK TRAINING MODE                  \n"
-			  << "========================================================\n"
-			  << "Target Directory : " << asset_dir.string() << "\n\n";
-
-		std::cout << "[..] Scanning and tokenizing all assets in " << asset_dir.filename().string() << "...\n";
-		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input);
-		if (processed == 0 || input.tokenized_data.empty()) {
-			std::cerr << "\n[!] No training files could be parsed from " << asset_dir.string() << "\n"
-				  << "[i] Instructions:\n"
-				  << "    1. Place training files into the asset directory:\n"
-				  << "       - Text (.txt, .md, .csv, code files)\n"
-				  << "       - Images (.jpeg, .png, .bmp, .webp)\n"
-				  << "       - Videos (.mp4, .mkv, .avi)\n"
-				  << "       - Voice/Audio (.ogg, .wav, .mp3)\n"
-				  << "       - Documents (.pdf) & 3D models (.obj, .stl, etc.)\n"
-				  << "    2. Then run Bulk Training again.\n";
-			if (is_interactive) {
-				pause_exit();
-			}
-			return 1;
-		}
-		std::cout << "\n[OK] Bulk ingestion complete: " << input.tokenized_data.size()
-			  << " tokens collected across " << processed << " files.\n";
-	} else {
-		std::cout << "[..] Parsing and tokenizing multimodal data...\n";
-		parser.tokenization(input, test);
-		if (input.tokenized_data.empty()) {
-			std::cerr << "[!] No data could be tokenized from the specified input.\n";
-			if (is_interactive) {
-				pause_exit();
-			}
-			return 1;
-		}
-	}
-
-	// Repeat sequence if shorter than one full context window + target to enable continuous training
-	const size_t min_training_tokens = config::context_window_size + 1;
-	if (input.tokenized_data.size() < min_training_tokens) {
-		std::cout << "[..] Dataset sequence (" << input.tokenized_data.size()
-			  << " tokens) is shorter than context window (" << config::context_window_size
-			  << " tokens). Repeating sequence to enable continuous autoregressive training...\n";
-		const size_t orig_sz = input.tokenized_data.size();
-		const size_t target_tokens = config::context_window_size * 8;
-		while (input.tokenized_data.size() < target_tokens) {
-			for (size_t i = 0; i < orig_sz && input.tokenized_data.size() < target_tokens; ++i) {
-				input.tokenized_data.push_back(input.tokenized_data[i]);
-			}
-		}
-	}
-
-	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
-	parser.embedding(input, test);
-	parser.build_embedding_table(input);
-	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n";
-
-	if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
-		parser.save_vocabulary(vocab_path, input);
-	}
-
-	// *********************************************************
-	// Phase 2: AI Instantiation and GPU Allocation
-	// *********************************************************
-	std::cout << "[..] Initializing AI model...\n";
 	Elements ai_elements;
 	AI ai(portion.all_elements,
 	      portion.target_elements,
@@ -1074,191 +1316,66 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	// *********************************************************
-	// Phase 3: Mode Execution Dispatch
-	// *********************************************************
-	if (mode == AppMode::Use) {
-		run_inference_engine(ai, parser, input, weights_path, vocab_path);
-		if (is_interactive) {
-			pause_exit();
+	if (!is_interactive) {
+		if (mode == AppMode::Test) {
+			return run_tests() ? 0 : 1;
+		}
+		if (mode == AppMode::Use) {
+			run_inference_engine(ai, parser, input, weights_path, vocab_path);
+			return 0;
+		}
+		if (mode == AppMode::Benchmark) {
+			run_hardware_benchmark(ai, parser, input);
+			return 0;
+		}
+		if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
+			const bool ok = execute_training_session(
+				ai, optimizer, portion, ai_elements, parser, input, test,
+				weights_path, vocab_path, embedded_path, asset_dir, core_dir,
+				mode, developer_mode, max_steps, false, auto_archive, auto_purge);
+			return ok ? 0 : 1;
 		}
 		return 0;
 	}
 
-	if (mode == AppMode::Benchmark) {
-		run_hardware_benchmark(ai, parser, input);
-		if (is_interactive) {
-			pause_exit();
+	// Interactive Menu Loop
+	while (true) {
+		Input session_input;
+		session_input.embedding_dim = config::token_dim;
+		AppMode selected_mode = collect_user_input(session_input);
+
+		if (selected_mode == AppMode::Exit) {
+			break;
 		}
-		return 0;
-	}
 
-	// Training Mode
-	if (developer_mode) {
-		std::cout << "--- Training AI ---\n";
-	}
-
-	std::cout << "[..] Optimizing data and loading to RAM...\n";
-	if (!portion.allocate_pinned()) {
-		std::cerr << "[!] Failed to allocate pinned host memory.\n";
-		if (is_interactive) {
-			pause_exit();
+		if (selected_mode == AppMode::Test) {
+			run_tests();
+			pause_menu();
+			continue;
 		}
-		return 1;
-	}
 
-	optimizer.disk_to_ram(portion);
-
-	if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
-		std::cerr << "[!] Not enough data in " << embedded_path
-			  << " to fill one context window.\n";
-		portion.free_pinned();
-		if (is_interactive) {
-			pause_exit();
+		if (selected_mode == AppMode::Benchmark) {
+			run_hardware_benchmark(ai, parser, session_input);
+			pause_menu();
+			continue;
 		}
-		return 1;
-	}
 
-	// If pre-existing weights exist on disk, load them into VRAM before training
-	if (std::filesystem::exists(weights_path)) {
-		std::cout << "[..] Pre-existing weights found at " << weights_path.filename().string()
-			  << ". Loading checkpoint...\n";
-		ai.load_weights(weights_path.string());
-	}
-
-	print_hardware_telemetry(portion);
-
-	run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path, vocab_path, max_steps);
-
-	portion.free_pinned();
-
-	if (mode == AppMode::BulkTrain) {
-		std::cout << "\n========================================================\n"
-			  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
-			  << "========================================================\n"
-			  << "[OK] Model weights safely saved to: " << weights_path.filename().string() << "\n";
-
-		const auto& bulk_files = parser.get_last_bulk_files();
-		if (!bulk_files.empty() && (auto_archive || auto_purge)) {
-			if (auto_archive) {
-				const std::filesystem::path archive_dir = asset_dir / "archive";
-				std::error_code ec;
-				std::filesystem::create_directories(archive_dir, ec);
-				size_t archived_count = 0;
-				for (const auto& fpath : bulk_files) {
-					if (std::filesystem::exists(fpath, ec)) {
-						std::filesystem::path dest = archive_dir / fpath.filename();
-						if (std::filesystem::exists(dest, ec)) {
-							std::string stem = fpath.stem().string();
-							std::string ext = fpath.extension().string();
-							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
-						}
-						std::filesystem::rename(fpath, dest, ec);
-						if (ec) {
-							ec.clear();
-							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
-							if (!ec) {
-								std::filesystem::remove(fpath, ec);
-								++archived_count;
-							}
-						} else {
-							++archived_count;
-						}
-					}
-				}
-				std::cout << "[OK] Automatically archived " << archived_count
-					  << " file(s) to " << archive_dir.string() << "\n";
-			} else if (auto_purge) {
-				size_t purged_count = 0;
-				for (const auto& fpath : bulk_files) {
-					std::error_code ec;
-					if (std::filesystem::remove(fpath, ec)) {
-						++purged_count;
-					}
-				}
-				std::cout << "[OK] Automatically purged " << purged_count
-					  << " file(s) from " << asset_dir.string() << "\n";
-			}
-		} else if (is_interactive && !bulk_files.empty()) {
-			std::cout << "\nProcessed Asset Management (" << bulk_files.size() << " file"
-				  << (bulk_files.size() == 1 ? "" : "s") << "):\n"
-				  << "  [1] Keep files in asset_sample/ (Default)\n"
-				  << "  [2] Archive processed files to asset_sample/archive/\n"
-				  << "  [3] Purge (Delete) processed files from asset_sample/\n"
-				  << "> ";
-
-			int cleanup_choice = read_choice();
-			if (cleanup_choice <= 0 || cleanup_choice > 3) {
-				cleanup_choice = 1;
-			}
-
-			if (cleanup_choice == 2) {
-				const std::filesystem::path archive_dir = (core_dir / config::asset_folder) / "archive";
-				std::error_code ec;
-				std::filesystem::create_directories(archive_dir, ec);
-				size_t archived_count = 0;
-				for (const auto& fpath : bulk_files) {
-					if (std::filesystem::exists(fpath, ec)) {
-						std::filesystem::path dest = archive_dir / fpath.filename();
-						if (std::filesystem::exists(dest, ec)) {
-							std::string stem = fpath.stem().string();
-							std::string ext = fpath.extension().string();
-							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
-						}
-						std::filesystem::rename(fpath, dest, ec);
-						if (ec) {
-							ec.clear();
-							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
-							if (!ec) {
-								std::filesystem::remove(fpath, ec);
-								++archived_count;
-							}
-						} else {
-							++archived_count;
-						}
-					}
-				}
-				std::cout << "[OK] Successfully archived " << archived_count
-					  << " file(s) to " << archive_dir.string() << "\n";
-			} else if (cleanup_choice == 3) {
-				std::cout << "\n[!] WARNING: This will permanently delete " << bulk_files.size()
-					  << " file(s) from " << (core_dir / config::asset_folder).string() << "!\n"
-					  << "Are you sure you want to proceed? (y/N): ";
-				char confirm = 0;
-				std::string confirm_line;
-				if (std::getline(std::cin, confirm_line)) {
-					strip_utf8_bom(confirm_line);
-					size_t first = confirm_line.find_first_not_of(" \t\r\n");
-					if (first != std::string::npos) {
-						confirm = confirm_line[first];
-					}
-				}
-				if (confirm == 'y' || confirm == 'Y') {
-					size_t purged_count = 0;
-					for (const auto& fpath : bulk_files) {
-						std::error_code ec;
-						if (std::filesystem::remove(fpath, ec)) {
-							++purged_count;
-						}
-					}
-					std::cout << "[OK] Successfully purged " << purged_count
-						  << " file(s) from asset_sample/.\n";
-				} else {
-					std::cout << "[i] Purge cancelled. Preserving all files in asset_sample/.\n";
-				}
-			} else {
-				std::cout << "[i] Keeping all processed files in asset_sample/.\n";
-			}
-		} else {
-			std::cout << "[i] You may now remove files from 'asset_sample',\n"
-				  << "    add new training data, and run Bulk Training again\n"
-				  << "    to continuously fine-tune the model.\n";
+		if (selected_mode == AppMode::Use) {
+			run_inference_engine(ai, parser, session_input, weights_path, vocab_path);
+			pause_menu();
+			continue;
 		}
-		std::cout << "========================================================\n";
+
+		if (selected_mode == AppMode::Train || selected_mode == AppMode::BulkTrain) {
+			Test empty_test;
+			execute_training_session(
+				ai, optimizer, portion, ai_elements, parser, session_input, empty_test,
+				weights_path, vocab_path, embedded_path, asset_dir, core_dir,
+				selected_mode, false, max_steps, true, auto_archive, auto_purge);
+			pause_menu();
+			continue;
+		}
 	}
 
-	if (is_interactive) {
-		pause_exit();
-	}
 	return 0;
 }

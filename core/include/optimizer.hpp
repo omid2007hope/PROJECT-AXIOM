@@ -165,6 +165,16 @@ public:
 	Optimizer(std::filesystem::path data_path, float learning_rate)
 	    : data_path(std::move(data_path)), learning_rate(learning_rate) {}
 
+	~Optimizer() {
+		close_stream();
+	}
+
+	void close_stream() {
+		if (file_stream.is_open()) {
+			file_stream.close();
+		}
+	}
+
 	void disk_to_ram(Portion& portion);
 
 	bool ram_to_contextWindow(Portion& portion);

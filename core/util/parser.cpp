@@ -82,23 +82,34 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 // stability). Layout: [emb(token_0)..., emb(token_1)..., ...] size =
 // tokenized_data.size() * embedding_dim
 std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
-	input.embedded_data.clear();
-	input.embedded_data.reserve(input.tokenized_data.size() * input.embedding_dim);
+	build_embedding_table(input);
 
-	for (uint32_t id : input.tokenized_data) {
-		auto it = input.embedding_table.find(id);
-		if (it == input.embedding_table.end()) {
-			std::vector<std::bfloat16_t> vec(input.embedding_dim);
-			for (uint32_t d = 0; d < input.embedding_dim; ++d) {
-				vec[d] = static_cast<std::bfloat16_t>(
-					std::sin(static_cast<double>(id) * (d + 1.0)));
+	input.embedded_data.clear();
+	input.embedded_data.resize(input.tokenized_data.size() * input.embedding_dim);
+	std::bfloat16_t* dst = input.embedded_data.data();
+
+	uint32_t last_id = std::numeric_limits<uint32_t>::max();
+	const std::bfloat16_t* last_vec = nullptr;
+
+	for (size_t i = 0; i < input.tokenized_data.size(); ++i) {
+		const uint32_t id = input.tokenized_data[i];
+		if (id != last_id) {
+			auto it = input.embedding_table.find(id);
+			if (it == input.embedding_table.end()) {
+				std::vector<std::bfloat16_t> vec(input.embedding_dim);
+				for (uint32_t d = 0; d < input.embedding_dim; ++d) {
+					vec[d] = static_cast<std::bfloat16_t>(
+						std::sin(static_cast<double>(id) * (d + 1.0)));
+				}
+				it = input.embedding_table.emplace(id, std::move(vec)).first;
 			}
-			it = input.embedding_table.emplace(id, std::move(vec)).first;
+			last_id = id;
+			last_vec = it->second.data();
 		}
 
-		// Append the dense vector for this token to the RAM output
-		const auto& vec = it->second;
-		input.embedded_data.insert(input.embedded_data.end(), vec.begin(), vec.end());
+		for (size_t d = 0; d < input.embedding_dim; ++d) {
+			*dst++ = last_vec[d];
+		}
 	}
 
 	// Use our new generalized save method
