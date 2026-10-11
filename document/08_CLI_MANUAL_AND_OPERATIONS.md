@@ -61,6 +61,15 @@ Prompt >
 
 - **Zero-Cloud Architecture:** The inference session executes entirely within local host RAM and GPU VRAM. Zero network packets are sent.
 - **Latency Profile:** Token predictions are generated in microsecond timeframes via direct Tensor Core kernel launches.
+- **Custom Vocabulary Files (`--vocab <path>`):**
+  By default, inference loads [`vocab.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/vocab.axiom). When testing experimental domain-specific corpora, point directly to custom dictionary files:
+  ```powershell
+  # Inference with custom domain dictionary:
+  .\app.exe --use --vocab custom_domain.vocab
+
+  # Training with designated output vocabulary path:
+  .\app.exe --bulk 25000 --vocab custom_domain.vocab
+  ```
 
 ---
 

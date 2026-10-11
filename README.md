@@ -678,6 +678,7 @@ Project Axiom is designed to train and infer across multiple modalities with sil
 | :--- | :--- | :--- | :--- |
 | **`.\app.exe`** | Interactive Dashboard | All (Text, Numbers, Images, Video, Voice, Bulk) | Real-time menus, training loss reports, HUDs |
 | **`.\app.exe --use`** | Low-latency inference | Text prompts (autoregressive 128 tokens) | TTFT, decode throughput (tok/s), predicted token ID & word |
+| **`.\app.exe --use --vocab <file>`** | Inference with custom dictionary | Text prompts & domain vocabularies | Restores custom `.vocab` file, $O(1)$ reverse text decoding |
 | **`.\app.exe --train [N]`** | Batch/continuous training | Interactive prompt / sample data | Step-by-step MSE loss reduction, % convergence |
 | **`.\app.exe --bulk [N]`** | Mass bulk dataset training | All files in `asset_sample` (Text, PDF, Img, Vid, Voice, 3D) | Auto-format detection, multi-file token counts, MSE loss |
 | **`.\app.exe --benchmark`** | Hardware profiling | Tensor sweeps & micro-inferences | 4-variable HUD (TTFT, tok/s, GB/s bus, % MFU) |

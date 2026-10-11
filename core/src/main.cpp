@@ -426,6 +426,8 @@ void run_inference_engine(AI& ai,
 		if (parser.load_vocabulary(vocab_path, input)) {
 			std::cout << "[OK] Vocabulary successfully restored (" << input.text_dictionary.size() << " tokens).\n\n";
 		}
+	} else if (vocab_path.filename().string() != config::vocab_file) {
+		std::cerr << "[!] Specified vocabulary file not found: " << vocab_path.string() << "\n";
 	}
 
 	parser.build_embedding_table(input);
@@ -728,65 +730,79 @@ int main(int argc, char* argv[]) {
 	SetConsoleCP(CP_UTF8);
 #endif
 
-	const std::string arg = fetch_argument(argc, argv);
-	const bool is_interactive = arg.empty();
+	std::string primary_mode_arg;
+	std::filesystem::path custom_vocab_path;
+	size_t max_steps = 0;
 
-	if (arg == "--test") {
-		return run_tests() ? 0 : 1;
+	for (int i = 1; i < argc; ++i) {
+		std::string a = argv[i];
+		if (a == "--test") {
+			return run_tests() ? 0 : 1;
+		}
+		if (a == "--help" || a == "-h") {
+			std::cout << "========================================================\n"
+				  << "   PROJECT AXIOM v1.0 — Native C++23/CUDA AI Engine     \n"
+				  << "========================================================\n"
+				  << "Usage: app.exe [OPTION] [--vocab <path>]\n\n"
+				  << "Options:\n"
+				  << "  (no argument)       Interactive console menu\n"
+				  << "  --use               Run direct forward inference ('Use it')\n"
+				  << "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
+				  << "  --bulk [N]          Bulk train on all files in asset_sample (optional N steps)\n"
+				  << "  --benchmark         Run hardware saturation & telemetry benchmark\n"
+				  << "  --test              Run all automated test suites\n"
+				  << "  --vocab <path>      Point to custom vocabulary file (default: vocab.axiom)\n"
+				  << "  --help, -h          Show this help message\n\n";
+			return 0;
+		}
+		if (a == "--vocab") {
+			if (i + 1 < argc) {
+				custom_vocab_path = argv[++i];
+			} else {
+				std::cerr << "Error: --vocab requires a file path argument.\n";
+				return 1;
+			}
+		} else if (a.rfind("--vocab=", 0) == 0) {
+			custom_vocab_path = a.substr(8);
+		} else if (a == "--use" || a == "--benchmark") {
+			primary_mode_arg = a;
+		} else if (a == "--bulk" || a == "--train-bulk" || a == "--train") {
+			primary_mode_arg = a;
+			if (i + 1 < argc && argv[i + 1][0] != '-') {
+				try {
+					max_steps = std::stoull(argv[i + 1]);
+					++i;
+				} catch (...) {
+					// Non-numeric argument, retain max_steps = 0
+				}
+			}
+		} else {
+			std::cerr << "Unknown argument: " << a << "\n"
+				  << "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --vocab <path> | --help]\n";
+			return 1;
+		}
 	}
 
-	if (arg == "--help" || arg == "-h") {
-		std::cout << "========================================================\n"
-			  << "   PROJECT AXIOM v1.0 — Native C++23/CUDA AI Engine     \n"
-			  << "========================================================\n"
-			  << "Usage: app.exe [OPTION]\n\n"
-			  << "Options:\n"
-			  << "  (no argument)  Interactive console menu\n"
-			  << "  --use          Run direct forward inference ('Use it')\n"
-			  << "  --train [N]    Train on sample data / prompt (optional N steps limit)\n"
-			  << "  --bulk [N]     Bulk train on all files in asset_sample (optional N steps)\n"
-			  << "  --benchmark    Run hardware saturation & telemetry benchmark\n"
-			  << "  --test         Run all automated test suites\n"
-			  << "  --help, -h     Show this help message\n\n";
-		return 0;
-	}
-
-	if (!arg.empty() && arg != "--train" && arg != "--use" && arg != "--benchmark" && arg != "--bulk" && arg != "--train-bulk") {
-		std::cerr << "Unknown argument: " << arg << "\n"
-			  << "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --help]\n";
-		return 1;
-	}
+	const bool is_interactive = primary_mode_arg.empty() && custom_vocab_path.empty();
 
 	AppMode mode = AppMode::Train;
 	bool developer_mode = false;
-	size_t max_steps = 0;
 
-	if (arg == "--use") {
+	if (primary_mode_arg == "--use") {
 		mode = AppMode::Use;
 		developer_mode = true;
-	} else if (arg == "--benchmark") {
+	} else if (primary_mode_arg == "--benchmark") {
 		mode = AppMode::Benchmark;
 		developer_mode = true;
-	} else if (arg == "--bulk" || arg == "--train-bulk") {
+	} else if (primary_mode_arg == "--bulk" || primary_mode_arg == "--train-bulk") {
 		mode = AppMode::BulkTrain;
 		developer_mode = false;
-		if (argc > 2) {
-			try {
-				max_steps = std::stoull(argv[2]);
-			} catch (...) {
-				max_steps = 0;
-			}
-		}
-	} else if (arg == "--train") {
+	} else if (primary_mode_arg == "--train") {
 		mode = AppMode::Train;
 		developer_mode = true;
-		if (argc > 2) {
-			try {
-				max_steps = std::stoull(argv[2]);
-			} catch (...) {
-				max_steps = 0;
-			}
-		}
+	} else if (!custom_vocab_path.empty() && primary_mode_arg.empty()) {
+		mode = AppMode::Use;
+		developer_mode = true;
 	}
 
 	// Everything below is configured here and handed down to the backend
@@ -799,12 +815,25 @@ int main(int argc, char* argv[]) {
 			: (std::filesystem::exists(config::weights_file)
 				   ? std::filesystem::path(config::weights_file)
 				   : (core_dir / config::weights_file));
-	const std::filesystem::path vocab_path =
-		std::filesystem::exists(core_dir / config::vocab_file)
-			? (core_dir / config::vocab_file)
-			: (std::filesystem::exists(config::vocab_file)
-				   ? std::filesystem::path(config::vocab_file)
-				   : (core_dir / config::vocab_file));
+
+	std::filesystem::path vocab_path;
+	if (!custom_vocab_path.empty()) {
+		if (std::filesystem::exists(custom_vocab_path)) {
+			vocab_path = custom_vocab_path;
+		} else if (std::filesystem::exists(core_dir / custom_vocab_path)) {
+			vocab_path = core_dir / custom_vocab_path;
+		} else {
+			vocab_path = custom_vocab_path;
+		}
+	} else {
+		vocab_path =
+			std::filesystem::exists(core_dir / config::vocab_file)
+				? (core_dir / config::vocab_file)
+				: (std::filesystem::exists(config::vocab_file)
+					   ? std::filesystem::path(config::vocab_file)
+					   : (core_dir / config::vocab_file));
+	}
+
 	const std::vector<std::filesystem::path> asset_dirs = {core_dir / config::asset_folder};
 
 	Parser parser(developer_mode, embedded_path, asset_dirs);
@@ -813,7 +842,7 @@ int main(int argc, char* argv[]) {
 	Test test = make_sample_data();
 
 	// If no argument, present interactive menu
-	if (arg.empty()) {
+	if (is_interactive) {
 		mode = collect_user_input(input);
 		if (mode == AppMode::Exit) {
 			return 0;
