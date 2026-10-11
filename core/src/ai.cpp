@@ -169,6 +169,12 @@ bool AI::save_weights(const std::string& path) {
 	}
 
 	// 4. Atomic write: write to temporary file first (.tmp)
+	std::filesystem::path target_p(path);
+	if (!target_p.parent_path().empty()) {
+		std::error_code dir_ec;
+		std::filesystem::create_directories(target_p.parent_path(), dir_ec);
+	}
+
 	std::string temp_path = path + ".tmp";
 	std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
 	if (!out.is_open()) {
@@ -199,10 +205,15 @@ bool AI::save_weights(const std::string& path) {
 	}
 	std::filesystem::rename(temp_path, path, ec);
 	if (ec) {
-		std::cerr << "[AI Brain] Failed to rename " << temp_path << " to " << path
-			  << ": " << ec.message() << "\n";
+		ec.clear();
+		std::filesystem::copy_file(temp_path, path,
+					   std::filesystem::copy_options::overwrite_existing, ec);
 		std::filesystem::remove(temp_path, ec);
-		return false;
+		if (ec) {
+			std::cerr << "[AI Brain] Failed to rename/copy " << temp_path << " to " << path
+				  << ": " << ec.message() << "\n";
+			return false;
+		}
 	}
 
 	std::cout << "[AI Brain] Saved " << header.weight_count << " weights and "
@@ -289,7 +300,7 @@ bool AI::predict(const Portion& portion, std::vector<float>& output_prediction) 
 	if (!upload_to_gpu(portion.context_window_tokens[portion.buffer_index],
 			   portion.all_elements,
 			   tgt_ptr,
-			   output_dim,
+			   portion.target_elements,
 			   &gpu_portion,
 			   portion.buffer_index)) {
 		std::cerr << "[AI Brain] Failed to upload context window to GPU for prediction.\n";

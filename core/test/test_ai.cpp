@@ -215,6 +215,16 @@ bool test_ai() {
 	// Clean up test file
 	std::filesystem::remove(test_weights_path);
 
+	// Nested directory creation and persistence test
+	{
+		const std::string nested_path = "test_artifacts/nested/weights.axiom";
+		test_check(ai.save_weights(nested_path), "ai.save_weights() creates parent directories and saves atomically", s_pass, s_fail);
+		test_check(std::filesystem::exists(nested_path), "Nested weight file exists on disk", s_pass, s_fail);
+		test_check(ai.load_weights(nested_path), "ai.load_weights() successfully loads from nested directory", s_pass, s_fail);
+		std::error_code rm_ec;
+		std::filesystem::remove_all("test_artifacts", rm_ec);
+	}
+
 	// ── [9] Forward Inference & Prediction Verification ───────────────────────
 	std::cout << "\n[9] Forward Inference & Prediction Verification\n";
 
