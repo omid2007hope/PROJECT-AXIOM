@@ -1,0 +1,10 @@
+# Envs 
+.env 
+.env.local 
+
+#Models 
+weights.axiom
+vocab.axiom 
+ 
+#Other Models 
+Qwen3.8-27B-UD-IQ4_XS.gguf
