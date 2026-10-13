@@ -70,7 +70,7 @@ Standard C++ memory allocations cannot optimally traverse the PCIe bus. This pha
 
 ---
 
-## Phase 4: The Neural Nucleus & Hardware Compute
+## Phase 4: The Neural Nucleus & Hardware Compute (Completed & Mathematically Corrected)
 
 This is the transition from moving memory to executing massive parallel mathematics on the GPU.
 
@@ -83,10 +83,10 @@ This is the transition from moving memory to executing massive parallel mathemat
 - Standard C++ nested loops on the GPU will fallback to legacy CUDA cores, wasting 95% of the RTX 4080's compute power.
 - Utilize NVIDIA's **CUTLASS C++ templates** to run the General Matrix Multiply (GEMM) directly on the Tensor Cores natively in `__nv_bfloat16`.
 
-### 3. Epilogue Visitor Trees (EVT) Kernel Fusion
+### 3. Epilogue Visitor Trees (EVT) Kernel Fusion & Linear Output
 
-- Fuse the GEMM multiplication, the bias addition, and the non-linear Rectified Linear Unit (ReLU) activation into a single CUDA kernel.
-- Executing this entirely within the GPU's ultra-fast shared memory registers avoids catastrophic latency round-trips to global VRAM.
+- Fuse the GEMM multiplication and bias addition into a single CUDA kernel.
+- **[COMPLETED & CORRECTED]**: Replaced non-linear ReLU with a linear identity output epilogue and un-gated backward gradients ($dz = dy$). This resolved the "Dying ReLU" deadlock against signed sinusoidal embeddings, restoring active gradient descent and sub-millisecond Tensor Core execution.
 
 ---
 
