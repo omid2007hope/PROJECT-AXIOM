@@ -143,18 +143,39 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 		return 0;
 	}
 
+	const size_t dim = input.embedding_dim;
+
+	// Rebuild the contiguous mirror whenever the table has grown or shrunk
+	if (input.decode_ids.size() != input.embedding_table.size()) {
+		input.decode_ids.clear();
+		input.decode_vectors.clear();
+		input.decode_ids.reserve(input.embedding_table.size());
+		input.decode_vectors.reserve(input.embedding_table.size() * dim);
+
+		for (const auto& [id, vec] : input.embedding_table) {
+			input.decode_ids.push_back(id);
+			for (size_t d = 0; d < dim; ++d) {
+				input.decode_vectors.push_back(
+					d < vec.size() ? static_cast<float>(vec[d]) : 0.0f);
+			}
+		}
+	}
+
+	const size_t compared_dims = std::min(dim, embedding_vector.size());
+	const float* row = input.decode_vectors.data();
+
 	uint32_t best_id = 0;
 	float min_dist_sq = std::numeric_limits<float>::max();
 
-	for (const auto& [id, vec] : input.embedding_table) {
+	for (size_t i = 0; i < input.decode_ids.size(); ++i, row += dim) {
 		float dist_sq = 0.0f;
-		for (size_t d = 0; d < input.embedding_dim && d < embedding_vector.size() && d < vec.size(); ++d) {
-			float diff = embedding_vector[d] - static_cast<float>(vec[d]);
+		for (size_t d = 0; d < compared_dims; ++d) {
+			const float diff = embedding_vector[d] - row[d];
 			dist_sq += diff * diff;
 		}
 		if (dist_sq < min_dist_sq) {
 			min_dist_sq = dist_sq;
-			best_id = id;
+			best_id = input.decode_ids[i];
 		}
 	}
 

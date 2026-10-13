@@ -16,7 +16,11 @@
 // clang-format on
 
 // =============================================================================
-// Forward pass:  y = ReLU(W x + b)  as ONE fused CUTLASS kernel on the Tensor Cores
+// Forward pass:  y = W x + b  as ONE fused CUTLASS kernel on the Tensor Cores
+//
+// The output layer is deliberately linear: the regression targets are signed
+// (sin() in [-1, 1]), and a ReLU can neither output a negative value nor pass a
+// gradient once it is at 0, so it permanently kills every neuron it clamps.
 //
 // The layer is a GEMM   Y[M x N] = X[M x K] * W^T[K x N]
 //     M = 1         (one context window per step)
@@ -29,8 +33,6 @@
 // while they are still in registers:
 //
 //              Store(bf16)
-//                  |
-//             ReLU(bf16 <- fp32)
 //                  |
 //          Add( Accum , Bias )
 //           /               \
@@ -71,20 +73,13 @@ using AddBias = cutlass::epilogue::threadblock::VisitorCompute<cutlass::plus,
 
 using EvtAddBias = cutlass::epilogue::threadblock::Sm80EVT<AddBias, Accum, Bias>;
 
-using Relu = cutlass::epilogue::threadblock::VisitorCompute<cutlass::epilogue::thread::ReLu,
-							    ElementIn,
-							    ElementCompute,
-							    cutlass::FloatRoundStyle::round_to_nearest>;
-
-using EvtRelu = cutlass::epilogue::threadblock::Sm80EVT<Relu, EvtAddBias>;
-
 using Store = cutlass::epilogue::threadblock::VisitorAuxStore<
 	OutputTileThreadMap,
 	ElementIn,
 	cutlass::FloatRoundStyle::round_to_nearest,
 	cute::Stride<int64_t, cute::_1, int64_t>>;
 
-using EvtStore = cutlass::epilogue::threadblock::Sm80EVT<Store, EvtRelu>;
+using EvtStore = cutlass::epilogue::threadblock::Sm80EVT<Store, EvtAddBias>;
 
 using GemmKernel = typename cutlass::gemm::kernel::DefaultGemmWithVisitor<
 	ElementIn,
@@ -171,15 +166,12 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 	// Visitor arguments are listed children first, then the node itself
 	typename EvtStore::Arguments callback_args {
 		{
-			{
-				{}, // Accum
-				{static_cast<const ElementIn*>(gpu_weights->d_bias),
-				 ElementIn(0),
-				 {_0 {}, _1 {}, int32_t(N)}}, // Bias
-				{}			       // AddBias
-			},				       // EvtAddBias
-			{}				       // Relu
-		},					       // EvtRelu
+			{}, // Accum
+			{static_cast<const ElementIn*>(gpu_weights->d_bias),
+			 ElementIn(0),
+			 {_0 {}, _1 {}, int32_t(N)}}, // Bias
+			{}			       // AddBias
+		},				       // EvtAddBias
 		{static_cast<ElementIn*>(gpu_activations->d_output),
 		 {int64_t(N), _1 {}, int64_t(M) * N}} // Store
 	};
@@ -274,15 +266,12 @@ extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, i
 
 	typename EvtStore::Arguments callback_args {
 		{
-			{
-				{}, // Accum
-				{reinterpret_cast<const ElementIn*>(d_bias),
-				 ElementIn(0),
-				 {_0 {}, _1 {}, int32_t(N)}}, // Bias
-				{}			       // AddBias
-			},				       // EvtAddBias
-			{}				       // Relu
-		},					       // EvtRelu
+			{}, // Accum
+			{reinterpret_cast<const ElementIn*>(d_bias),
+			 ElementIn(0),
+			 {_0 {}, _1 {}, int32_t(N)}}, // Bias
+			{}			       // AddBias
+		},				       // EvtAddBias
 		{reinterpret_cast<ElementIn*>(d_out),
 		 {int64_t(N), _1 {}, int64_t(M) * N}} // Store
 	};

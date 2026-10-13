@@ -9,7 +9,7 @@
 //
 //   loss      L  = 0.5 * sum_i (y_i - t_i)^2
 //   dL/dy_i      = y_i - t_i
-//   dL/dz_i      = dL/dy_i * [y_i > 0]            (ReLU gradient, z = Wx + b)
+//   dL/dz_i      = dL/dy_i                        (linear output, y = z = Wx + b)
 //   dL/dW_ij     = dL/dz_i * x_j                  (outer product, K = 1)
 //   dL/db_i      = dL/dz_i
 //
@@ -62,8 +62,8 @@ __global__ static void backward_pass_kernel(float* __restrict__ W_master,
 		float t_val = __bfloat162float(target[row]);
 		float dy = y_val - t_val;
 
-		// Gradient of ReLU
-		float dz = (y_val > 0.0f) ? dy : 0.0f;
+		// Linear output: the gradient passes through unchanged
+		float dz = dy;
 
 		float w_val = W_master[i] - learning_rate * dz * __bfloat162float(x[col]);
 		W_master[i] = w_val;

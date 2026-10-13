@@ -57,6 +57,12 @@ struct Input {
 
 	// bfloat16_t
 	std::unordered_map<uint32_t, std::vector<std::bfloat16_t>> embedding_table = {};
+
+	// Contiguous mirror of embedding_table (ids + row-major vectors of embedding_dim
+	// floats), rebuilt on demand by decode_embedding_to_token when its size no longer
+	// matches the table. Mutable because it is a cache of the table, not state.
+	mutable std::vector<uint32_t> decode_ids = {};
+	mutable std::vector<float> decode_vectors = {};
 };
 
 inline std::string format_file_size(uintmax_t bytes) {

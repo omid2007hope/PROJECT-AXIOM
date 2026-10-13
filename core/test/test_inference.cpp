@@ -209,7 +209,7 @@ bool test_inference() {
 
 	const size_t STRESS_PASSES = 100;
 	bool all_inference_finite = true;
-	bool all_inference_non_negative = true;
+	bool any_inference_nonzero = false;
 
 	for (size_t iter = 0; iter < STRESS_PASSES; ++iter) {
 		std::vector<std::bfloat16_t> iter_ctx(in_dim);
@@ -233,14 +233,14 @@ bool test_inference() {
 			if (std::isnan(val) || std::isinf(val)) {
 				all_inference_finite = false;
 			}
-			if (val < 0.0f) {
-				all_inference_non_negative = false;
+			if (val != 0.0f) {
+				any_inference_nonzero = true;
 			}
 		}
 	}
 
 	test_check(all_inference_finite, "All 100 consecutive forward inference outputs are finite numbers", s_pass, s_fail);
-	test_check(all_inference_non_negative, "All 100 outputs are strictly >= 0 (CUTLASS ReLU non-negativity)", s_pass, s_fail);
+	test_check(any_inference_nonzero, "Linear outputs are alive (not collapsed to all zeros)", s_pass, s_fail);
 
 	size_t vram_free_end = 0, vram_total_end = 0;
 	get_gpu_telemetry(&vram_free_end, &vram_total_end);

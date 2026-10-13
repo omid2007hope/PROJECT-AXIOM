@@ -238,7 +238,7 @@ static void test_cutlass_forward_pass_evt() {
 	bool down_out = download_output(&acts, h_out.data(), out_dim);
 	check(down_out, "download_output() succeeds");
 
-	// Compute CPU reference: ReLU(W * x + b)
+	// Compute CPU reference: W * x + b (linear output layer)
 	bool matched = true;
 	for (size_t row = 0; row < out_dim; ++row) {
 		float sum = h_b[row];
@@ -247,16 +247,13 @@ static void test_cutlass_forward_pass_evt() {
 			float w_val = h_w[row * in_dim + col];
 			sum += w_val * x_val;
 		}
-		if (sum < 0.0f) {
-			sum = 0.0f; // ReLU
-		}
 		float actual = static_cast<float>(h_out[row]);
 		if (std::abs(actual - sum) > 0.15f) {
 			matched = false;
 			std::cerr << "Mismatch row " << row << ": actual=" << actual << " ref=" << sum << "\n";
 		}
 	}
-	check(matched, "CUTLASS EVT output matches CPU reference ReLU(Wx + b)");
+	check(matched, "CUTLASS EVT output matches CPU reference (Wx + b)");
 
 	free_gpu(&gpu);
 	free_gpu_weights(&weights);
@@ -350,7 +347,7 @@ bool test_cuda_transfer() {
 	std::cout << "\n[5] GPU transfer tests\n";
 	test_gpu_roundtrip();
 
-	std::cout << "\n[6] CUTLASS EVT Forward Pass (Tensor Cores + Fused Bias/ReLU)\n";
+	std::cout << "\n[6] CUTLASS EVT Forward Pass (Tensor Cores + Fused Bias)\n";
 	test_cutlass_forward_pass_evt();
 
 	std::cout << "\n[7] Backward Pass Gradients & Validation Loss Drop\n";
