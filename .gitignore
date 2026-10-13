@@ -7,4 +7,10 @@ weights.axiom
 vocab.axiom 
  
 #Other Models 
+other_models
 Qwen3.8-27B-UD-IQ4_XS.gguf
+
+#Data 
+core/database
+core/asset_sample
+core/training_data
