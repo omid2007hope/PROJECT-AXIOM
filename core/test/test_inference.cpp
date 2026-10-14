@@ -65,15 +65,15 @@ bool test_inference() {
 	test_check(repeat_tokens[0] == repeat_tokens[1] && repeat_tokens[1] == repeat_tokens[2],
 		   "Repeated words share exact identical token ID", s_pass, s_fail);
 
-	// 1.5 Modality Boundary Check: Text IDs must strictly reside in [1, 9,999,999]
+	// 1.5 Modality Boundary Check: Text IDs must strictly reside in [1, 999,999,999]
 	bool text_ids_in_bounds = true;
 	for (const auto& [word, id] : input.text_dictionary) {
-		if (id < 1 || id >= 10000000) {
+		if (id < 1 || id >= 1000000000) {
 			text_ids_in_bounds = false;
 			break;
 		}
 	}
-	test_check(text_ids_in_bounds, "All allocated text IDs strictly within [1, 9,999,999]", s_pass, s_fail);
+	test_check(text_ids_in_bounds, "All allocated text IDs strictly within [1, 999,999,999]", s_pass, s_fail);
 
 	// ── [2] Autoregressive Context Window Generation & Padding Logistics ────────
 	std::cout << "\n[2] Autoregressive Context Window Generation & Padding Logistics\n";
@@ -143,31 +143,31 @@ bool test_inference() {
 	test_check_eq(parser.token_to_string(input, 42), std::string("Axiom"), "Text token #42 decodes to 'Axiom'", s_pass, s_fail);
 	test_check_eq(parser.token_to_string(input, 999), std::string("[Text #999]"), "Unmapped text ID decodes to '[Text #999]'", s_pass, s_fail);
 
-	// 3.2 Number Modality (10,000,000 to 19,999,999)
-	input.number_dictionary[3.14159] = 10000005;
-	test_check(parser.token_to_string(input, 10000005).find("3.14159") != std::string::npos,
-		   "Number token #10000005 decodes to numeric string 3.14159", s_pass, s_fail);
-	test_check_eq(parser.token_to_string(input, 10000099), std::string("[Number #10000099]"),
-		      "Unmapped number ID decodes to '[Number #10000099]'", s_pass, s_fail);
+	// 3.2 Number Modality (1,000,000,000 to 1,999,999,999)
+	input.number_dictionary[3.14159] = 1000000005;
+	test_check(parser.token_to_string(input, 1000000005).find("3.14159") != std::string::npos,
+		   "Number token #1000000005 decodes to numeric string 3.14159", s_pass, s_fail);
+	test_check_eq(parser.token_to_string(input, 1000000099), std::string("[Number #1000000099]"),
+		      "Unmapped number ID decodes to '[Number #1000000099]'", s_pass, s_fail);
 
-	// 3.3 Image Modality (20,000,000 to 29,999,999)
-	input.image_dictionary[static_cast<uint8_t>(255)] = 20000010;
-	test_check_eq(parser.token_to_string(input, 20000010), std::string("[Image byte: 255]"),
-		      "Image token #20000010 decodes to '[Image byte: 255]'", s_pass, s_fail);
+	// 3.3 Image Modality (2,000,000,000 to 2,999,999,999)
+	input.image_dictionary[static_cast<uint8_t>(255)] = 2000000010;
+	test_check_eq(parser.token_to_string(input, 2000000010), std::string("[Image byte: 255]"),
+		      "Image token #2000000010 decodes to '[Image byte: 255]'", s_pass, s_fail);
 
-	// 3.4 Video Modality (30,000,000 to 39,999,999)
-	input.video_dictionary[static_cast<uint8_t>(128)] = 30000020;
-	test_check_eq(parser.token_to_string(input, 30000020), std::string("[Video byte: 128]"),
-		      "Video token #30000020 decodes to '[Video byte: 128]'", s_pass, s_fail);
+	// 3.4 Video Modality (3,000,000,000 to 3,999,999,999)
+	input.video_dictionary[static_cast<uint8_t>(128)] = 3000000020;
+	test_check_eq(parser.token_to_string(input, 3000000020), std::string("[Video byte: 128]"),
+		      "Video token #3000000020 decodes to '[Video byte: 128]'", s_pass, s_fail);
 
-	// 3.5 Voice Modality (40,000,000 to 49,999,999)
-	input.voice_dictionary[static_cast<uint8_t>(64)] = 40000030;
-	test_check_eq(parser.token_to_string(input, 40000030), std::string("[Voice byte: 64]"),
-		      "Voice token #40000030 decodes to '[Voice byte: 64]'", s_pass, s_fail);
+	// 3.5 Voice Modality (4,000,000,000 to 4,200,000,000)
+	input.voice_dictionary[static_cast<uint8_t>(64)] = 4000000030;
+	test_check_eq(parser.token_to_string(input, 4000000030), std::string("[Voice byte: 64]"),
+		      "Voice token #4000000030 decodes to '[Voice byte: 64]'", s_pass, s_fail);
 
-	// 3.6 Unknown / Out-of-bounds Modality (>= 50,000,000)
-	test_check_eq(parser.token_to_string(input, 99999999), std::string("[Unknown #99999999]"),
-		      "Token ID >= 50,000,000 decodes to '[Unknown #99999999]'", s_pass, s_fail);
+	// 3.6 Unknown / Out-of-bounds Modality (>= 4,200,000,000)
+	test_check_eq(parser.token_to_string(input, 4250000000U), std::string("[Unknown #4250000000]"),
+		      "Token ID >= 4,200,000,000 decodes to '[Unknown #4250000000]'", s_pass, s_fail);
 
 	// ── [4] Nearest-Neighbor Euclidean L2 Space Invariants ───────────────────────
 	std::cout << "\n[4] Nearest-Neighbor Euclidean L2 Space Invariants\n";

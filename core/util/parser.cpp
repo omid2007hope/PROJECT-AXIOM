@@ -296,8 +296,12 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 }
 
 std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
-	// 1. Text Modality (1 to 9,999,999)
-	if (token_id < 10000000) {
+	if (token_id == 0) {
+		return "[Unknown #0]";
+	}
+
+	// 1. Text Modality (1 to 999,999,999)
+	if (token_id < 1000000000U) {
 		auto it = input.reverse_text_dictionary.find(token_id);
 		if (it != input.reverse_text_dictionary.end()) {
 			return it->second;
@@ -309,8 +313,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		return "[Text #" + std::to_string(token_id) + "]";
 	}
 
-	// 2. Number Modality (10,000,000 to 19,999,999)
-	if (token_id < 20000000) {
+	// 2. Number Modality (1,000,000,000 to 1,999,999,999)
+	if (token_id < 2000000000U) {
 		for (const auto& [num, each_token] : input.number_dictionary) {
 			if (each_token == token_id) {
 				std::ostringstream oss;
@@ -321,8 +325,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		return "[Number #" + std::to_string(token_id) + "]";
 	}
 
-	// 3. Image Modality (20,000,000 to 29,999,999)
-	if (token_id < 30000000) {
+	// 3. Image Modality (2,000,000,000 to 2,999,999,999)
+	if (token_id < 3000000000U) {
 		for (const auto& [byte_val, each_token] : input.image_dictionary) {
 			if (each_token == token_id) {
 				return "[Image byte: " +
@@ -332,8 +336,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		return "[Image #" + std::to_string(token_id) + "]";
 	}
 
-	// 4. Video Modality (30,000,000 to 39,999,999)
-	if (token_id < 40000000) {
+	// 4. Video Modality (3,000,000,000 to 3,999,999,999)
+	if (token_id < 4000000000U) {
 		for (const auto& [byte_val, each_token] : input.video_dictionary) {
 			if (each_token == token_id) {
 				return "[Video byte: " +
@@ -343,8 +347,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		return "[Video #" + std::to_string(token_id) + "]";
 	}
 
-	// 5. Voice Modality (40,000,000 to 49,999,999)
-	if (token_id < 50000000) {
+	// 5. Voice Modality (4,000,000,000 to 4,200,000,000)
+	if (token_id < 4200000000U) {
 		for (const auto& [byte_val, each_token] : input.voice_dictionary) {
 			if (each_token == token_id) {
 				return "[Voice byte: " +
