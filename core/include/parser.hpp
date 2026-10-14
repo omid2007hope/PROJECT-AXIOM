@@ -14,8 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "./optimizer.hpp"
-
 
 struct Test {
 	std::vector<std::string> data_txt = {};
@@ -69,7 +67,7 @@ struct Input {
 
 	// Demonstrate progress with bar
 	size_t minimum_limit = 500000;
-	size_t ram_buffer_size = Optimizer.ram_buffer_size;
+	size_t ram_buffer_size = 100000;
 };
 
 // ***********
