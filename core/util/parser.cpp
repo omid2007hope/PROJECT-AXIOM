@@ -275,6 +275,13 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 	}
 
 	const size_t compared_dims = std::min(input.embedding_dim, embedding_vector.size());
+
+	for (size_t d = 0; d < compared_dims; ++d) {
+		if (!std::isfinite(embedding_vector[d])) {
+			return 0;
+		}
+	}
+
 	const float* row = input.decode_vectors.data();
 
 	uint32_t best_id = 0;

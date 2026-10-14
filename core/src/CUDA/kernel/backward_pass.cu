@@ -62,20 +62,39 @@ __global__ static void backward_pass_kernel(float* __restrict__ W_master,
 		float t_val = __bfloat162float(target[row]);
 		float dy = y_val - t_val;
 
-		// Linear output: the gradient passes through unchanged
-		float dz = dy;
+		// Defensive NaN / Inf check
+		if (isnan(dy) || isinf(dy)) {
+			dy = 0.0f;
+		}
 
-		float w_val = W_master[i] - learning_rate * dz * __bfloat162float(x[col]);
-		W_master[i] = w_val;
-		W[i] = __float2bfloat16(w_val);
+		// Gradient clipping: prevent runaway exploding gradients across multi-million step training
+		float dz = fmaxf(-1.0f, fminf(1.0f, dy));
+
+		float x_val = __bfloat162float(x[col]);
+		if (isnan(x_val) || isinf(x_val)) {
+			x_val = 0.0f;
+		}
+
+		float w_val = W_master[i] - learning_rate * dz * x_val;
+		if (isfinite(w_val)) {
+			// Clamp weights to safe numerical envelope to prevent IEEE 754 overflow
+			w_val = fmaxf(-10.0f, fminf(10.0f, w_val));
+			W_master[i] = w_val;
+			W[i] = __float2bfloat16(w_val);
+		}
 
 		// Each row's first thread owns that row's bias and its share of the loss
 		if (col == 0) {
 			float b_val = b_master[row] - learning_rate * dz;
-			b_master[row] = b_val;
-			b[row] = __float2bfloat16(b_val);
+			if (isfinite(b_val)) {
+				b_val = fmaxf(-10.0f, fminf(10.0f, b_val));
+				b_master[row] = b_val;
+				b[row] = __float2bfloat16(b_val);
+			}
 
-			atomicAdd(loss, 0.5f * dy * dy);
+			if (isfinite(dy)) {
+				atomicAdd(loss, 0.5f * dy * dy);
+			}
 		}
 	}
 }

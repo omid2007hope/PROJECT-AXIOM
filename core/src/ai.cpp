@@ -168,6 +168,19 @@ bool AI::save_weights(const std::string& path) {
 		return false;
 	}
 
+	for (float w : h_weights) {
+		if (!std::isfinite(w)) {
+			std::cerr << "[AI Brain] Refusing to save corrupt checkpoint: weights contain NaN or Inf.\n";
+			return false;
+		}
+	}
+	for (float b : h_bias) {
+		if (!std::isfinite(b)) {
+			std::cerr << "[AI Brain] Refusing to save corrupt checkpoint: biases contain NaN or Inf.\n";
+			return false;
+		}
+	}
+
 	// 4. Atomic write: write to temporary file first (.tmp)
 	std::filesystem::path target_p(path);
 	if (!target_p.parent_path().empty()) {
@@ -269,6 +282,19 @@ bool AI::load_weights(const std::string& path) {
 	if (in.gcount() != static_cast<std::streamsize>(header.bias_count * sizeof(float))) {
 		std::cerr << "[AI Brain] Incomplete bias data in " << path << "\n";
 		return false;
+	}
+
+	for (float w : loaded_weights) {
+		if (!std::isfinite(w)) {
+			std::cerr << "[AI Brain] Corrupt weights in " << path << ": contains NaN or Inf. Rejecting load.\n";
+			return false;
+		}
+	}
+	for (float b : loaded_bias) {
+		if (!std::isfinite(b)) {
+			std::cerr << "[AI Brain] Corrupt biases in " << path << ": contains NaN or Inf. Rejecting load.\n";
+			return false;
+		}
 	}
 
 	// Atomic update of host parameters
