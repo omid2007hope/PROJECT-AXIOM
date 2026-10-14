@@ -10,6 +10,10 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <winreg.h>
+
+#include "../include/optimizer.hpp"
+
 
 // Data Streaming (or Batching).
 
@@ -18,10 +22,19 @@ Turn raw data samples into the parsed input vector;
 Now isolated from the neural network entirely.
 */
 
+// *************
+// Tokenization phase
+// *************
+
 // MOCK DISCRETE TOKENIZER (Gemini / Chameleon Early Fusion style)
 std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
-	if (developer_mode) {
+	// *************
+	// Developer mode : on
+	// Data comes from test structure
+	// *************
+
+	if (developer_mode == true) {
 		// 1. Text Tokenization (IDs 1 - 9999)
 		for (const std::string& word : test.data_txt) {
 			add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
@@ -51,6 +64,11 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 				file, input.voice_dictionary, input.next_voice_id, input);
 		}
 
+		// *************
+		// Developer mode : off
+		// Data comes from input structure
+		// *************
+
 	} else {
 		// Production Mode: Dynamically Tokenize User's UI Data
 		for (const std::string& word : input.user_text) {
@@ -74,13 +92,21 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 		}
 	}
 
+
 	return input.tokenized_data;
 }
+
+// *************
+// Embedding phase
+// *************
 
 // EMBEDDINGS: Convert global token IDs to a flat dense vector
 // Streams directly to disk in fixed-size chunks to eliminate RAM saturation
 // and SSD page thrashing on massive datasets (hundreds of millions of tokens).
 std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
+	Portion portion;
+
+	//
 	build_embedding_table(input);
 
 	if (!embedded_path.parent_path().empty()) {
@@ -89,95 +115,114 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 	}
 
 	std::ofstream out(embedded_path, std::ios::binary | std::ios::trunc);
+
 	if (!out) {
-		std::cerr << "[!] Fatal: Failed to open " << embedded_path << " for writing embeddings.\n";
+		std::cerr << "[!] Fatal: Failed to open " << embedded_path
+			  << " for writing embeddings.\n";
+
 		return {};
 	}
 
-	const size_t total_tokens = input.tokenized_data.size();
-	const size_t dim = input.embedding_dim;
+	// If we are testing which means developer mode is on
+	// if token size is less than equal to ram's buffer size
+	const bool keep_in_ram =
+		developer_mode == true || (input.tokenized_data.size() <= portion.ram_buffer_size);
 
-	// For small datasets / unit tests (<= 100K tokens), keep input.embedded_data populated
-	constexpr size_t MAX_IN_MEMORY_TOKENS = 100000;
-	const bool keep_in_ram = developer_mode || (total_tokens <= MAX_IN_MEMORY_TOKENS);
-
-	if (keep_in_ram) {
-		input.embedded_data.resize(total_tokens * dim);
+	if (keep_in_ram == true) {
+		input.embedded_data.resize(input.tokenized_data.size() * input.embedding_dim);
 	} else {
 		input.embedded_data.clear();
 		input.embedded_data.shrink_to_fit();
 	}
 
-	constexpr size_t CHUNK_TOKENS = 65536;
-	std::vector<std::bfloat16_t> chunk(CHUNK_TOKENS * dim);
-	std::vector<std::bfloat16_t> current_vec(dim);
+	std::vector<std::bfloat16_t> chunk(input.CHUNK_TOKENS * input.embedding_dim);
+	std::vector<std::bfloat16_t> current_vec(input.embedding_dim);
 
-	uint32_t last_id = std::numeric_limits<uint32_t>::max();
-	size_t chunk_pos = 0;
-	size_t tokens_written = 0;
-	size_t last_pct = 0;
-	const bool show_progress = (total_tokens >= 500000);
+	const bool show_progress = (input.tokenized_data.size() >= input.minimum_limit);
 
-	for (size_t i = 0; i < total_tokens; ++i) {
-		const uint32_t id = input.tokenized_data[i];
-		if (id != last_id) {
-			last_id = id;
-			for (size_t d = 0; d < dim; ++d) {
+	for (size_t i = 0; i < input.tokenized_data.size(); ++i) {
+
+		// each single token
+		const uint32_t each_token = input.tokenized_data[i];
+
+		// Insure it creates a new unique ID each time
+		if (each_token != input.last_token) {
+			input.last_token = each_token;
+			for (size_t d = 0; d < input.embedding_dim; ++d) {
+
 				current_vec[d] = static_cast<std::bfloat16_t>(
-					std::sin(static_cast<double>(id) * (d + 1.0)));
+
+					// tokenized data multiply by ((1, 2, 3, 4) + 1.0)
+					std::sin(static_cast<double>(each_token) * (d + 1.0)));
 			}
 		}
 
-		if (keep_in_ram) {
-			for (size_t d = 0; d < dim; ++d) {
-				input.embedded_data[i * dim + d] = current_vec[d];
+		/*
+		const bool keep_in_ram =
+		developer_mode == true || (input.tokenized_data.size() <= portion.ram_buffer_size);  
+        */
+
+		if (keep_in_ram == true) {
+			for (size_t d = 0; d < input.embedding_dim; ++d) {
+
+				input.embedded_data[i * input.embedding_dim + d] = current_vec[d];
 			}
 		}
 
-		for (size_t d = 0; d < dim; ++d) {
-			chunk[chunk_pos++] = current_vec[d];
+		for (size_t d = 0; d < input.embedding_dim; ++d) {
+			chunk[input.chunk_pos++] = current_vec[d];
 		}
 
-		if (chunk_pos == chunk.size()) {
+		if (input.chunk_pos == chunk.size()) {
 			out.write(reinterpret_cast<const char*>(chunk.data()),
 				  chunk.size() * sizeof(std::bfloat16_t));
-			tokens_written += CHUNK_TOKENS;
-			chunk_pos = 0;
+			input.tokens_written += input.CHUNK_TOKENS;
+			input.chunk_pos = 0;
 
 			if (show_progress) {
-				const size_t pct = (tokens_written * 100) / total_tokens;
-				if (pct != last_pct) {
-					last_pct = pct;
+				const size_t pct =
+					(input.tokens_written * 100) / input.tokenized_data.size();
+				if (pct != input.last_pct) {
+					input.last_pct = pct;
 					constexpr int bar_w = 24;
 					const int filled = static_cast<int>((pct / 100.0) * bar_w);
 					std::string bar = "[";
 					for (int b = 0; b < bar_w; ++b) {
-						if (b < filled) bar += '=';
-						else if (b == filled) bar += '>';
-						else bar += ' ';
+						if (b < filled)
+							bar += '=';
+						else if (b == filled)
+							bar += '>';
+						else
+							bar += ' ';
 					}
 					bar += "]";
-					std::cout << "\r  [..] Synthesizing continuous embeddings " << bar
-						  << " " << pct << "% (" << tokens_written << "/" << total_tokens
-						  << " tokens)" << std::flush;
+					std::cout << "\r  [..] Synthesizing continuous embeddings "
+						  << bar << " " << pct << "% ("
+						  << input.tokens_written << "/"
+						  << input.tokenized_data.size() << " tokens)"
+						  << std::flush;
 				}
 			}
 		}
 	}
 
-	if (chunk_pos > 0) {
+	// std::ofstream out(embedded_path, std::ios::binary | std::ios::trunc)
+	if (input.chunk_pos > 0) {
 		out.write(reinterpret_cast<const char*>(chunk.data()),
-			  chunk_pos * sizeof(std::bfloat16_t));
-		tokens_written += (chunk_pos / dim);
+			  input.chunk_pos * sizeof(std::bfloat16_t));
+		input.tokens_written += (input.chunk_pos / input.embedding_dim);
 	}
 	out.close();
 
 	if (show_progress) {
-		const uintmax_t bytes = total_tokens * dim * sizeof(std::bfloat16_t);
-		std::cout << "\r                                                                                \r"
-			  << "  [OK] Continuous embeddings synthesized: " << total_tokens << " tokens ("
-			  << format_file_size(bytes) << ") streamed to disk.\n"
-			  << std::flush;
+		const uintmax_t bytes =
+			input.tokenized_data.size() * input.embedding_dim * sizeof(std::bfloat16_t);
+		std::cout
+			<< "\r                                                                                \r"
+			<< "  [OK] Continuous embeddings synthesized: "
+			<< input.tokenized_data.size() << " tokens (" << format_file_size(bytes)
+			<< ") streamed to disk.\n"
+			<< std::flush;
 	}
 
 	return input.embedded_data;
@@ -191,22 +236,27 @@ void Parser::build_embedding_table(Input& input) {
 		input.embedding_table.reserve(total_unique);
 	}
 
-	auto ensure_embedding = [&](uint32_t id) {
-		if (input.embedding_table.find(id) == input.embedding_table.end()) {
+	auto ensure_embedding = [&](uint32_t each_token) {
+		if (input.embedding_table.find(each_token) == input.embedding_table.end()) {
 			std::vector<std::bfloat16_t> vec(input.embedding_dim);
 			for (uint32_t d = 0; d < input.embedding_dim; ++d) {
 				vec[d] = static_cast<std::bfloat16_t>(
-					std::sin(static_cast<double>(id) * (d + 1.0)));
+					std::sin(static_cast<double>(each_token) * (d + 1.0)));
 			}
-			input.embedding_table[id] = std::move(vec);
+			input.embedding_table[each_token] = std::move(vec);
 		}
 	};
 
-	for (const auto& [_, id] : input.text_dictionary) ensure_embedding(id);
-	for (const auto& [_, id] : input.number_dictionary) ensure_embedding(id);
-	for (const auto& [_, id] : input.image_dictionary) ensure_embedding(id);
-	for (const auto& [_, id] : input.video_dictionary) ensure_embedding(id);
-	for (const auto& [_, id] : input.voice_dictionary) ensure_embedding(id);
+	for (const auto& [_, each_token] : input.text_dictionary)
+		ensure_embedding(each_token);
+	for (const auto& [_, each_token] : input.number_dictionary)
+		ensure_embedding(each_token);
+	for (const auto& [_, each_token] : input.image_dictionary)
+		ensure_embedding(each_token);
+	for (const auto& [_, each_token] : input.video_dictionary)
+		ensure_embedding(each_token);
+	for (const auto& [_, each_token] : input.voice_dictionary)
+		ensure_embedding(each_token);
 }
 
 uint32_t Parser::decode_embedding_to_token(const Input& input,
@@ -215,31 +265,31 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 		return 0;
 	}
 
-	const size_t dim = input.embedding_dim;
+	const size_t input.embedding_dim = input.embedding_dim;
 
 	// Rebuild the contiguous mirror whenever the table has grown or shrunk
 	if (input.decode_ids.size() != input.embedding_table.size()) {
 		input.decode_ids.clear();
 		input.decode_vectors.clear();
 		input.decode_ids.reserve(input.embedding_table.size());
-		input.decode_vectors.reserve(input.embedding_table.size() * dim);
+		input.decode_vectors.reserve(input.embedding_table.size() * input.embedding_dim);
 
-		for (const auto& [id, vec] : input.embedding_table) {
-			input.decode_ids.push_back(id);
-			for (size_t d = 0; d < dim; ++d) {
+		for (const auto& [each_token, vec] : input.embedding_table) {
+			input.decode_ids.push_back(each_token);
+			for (size_t d = 0; d < input.embedding_dim; ++d) {
 				input.decode_vectors.push_back(
 					d < vec.size() ? static_cast<float>(vec[d]) : 0.0f);
 			}
 		}
 	}
 
-	const size_t compared_dims = std::min(dim, embedding_vector.size());
+	const size_t compared_dims = std::min(input.embedding_dim, embedding_vector.size());
 	const float* row = input.decode_vectors.data();
 
 	uint32_t best_id = 0;
 	float min_dist_sq = std::numeric_limits<float>::max();
 
-	for (size_t i = 0; i < input.decode_ids.size(); ++i, row += dim) {
+	for (size_t i = 0; i < input.decode_ids.size(); ++i, row += input.embedding_dim) {
 		float dist_sq = 0.0f;
 		for (size_t d = 0; d < compared_dims; ++d) {
 			const float diff = embedding_vector[d] - row[d];
@@ -261,16 +311,17 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		if (it != input.reverse_text_dictionary.end()) {
 			return it->second;
 		}
-		for (const auto& [word, id] : input.text_dictionary) {
-			if (id == token_id) return word;
+		for (const auto& [word, each_token] : input.text_dictionary) {
+			if (each_token == token_id)
+				return word;
 		}
 		return "[Text #" + std::to_string(token_id) + "]";
 	}
 
 	// 2. Number Modality (10,000,000 to 19,999,999)
 	if (token_id < 20000000) {
-		for (const auto& [num, id] : input.number_dictionary) {
-			if (id == token_id) {
+		for (const auto& [num, each_token] : input.number_dictionary) {
+			if (each_token == token_id) {
 				std::ostringstream oss;
 				oss << num;
 				return oss.str();
@@ -281,9 +332,10 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 	// 3. Image Modality (20,000,000 to 29,999,999)
 	if (token_id < 30000000) {
-		for (const auto& [byte_val, id] : input.image_dictionary) {
-			if (id == token_id) {
-				return "[Image byte: " + std::to_string(static_cast<int>(byte_val)) + "]";
+		for (const auto& [byte_val, each_token] : input.image_dictionary) {
+			if (each_token == token_id) {
+				return "[Image byte: " +
+				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
 		}
 		return "[Image #" + std::to_string(token_id) + "]";
@@ -291,9 +343,10 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 	// 4. Video Modality (30,000,000 to 39,999,999)
 	if (token_id < 40000000) {
-		for (const auto& [byte_val, id] : input.video_dictionary) {
-			if (id == token_id) {
-				return "[Video byte: " + std::to_string(static_cast<int>(byte_val)) + "]";
+		for (const auto& [byte_val, each_token] : input.video_dictionary) {
+			if (each_token == token_id) {
+				return "[Video byte: " +
+				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
 		}
 		return "[Video #" + std::to_string(token_id) + "]";
@@ -301,9 +354,10 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 	// 5. Voice Modality (40,000,000 to 49,999,999)
 	if (token_id < 50000000) {
-		for (const auto& [byte_val, id] : input.voice_dictionary) {
-			if (id == token_id) {
-				return "[Voice byte: " + std::to_string(static_cast<int>(byte_val)) + "]";
+		for (const auto& [byte_val, each_token] : input.voice_dictionary) {
+			if (each_token == token_id) {
+				return "[Voice byte: " +
+				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
 		}
 		return "[Voice #" + std::to_string(token_id) + "]";
@@ -315,7 +369,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 std::string Parser::decode_prediction(const Input& input,
 				      const std::vector<float>& embedding_vector) {
 	uint32_t token_id = decode_embedding_to_token(input, embedding_vector);
-	if (token_id == 0) return "[Empty Vocabulary]";
+	if (token_id == 0)
+		return "[Empty Vocabulary]";
 	return token_to_string(input, token_id);
 }
 
@@ -336,11 +391,12 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 }
 
 std::vector<std::bfloat16_t> Parser::tokens_to_context_window(const Input& input,
-							       const std::vector<uint32_t>& tokens,
-							       size_t context_tokens) {
+							      const std::vector<uint32_t>& tokens,
+							      size_t context_tokens) {
 	std::vector<std::bfloat16_t> window(context_tokens * input.embedding_dim,
 					    static_cast<std::bfloat16_t>(0.0f));
-	if (tokens.empty()) return window;
+	if (tokens.empty())
+		return window;
 
 	size_t count = std::min(tokens.size(), context_tokens);
 	size_t start_token_idx = context_tokens - count;
@@ -350,7 +406,8 @@ std::vector<std::bfloat16_t> Parser::tokens_to_context_window(const Input& input
 		auto it = input.embedding_table.find(tok_id);
 		if (it != input.embedding_table.end()) {
 			for (size_t d = 0; d < input.embedding_dim; ++d) {
-				window[(start_token_idx + i) * input.embedding_dim + d] = it->second[d];
+				window[(start_token_idx + i) * input.embedding_dim + d] =
+					it->second[d];
 			}
 		}
 	}
@@ -361,9 +418,11 @@ static void print_progress_bar(const std::string& filename,
 			       const std::string& action,
 			       uintmax_t current_bytes,
 			       uintmax_t total_bytes) {
-	const double pct = (total_bytes > 0)
-		? std::min(100.0, (static_cast<double>(current_bytes) / static_cast<double>(total_bytes)) * 100.0)
-		: 100.0;
+	const double pct = (total_bytes > 0) ? std::min(100.0,
+							(static_cast<double>(current_bytes) /
+							 static_cast<double>(total_bytes)) *
+								100.0)
+					     : 100.0;
 	constexpr int bar_width = 24;
 	const int filled = static_cast<int>((pct / 100.0) * bar_width);
 
@@ -379,17 +438,19 @@ static void print_progress_bar(const std::string& filename,
 	}
 	bar += "]";
 
-	std::cout << "\r  [..] " << action << " " << filename << " " << bar << " "
-		  << std::fixed << std::setprecision(1) << pct << "% ("
-		  << format_file_size(current_bytes) << " / " << format_file_size(total_bytes) << ")"
-		  << std::flush;
+	std::cout << "\r  [..] " << action << " " << filename << " " << bar << " " << std::fixed
+		  << std::setprecision(1) << pct << "% (" << format_file_size(current_bytes)
+		  << " / " << format_file_size(total_bytes) << ")" << std::flush;
 }
 
-size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input, size_t max_files) {
+size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
+				       Input& input,
+				       size_t max_files) {
 	last_bulk_files.clear();
 
 	std::error_code ec;
-	if (!std::filesystem::exists(dir_path, ec) || !std::filesystem::is_directory(dir_path, ec)) {
+	if (!std::filesystem::exists(dir_path, ec) ||
+	    !std::filesystem::is_directory(dir_path, ec)) {
 		std::cerr << "[!] Invalid or non-existent asset directory: " << dir_path << "\n";
 		return 0;
 	}
@@ -421,7 +482,8 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 	}
 
 	std::sort(files.begin(), files.end());
-	std::cout << "\n[+] Discovered " << files.size() << " asset file(s) in " << dir_path.string() << ":\n";
+	std::cout << "\n[+] Discovered " << files.size() << " asset file(s) in "
+		  << dir_path.string() << ":\n";
 
 	size_t files_processed = 0;
 	for (const auto& fpath : files) {
@@ -429,39 +491,39 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 			break;
 		}
 		std::string ext = fpath.extension().string();
-		for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		for (char& c : ext)
+			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
 		uintmax_t fsize = std::filesystem::file_size(fpath, ec);
-		if (ec) fsize = 0;
+		if (ec)
+			fsize = 0;
 
 		const size_t initial_tokens = input.tokenized_data.size();
 
-		bool is_text_ext = (ext == ".txt" || ext == ".text" || ext == ".md" ||
-				    ext == ".markdown" || ext == ".json" || ext == ".csv" ||
-				    ext == ".log" || ext == ".c" || ext == ".cpp" ||
-				    ext == ".h" || ext == ".hpp" || ext == ".cu" ||
-				    ext == ".cuh" || ext == ".py" || ext == ".html" ||
-				    ext == ".htm" || ext == ".xml" || ext == ".yaml" ||
-				    ext == ".yml" || ext == ".ini" || ext == ".cfg" ||
-				    ext == ".conf" || ext == ".sql" || ext == ".rs" ||
-				    ext == ".go" || ext == ".java" || ext == ".ts" ||
-				    ext == ".js" || ext == ".sh" || ext == ".bat" ||
-				    ext == ".ps1");
+		bool is_text_ext =
+			(ext == ".txt" || ext == ".text" || ext == ".md" || ext == ".markdown" ||
+			 ext == ".json" || ext == ".csv" || ext == ".log" || ext == ".c" ||
+			 ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".cu" ||
+			 ext == ".cuh" || ext == ".py" || ext == ".html" || ext == ".htm" ||
+			 ext == ".xml" || ext == ".yaml" || ext == ".yml" || ext == ".ini" ||
+			 ext == ".cfg" || ext == ".conf" || ext == ".sql" || ext == ".rs" ||
+			 ext == ".go" || ext == ".java" || ext == ".ts" || ext == ".js" ||
+			 ext == ".sh" || ext == ".bat" || ext == ".ps1");
 
-		bool is_image_ext = (ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
-				     ext == ".bmp" || ext == ".webp" || ext == ".gif" ||
-				     ext == ".tiff" || ext == ".tif" || ext == ".ico" ||
-				     ext == ".ppm" || ext == ".pgm" || ext == ".svg");
+		bool is_image_ext =
+			(ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" ||
+			 ext == ".webp" || ext == ".gif" || ext == ".tiff" || ext == ".tif" ||
+			 ext == ".ico" || ext == ".ppm" || ext == ".pgm" || ext == ".svg");
 
-		bool is_video_ext = (ext == ".mp4" || ext == ".mkv" || ext == ".avi" ||
-				     ext == ".mov" || ext == ".webm" || ext == ".wmv" ||
-				     ext == ".flv" || ext == ".m4v" || ext == ".mpg" ||
-				     ext == ".mpeg" || ext == ".3gp");
+		bool is_video_ext =
+			(ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov" ||
+			 ext == ".webm" || ext == ".wmv" || ext == ".flv" || ext == ".m4v" ||
+			 ext == ".mpg" || ext == ".mpeg" || ext == ".3gp");
 
-		bool is_audio_ext = (ext == ".ogg" || ext == ".wav" || ext == ".mp3" ||
-				     ext == ".flac" || ext == ".aac" || ext == ".m4a" ||
-				     ext == ".wma" || ext == ".opus" || ext == ".aiff" ||
-				     ext == ".mid" || ext == ".midi");
+		bool is_audio_ext =
+			(ext == ".ogg" || ext == ".wav" || ext == ".mp3" || ext == ".flac" ||
+			 ext == ".aac" || ext == ".m4a" || ext == ".wma" || ext == ".opus" ||
+			 ext == ".aiff" || ext == ".mid" || ext == ".midi");
 
 		bool is_3d_ext = (ext == ".obj" || ext == ".stl" || ext == ".gltf" ||
 				  ext == ".glb" || ext == ".ply" || ext == ".3ds" ||
@@ -481,26 +543,30 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 			}
 		}
 
-		if (is_text_ext || (!is_image_ext && !is_video_ext && !is_audio_ext && !is_binary)) {
+		if (is_text_ext ||
+		    (!is_image_ext && !is_video_ext && !is_audio_ext && !is_binary)) {
 			std::ifstream in(fpath);
 			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				std::cerr << "  [!] Failed to open " << fpath.filename().string()
+					  << "\n";
 				continue;
 			}
 			std::string word;
 			while (in >> word) {
-				add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
+				add_assign_increase(
+					word, input.text_dictionary, input.next_text_id, input);
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
-			std::cout << "  [OK] " << fpath.filename().string()
-				  << " (" << format_file_size(fsize) << ") -> Text: "
-				  << added << " tokens mapped\n";
+			std::cout << "  [OK] " << fpath.filename().string() << " ("
+				  << format_file_size(fsize) << ") -> Text: " << added
+				  << " tokens mapped\n";
 			++files_processed;
 			last_bulk_files.push_back(fpath);
 		} else if (is_image_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				std::cerr << "  [!] Failed to open " << fpath.filename().string()
+					  << "\n";
 				continue;
 			}
 			char buf[65536];
@@ -511,28 +577,38 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
-					add_assign_increase(static_cast<uint8_t>(buf[i]), input.image_dictionary, input.next_image_id, input);
+					add_assign_increase(static_cast<uint8_t>(buf[i]),
+							    input.image_dictionary,
+							    input.next_image_id,
+							    input);
 				}
 				bytes_read += static_cast<uintmax_t>(n);
-				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read >= fsize)) {
+				if (show_progress &&
+				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
+				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
-					print_progress_bar(fpath.filename().string(), "Ingesting Image", bytes_read, fsize);
+					print_progress_bar(fpath.filename().string(),
+							   "Ingesting Image",
+							   bytes_read,
+							   fsize);
 				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			if (show_progress) {
-				std::cout << "\r                                                                                \r";
+				std::cout
+					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string()
-				  << " (" << format_file_size(fsize) << ") -> Image: "
-				  << added << " tokens mapped\n"
+			std::cout << "  [OK] " << fpath.filename().string() << " ("
+				  << format_file_size(fsize) << ") -> Image: " << added
+				  << " tokens mapped\n"
 				  << std::flush;
 			++files_processed;
 			last_bulk_files.push_back(fpath);
 		} else if (is_video_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				std::cerr << "  [!] Failed to open " << fpath.filename().string()
+					  << "\n";
 				continue;
 			}
 			char buf[65536];
@@ -543,28 +619,38 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
-					add_assign_increase(static_cast<uint8_t>(buf[i]), input.video_dictionary, input.next_video_id, input);
+					add_assign_increase(static_cast<uint8_t>(buf[i]),
+							    input.video_dictionary,
+							    input.next_video_id,
+							    input);
 				}
 				bytes_read += static_cast<uintmax_t>(n);
-				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read >= fsize)) {
+				if (show_progress &&
+				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
+				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
-					print_progress_bar(fpath.filename().string(), "Tokenizing Video", bytes_read, fsize);
+					print_progress_bar(fpath.filename().string(),
+							   "Tokenizing Video",
+							   bytes_read,
+							   fsize);
 				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			if (show_progress) {
-				std::cout << "\r                                                                                \r";
+				std::cout
+					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string()
-				  << " (" << format_file_size(fsize) << ") -> Video: "
-				  << added << " tokens mapped\n"
+			std::cout << "  [OK] " << fpath.filename().string() << " ("
+				  << format_file_size(fsize) << ") -> Video: " << added
+				  << " tokens mapped\n"
 				  << std::flush;
 			++files_processed;
 			last_bulk_files.push_back(fpath);
 		} else if (is_audio_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				std::cerr << "  [!] Failed to open " << fpath.filename().string()
+					  << "\n";
 				continue;
 			}
 			char buf[65536];
@@ -575,21 +661,30 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
-					add_assign_increase(static_cast<uint8_t>(buf[i]), input.voice_dictionary, input.next_voice_id, input);
+					add_assign_increase(static_cast<uint8_t>(buf[i]),
+							    input.voice_dictionary,
+							    input.next_voice_id,
+							    input);
 				}
 				bytes_read += static_cast<uintmax_t>(n);
-				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read >= fsize)) {
+				if (show_progress &&
+				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
+				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
-					print_progress_bar(fpath.filename().string(), "Ingesting Audio", bytes_read, fsize);
+					print_progress_bar(fpath.filename().string(),
+							   "Ingesting Audio",
+							   bytes_read,
+							   fsize);
 				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			if (show_progress) {
-				std::cout << "\r                                                                                \r";
+				std::cout
+					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string()
-				  << " (" << format_file_size(fsize) << ") -> Voice/Audio: "
-				  << added << " tokens mapped\n"
+			std::cout << "  [OK] " << fpath.filename().string() << " ("
+				  << format_file_size(fsize) << ") -> Voice/Audio: " << added
+				  << " tokens mapped\n"
 				  << std::flush;
 			++files_processed;
 			last_bulk_files.push_back(fpath);
@@ -597,34 +692,48 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 			// PDF, 3D model, archive (.zip/.tar/.gz/.7z), or arbitrary binary document
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string() << "\n";
+				std::cerr << "  [!] Failed to open " << fpath.filename().string()
+					  << "\n";
 				continue;
 			}
 			char buf[65536];
 			uintmax_t bytes_read = 0;
 			uintmax_t last_progress_bytes = 0;
 			const bool show_progress = (fsize >= 5 * 1024 * 1024);
-			const std::string action_label = is_3d_ext ? "Loading 3D Model" : (ext == ".pdf" ? "Parsing PDF" : "Extracting Asset");
+			const std::string action_label =
+				is_3d_ext ? "Loading 3D Model"
+					  : (ext == ".pdf" ? "Parsing PDF" : "Extracting Asset");
 
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
-					add_assign_increase(static_cast<uint8_t>(buf[i]), input.image_dictionary, input.next_image_id, input);
+					add_assign_increase(static_cast<uint8_t>(buf[i]),
+							    input.image_dictionary,
+							    input.next_image_id,
+							    input);
 				}
 				bytes_read += static_cast<uintmax_t>(n);
-				if (show_progress && (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read >= fsize)) {
+				if (show_progress &&
+				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
+				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
-					print_progress_bar(fpath.filename().string(), action_label, bytes_read, fsize);
+					print_progress_bar(fpath.filename().string(),
+							   action_label,
+							   bytes_read,
+							   fsize);
 				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
-			std::string tag = is_3d_ext ? "3D Model" : (ext == ".pdf" ? "PDF Document" : "Binary/Archive Asset");
+			std::string tag = is_3d_ext ? "3D Model"
+						    : (ext == ".pdf" ? "PDF Document"
+								     : "Binary/Archive Asset");
 			if (show_progress) {
-				std::cout << "\r                                                                                \r";
+				std::cout
+					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string()
-				  << " (" << format_file_size(fsize) << ") -> " << tag << ": "
-				  << added << " tokens mapped\n"
+			std::cout << "  [OK] " << fpath.filename().string() << " ("
+				  << format_file_size(fsize) << ") -> " << tag << ": " << added
+				  << " tokens mapped\n"
 				  << std::flush;
 			++files_processed;
 			last_bulk_files.push_back(fpath);
@@ -637,7 +746,8 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input& input) {
 	if (input.text_dictionary.empty()) {
 		if (std::filesystem::exists(filepath)) {
-			std::cout << "[i] Preserving existing vocabulary at " << filepath.filename().string()
+			std::cout << "[i] Preserving existing vocabulary at "
+				  << filepath.filename().string()
 				  << " (no text tokens in current dataset).\n";
 			return true;
 		}
@@ -667,11 +777,11 @@ bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input&
 	out.write(reinterpret_cast<const char*>(&vocab_size), sizeof(uint64_t));
 
 	// 4. Stream Key-Value Pairs [Length] [Bytes] [ID]
-	for (const auto& [word, id] : input.text_dictionary) {
+	for (const auto& [word, each_token] : input.text_dictionary) {
 		uint32_t word_len = static_cast<uint32_t>(word.size());
 		out.write(reinterpret_cast<const char*>(&word_len), sizeof(uint32_t));
 		out.write(word.data(), word_len);
-		out.write(reinterpret_cast<const char*>(&id), sizeof(uint32_t));
+		out.write(reinterpret_cast<const char*>(&each_token), sizeof(uint32_t));
 	}
 
 	out.close();
@@ -685,13 +795,16 @@ bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input&
 	std::filesystem::rename(tmp_filepath, filepath, ec);
 	if (ec) {
 		ec.clear();
-		std::filesystem::copy_file(tmp_filepath, filepath,
-					   std::filesystem::copy_options::overwrite_existing, ec);
+		std::filesystem::copy_file(tmp_filepath,
+					   filepath,
+					   std::filesystem::copy_options::overwrite_existing,
+					   ec);
 		std::filesystem::remove(tmp_filepath, ec);
 	}
 
 	std::cout << "[OK] Serialized " << vocab_size << " text tokens to "
-		  << filepath.filename().string() << "\n" << std::flush;
+		  << filepath.filename().string() << "\n"
+		  << std::flush;
 	return true;
 }
 
@@ -705,7 +818,8 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 	// 1. Validate Magic Header
 	char magic[4] = {};
 	in.read(magic, 4);
-	if (in.gcount() != 4 || magic[0] != 'A' || magic[1] != 'X' || magic[2] != 'V' || magic[3] != 'K') {
+	if (in.gcount() != 4 || magic[0] != 'A' || magic[1] != 'X' || magic[2] != 'V' ||
+	    magic[3] != 'K') {
 		std::cerr << "[!] Fatal: Invalid magic bytes in vocab file: "
 			  << filepath.filename().string() << " (expected 'AXVK')\n";
 		return false;
@@ -737,7 +851,8 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 		uint32_t word_len = 0;
 		in.read(reinterpret_cast<char*>(&word_len), sizeof(uint32_t));
 		if (!in) {
-			std::cerr << "[!] Incomplete vocabulary entry length at index " << i << "\n";
+			std::cerr << "[!] Incomplete vocabulary entry length at index " << i
+				  << "\n";
 			return false;
 		}
 
@@ -748,24 +863,24 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 			return false;
 		}
 
-		uint32_t id = 0;
-		in.read(reinterpret_cast<char*>(&id), sizeof(uint32_t));
+		uint32_t each_token = 0;
+		in.read(reinterpret_cast<char*>(&each_token), sizeof(uint32_t));
 		if (!in) {
 			std::cerr << "[!] Incomplete vocabulary token ID at index " << i << "\n";
 			return false;
 		}
 
-		input.text_dictionary[word] = id;
-		input.reverse_text_dictionary[id] = word;
-		if (id >= input.next_text_id) {
-			input.next_text_id = id + 1;
+		input.text_dictionary[word] = each_token;
+		input.reverse_text_dictionary[each_token] = word;
+		if (each_token >= input.next_text_id) {
+			input.next_text_id = each_token + 1;
 		}
 	}
 
 	in.close();
 	build_embedding_table(input);
 	std::cout << "[OK] Loaded " << vocab_size << " vocabulary tokens from "
-		  << filepath.filename().string() << "\n" << std::flush;
+		  << filepath.filename().string() << "\n"
+		  << std::flush;
 	return true;
 }
-

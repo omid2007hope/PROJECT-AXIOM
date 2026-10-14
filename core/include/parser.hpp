@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+
 struct Test {
 	std::vector<std::string> data_txt = {};
 	std::vector<double> data_num = {};
@@ -23,9 +24,22 @@ struct Test {
 };
 
 struct Input {
+	std::vector<uint32_t> tokenized_data = {};
+	std::vector<std::bfloat16_t> embedded_data = {};
+
+	mutable std::vector<uint32_t> decode_ids = {};
+	mutable std::vector<float> decode_vectors = {};
+
+	std::unordered_map<uint32_t, std::vector<std::bfloat16_t>> embedding_table = {};
+	size_t embedding_dim = 4;
+
+	// IDs
+	uint32_t last_token = std::numeric_limits<uint32_t>::max();
+
 	// Global Vocabulary Dictionaries (The Discrete VQ-VAEs)
 	std::unordered_map<std::string, uint32_t> text_dictionary = {};
 	std::unordered_map<uint32_t, std::string> reverse_text_dictionary = {};
+
 	std::unordered_map<double, uint32_t> number_dictionary = {};
 	std::unordered_map<uint8_t, uint32_t> image_dictionary = {};
 	std::unordered_map<uint8_t, uint32_t> video_dictionary = {};
@@ -39,34 +53,28 @@ struct Input {
 	std::vector<std::string> user_voice_paths = {};
 
 	// Global ID Counters (Ensuring Modalities Never Overlap)
-	uint32_t next_text_id = 1;	    // 1 to 9,999,999
-	uint32_t next_number_id = 10000000; // 10,000,000 to 19,999,999
-	uint32_t next_image_id = 20000000;  // 20,000,000 to 29,999,999
-	uint32_t next_video_id = 30000000;  // 30,000,000 to 39,999,999
-	uint32_t next_voice_id = 40000000;  // 40,000,000 to 49,999,999
+	uint32_t next_text_id = 1;
+	uint32_t next_number_id = 1000000000;
+	uint32_t next_image_id = 2000000000;
+	uint32_t next_video_id = 3000000000;
+	uint32_t next_voice_id = 4000000000;
 
-	// The unified output sequence
-	std::vector<uint32_t> tokenized_data = {};
+	// Optimization for test
+	size_t CHUNK_TOKENS = 65536;
+	size_t chunk_pos = 0;
+	size_t tokens_written = 0;
+	size_t last_pct = 0;
 
-	// bfloat16_t
-	std::vector<std::bfloat16_t> embedded_data = {};
-
-	// Embedding lookup table: token_id -> dense vector of size embedding_dim
-	// bfloat16_t
-	size_t embedding_dim = 4;
-
-	// bfloat16_t
-	std::unordered_map<uint32_t, std::vector<std::bfloat16_t>> embedding_table = {};
-
-	// Contiguous mirror of embedding_table (ids + row-major vectors of embedding_dim
-	// floats), rebuilt on demand by decode_embedding_to_token when its size no longer
-	// matches the table. Mutable because it is a cache of the table, not state.
-	mutable std::vector<uint32_t> decode_ids = {};
-	mutable std::vector<float> decode_vectors = {};
+	// Demonstrate progress with bar
+	size_t minimum_limit = 500000;
 };
 
+// ***********
+// File size formatter
+// ***********
 inline std::string format_file_size(uintmax_t bytes) {
 	std::ostringstream oss;
+
 	if (bytes < 1024) {
 		oss << bytes << " B";
 	} else if (bytes < 1024 * 1024) {
@@ -74,8 +82,10 @@ inline std::string format_file_size(uintmax_t bytes) {
 	} else if (bytes < 1024ULL * 1024ULL * 1024ULL) {
 		oss << std::fixed << std::setprecision(1) << (bytes / (1024.0 * 1024.0)) << " MB";
 	} else {
-		oss << std::fixed << std::setprecision(2) << (bytes / (1024.0 * 1024.0 * 1024.0)) << " GB";
+		oss << std::fixed << std::setprecision(2) << (bytes / (1024.0 * 1024.0 * 1024.0))
+		    << " GB";
 	}
+
 	return oss.str();
 }
 
@@ -129,7 +139,8 @@ private:
 		// Write the entire vector to disk in one lightning-fast operation
 		out_file.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(T));
 		out_file.close();
-		std::cout << "Saved " << data.size() << " items to " << full_path << "\n" << std::flush;
+		std::cout << "Saved " << data.size() << " items to " << full_path << "\n"
+			  << std::flush;
 	}
 
 	// ********************
@@ -217,9 +228,9 @@ private:
 				std::cout
 					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] Ingested " << path.filename().string()
-				  << " (" << format_file_size(fsize) << ") -> "
-				  << added << " tokens mapped\n"
+			std::cout << "  [OK] Ingested " << path.filename().string() << " ("
+				  << format_file_size(fsize) << ") -> " << added
+				  << " tokens mapped\n"
 				  << std::flush;
 			return true;
 		};
@@ -266,7 +277,9 @@ public:
 	std::vector<uint32_t> tokenization(Input& input, Test& test);
 
 	// Bulk directory parser: scans and tokenizes all files in a folder (Text, PDF, Images, Video, Audio, 3D Models)
-	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input, size_t max_files = 0);
+	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path,
+				       Input& input,
+				       size_t max_files = 0);
 
 	// Returns the list of files processed in the most recent bulk tokenization run
 	const std::vector<std::filesystem::path>& get_last_bulk_files() const {

@@ -27,6 +27,7 @@ extern "C" CUDA_API void pinned_free(void* ptr);
 
 struct Portion {
 
+
 	int buffer_index = 0;
 
 	// =========================================================================
