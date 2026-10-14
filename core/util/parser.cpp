@@ -10,9 +10,6 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
-#include <winreg.h>
-
-#include "../include/optimizer.hpp"
 
 
 // Data Streaming (or Batching).
@@ -104,9 +101,10 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 // Streams directly to disk in fixed-size chunks to eliminate RAM saturation
 // and SSD page thrashing on massive datasets (hundreds of millions of tokens).
 std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
-	Portion portion;
+	input.chunk_pos = 0;
+	input.tokens_written = 0;
+	input.last_pct = 0;
 
-	//
 	build_embedding_table(input);
 
 	if (!embedded_path.parent_path().empty()) {
@@ -126,7 +124,7 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 	// If we are testing which means developer mode is on
 	// if token size is less than equal to ram's buffer size
 	const bool keep_in_ram =
-		developer_mode == true || (input.tokenized_data.size() <= portion.ram_buffer_size);
+		developer_mode == true || (input.tokenized_data.size() <= input.ram_buffer_size);
 
 	if (keep_in_ram == true) {
 		input.embedded_data.resize(input.tokenized_data.size() * input.embedding_dim);
@@ -156,11 +154,6 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 					std::sin(static_cast<double>(each_token) * (d + 1.0)));
 			}
 		}
-
-		/*
-		const bool keep_in_ram =
-		developer_mode == true || (input.tokenized_data.size() <= portion.ram_buffer_size);  
-        */
 
 		if (keep_in_ram == true) {
 			for (size_t d = 0; d < input.embedding_dim; ++d) {
@@ -264,8 +257,6 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 	if (input.embedding_table.empty()) {
 		return 0;
 	}
-
-	const size_t input.embedding_dim = input.embedding_dim;
 
 	// Rebuild the contiguous mirror whenever the table has grown or shrunk
 	if (input.decode_ids.size() != input.embedding_table.size()) {

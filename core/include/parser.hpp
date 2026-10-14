@@ -53,11 +53,11 @@ struct Input {
 	std::vector<std::string> user_voice_paths = {};
 
 	// Global ID Counters (Ensuring Modalities Never Overlap)
-	uint32_t next_text_id = 1;
-	uint32_t next_number_id = 1000000000;
-	uint32_t next_image_id = 2000000000;
-	uint32_t next_video_id = 3000000000;
-	uint32_t next_voice_id = 4000000000;
+	uint32_t next_text_id = 1;	    // 1 to 9,999,999
+	uint32_t next_number_id = 10000000; // 10,000,000 to 19,999,999
+	uint32_t next_image_id = 20000000;  // 20,000,000 to 29,999,999
+	uint32_t next_video_id = 30000000;  // 30,000,000 to 39,999,999
+	uint32_t next_voice_id = 40000000;  // 40,000,000 to 49,999,999
 
 	// Optimization for test
 	size_t CHUNK_TOKENS = 65536;
@@ -67,6 +67,7 @@ struct Input {
 
 	// Demonstrate progress with bar
 	size_t minimum_limit = 500000;
+	size_t ram_buffer_size = 100000;
 };
 
 // ***********
