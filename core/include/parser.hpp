@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include "./optimizer.hpp"
+
 
 struct Test {
 	std::vector<std::string> data_txt = {};
@@ -53,7 +55,7 @@ struct Input {
 	std::vector<std::string> user_voice_paths = {};
 
 	// Global ID Counters (Ensuring Modalities Never Overlap)
-	uint32_t next_text_id = 1;	        // 1 to 999,999,999
+	uint32_t next_text_id = 1;	      // 1 to 999,999,999
 	uint32_t next_number_id = 1000000000; // 1,000,000,000 to 1,999,999,999
 	uint32_t next_image_id = 2000000000;  // 2,000,000,000 to 2,999,999,999
 	uint32_t next_video_id = 3000000000;  // 3,000,000,000 to 3,999,999,999
@@ -67,7 +69,7 @@ struct Input {
 
 	// Demonstrate progress with bar
 	size_t minimum_limit = 500000;
-	size_t ram_buffer_size = 100000;
+	size_t ram_buffer_size = Optimizer.ram_buffer_size;
 };
 
 // ***********
