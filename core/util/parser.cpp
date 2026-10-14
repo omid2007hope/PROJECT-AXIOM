@@ -488,6 +488,53 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		  << dir_path.string() << ":\n";
 
 	size_t files_processed = 0;
+	const size_t total_files =
+		(max_files > 0 && max_files < files.size()) ? max_files : files.size();
+
+	auto report_file_done = [&](const std::filesystem::path& fpath,
+				    uintmax_t fsize,
+				    const std::string& modality_tag,
+				    size_t added_tokens) {
+		++files_processed;
+		last_bulk_files.push_back(fpath);
+
+		if (developer_mode) {
+			std::cout << "  [OK] " << fpath.filename().string() << " ("
+				  << format_file_size(fsize) << ") -> " << modality_tag
+				  << ": " << added_tokens << " tokens mapped\n";
+		} else {
+			const double pct = (total_files > 0)
+				? std::min(100.0,
+					   (static_cast<double>(files_processed) * 100.0 /
+					    total_files))
+				: 100.0;
+			constexpr int bar_w = 24;
+			int filled = static_cast<int>((pct / 100.0) * bar_w);
+			if (filled > bar_w)
+				filled = bar_w;
+			std::string bar = "[";
+			for (int b = 0; b < bar_w; ++b) {
+				if (b < filled)
+					bar += '=';
+				else if (b == filled && filled < bar_w)
+					bar += '>';
+				else
+					bar += ' ';
+			}
+			bar += "]";
+
+			std::string fname = fpath.filename().string();
+			if (fname.size() > 20)
+				fname = fname.substr(0, 17) + "...";
+
+			std::cout << "\r  [..] Ingesting assets " << bar << " " << std::fixed
+				  << std::setprecision(1) << pct << "% (" << files_processed
+				  << "/" << total_files << " files | "
+				  << input.tokenized_data.size() << " tokens | " << fname
+				  << ")   " << std::flush;
+		}
+	};
+
 	for (const auto& fpath : files) {
 		if (max_files > 0 && files_processed >= max_files) {
 			break;
@@ -559,11 +606,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 					word, input.text_dictionary, input.next_text_id, input);
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
-			std::cout << "  [OK] " << fpath.filename().string() << " ("
-				  << format_file_size(fsize) << ") -> Text: " << added
-				  << " tokens mapped\n";
-			++files_processed;
-			last_bulk_files.push_back(fpath);
+			report_file_done(fpath, fsize, "Text", added);
 		} else if (is_image_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
@@ -600,12 +643,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				std::cout
 					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string() << " ("
-				  << format_file_size(fsize) << ") -> Image: " << added
-				  << " tokens mapped\n"
-				  << std::flush;
-			++files_processed;
-			last_bulk_files.push_back(fpath);
+			report_file_done(fpath, fsize, "Image", added);
 		} else if (is_video_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
@@ -642,12 +680,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				std::cout
 					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string() << " ("
-				  << format_file_size(fsize) << ") -> Video: " << added
-				  << " tokens mapped\n"
-				  << std::flush;
-			++files_processed;
-			last_bulk_files.push_back(fpath);
+			report_file_done(fpath, fsize, "Video", added);
 		} else if (is_audio_ext) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
@@ -684,12 +717,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				std::cout
 					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string() << " ("
-				  << format_file_size(fsize) << ") -> Voice/Audio: " << added
-				  << " tokens mapped\n"
-				  << std::flush;
-			++files_processed;
-			last_bulk_files.push_back(fpath);
+			report_file_done(fpath, fsize, "Voice/Audio", added);
 		} else {
 			// PDF, 3D model, archive (.zip/.tar/.gz/.7z), or arbitrary binary document
 			std::ifstream in(fpath, std::ios::binary);
@@ -733,13 +761,15 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				std::cout
 					<< "\r                                                                                \r";
 			}
-			std::cout << "  [OK] " << fpath.filename().string() << " ("
-				  << format_file_size(fsize) << ") -> " << tag << ": " << added
-				  << " tokens mapped\n"
-				  << std::flush;
-			++files_processed;
-			last_bulk_files.push_back(fpath);
+			report_file_done(fpath, fsize, tag, added);
 		}
+	}
+
+	if (!developer_mode && files_processed > 0) {
+		std::cout << "\r  [OK] Ingesting assets [========================] 100.0% ("
+			  << files_processed << "/" << total_files << " files | "
+			  << input.tokenized_data.size() << " tokens)            \n"
+			  << std::flush;
 	}
 
 	return files_processed;

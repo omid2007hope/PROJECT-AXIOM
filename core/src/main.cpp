@@ -753,7 +753,28 @@ void run_training_loop(AI& ai,
 		       const std::filesystem::path& weights_path,
 		       const std::filesystem::path& vocab_path,
 		       size_t max_steps = 0) {
-	std::cout << "Beginning continuous training loop...\n";
+	std::error_code ec;
+	uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
+	size_t total_dataset_tokens = 0;
+	if (!ec && file_bytes > 0) {
+		total_dataset_tokens = file_bytes / (portion.token_dim * sizeof(std::bfloat16_t));
+	}
+	size_t total_dataset_steps = (total_dataset_tokens > portion.context_window_size)
+		? (total_dataset_tokens - portion.context_window_size)
+		: 0;
+
+	size_t target_steps = (max_steps > 0)
+		? std::min(max_steps, total_dataset_steps > 0 ? total_dataset_steps : max_steps)
+		: total_dataset_steps;
+
+	if (target_steps == 0) {
+		std::cerr << "[!] No training data available in "
+			  << optimizer.data_path.filename().string() << "\n";
+		return;
+	}
+
+	std::cout << "Beginning training session (" << target_steps
+		  << " steps to 100% completion)...\n";
 	std::cout << "Controls:\n"
 		  << "  [S] Save current model weights to " << weights_path.filename().string()
 		  << "\n"
@@ -835,19 +856,72 @@ void run_training_loop(AI& ai,
 		const TrainStatus status = ai.train(optimizer, portion);
 
 		if (status == TrainStatus::Failed) {
-			std::cerr << "[!] Training stopped: a GPU step failed.\n";
+			std::cerr << "\n[!] Training stopped: a GPU step failed.\n";
 			std::exit(1);
 		}
 
 		if (status == TrainStatus::Trained) {
 			++step;
+
+			double current_loss = 0.0;
 			if (step == 1 || step % config::loss_report_interval == 0 ||
-			    (max_steps > 0 && step == max_steps)) {
-				print_loss(ai, step, first_loss);
+			    step >= target_steps) {
+				size_t loss_steps = 0;
+				if (ai.read_loss(current_loss, loss_steps)) {
+					if (!first_loss) {
+						first_loss = current_loss;
+					}
+
+					const double pct = (target_steps > 0)
+						? std::min(100.0,
+							   (static_cast<double>(step) * 100.0 /
+							    target_steps))
+						: 100.0;
+					constexpr int bar_width = 24;
+					int filled = static_cast<int>((pct / 100.0) * bar_width);
+					if (filled > bar_width)
+						filled = bar_width;
+					std::string bar = "[";
+					for (int b = 0; b < bar_width; ++b) {
+						if (b < filled)
+							bar += '=';
+						else if (b == filled && filled < bar_width)
+							bar += '>';
+						else
+							bar += ' ';
+					}
+					bar += "]";
+
+					std::cout << "\r  [..] Learning " << bar << " " << std::fixed
+						  << std::setprecision(1) << pct << "% | Step " << step
+						  << "/" << target_steps << " | Loss: "
+						  << std::setprecision(4) << current_loss;
+					if (*first_loss > 0.0) {
+						double delta_pct =
+							(current_loss - *first_loss) / *first_loss * 100.0;
+						std::cout << " (" << std::showpos
+							  << std::setprecision(1) << delta_pct
+							  << "% vs 1st)" << std::noshowpos;
+					}
+					std::cout << "   " << std::flush;
+				}
 			}
-			if (max_steps > 0 && step >= max_steps) {
-				std::cout << "\n[!] Target training steps reached (" << max_steps
-					  << "). Saving model weights...\n";
+
+			if (step >= target_steps) {
+				std::cout << "\r  [OK] Learning [========================] 100.0% | Step "
+					  << step << "/" << target_steps << " | Loss: " << std::fixed
+					  << std::setprecision(4) << current_loss;
+				if (first_loss && *first_loss > 0.0) {
+					double delta_pct =
+						(current_loss - *first_loss) / *first_loss * 100.0;
+					std::cout << " (" << std::showpos
+						  << std::setprecision(1) << delta_pct
+						  << "% vs 1st)" << std::noshowpos;
+				}
+				std::cout << "\n\n[OK] 100% of dataset learned: all embedded data on disk consumed.\n"
+					  << "[!] Automatically saving model checkpoint...\n"
+					  << std::flush;
+
 				ai.save_weights(weights_path.string());
 				parser.save_vocabulary(vocab_path, input);
 				std::cout << "[OK] Model checkpoint saved to "
@@ -857,9 +931,13 @@ void run_training_loop(AI& ai,
 		}
 
 		// When the RAM buffer is exhausted, the offset resets to 0.
-		// We must pull the next massive chunk from disk into RAM.
+		// Pull the next massive chunk from disk into RAM.
 		if (portion.offset == 0) {
 			optimizer.disk_to_ram(portion);
+			if (portion.ram_buffer_tokens.size() <
+			    portion.all_elements + portion.target_elements) {
+				break;
+			}
 		}
 	}
 }
@@ -948,7 +1026,7 @@ struct EmbeddedDataCleanup {
 
 		std::error_code ec;
 		if (std::filesystem::remove(path, ec)) {
-			std::cout << "[OK] Temporary embedding stream removed: "
+			std::cout << "[OK] Temporary embedding stream automatically removed: "
 				  << path.filename().string() << "\n";
 		}
 	}
@@ -1164,8 +1242,9 @@ bool execute_training_session(AI& ai,
 					  << " file(s) from " << asset_dir.string() << "\n";
 			}
 		} else if (is_interactive && !bulk_files.empty()) {
-			std::cout << "\nProcessed Asset Management (" << bulk_files.size()
-				  << " file" << (bulk_files.size() == 1 ? "" : "s") << "):\n"
+			std::cout << "\nRaw Asset Management (" << bulk_files.size()
+				  << " source file" << (bulk_files.size() == 1 ? "" : "s") << " in "
+				  << asset_dir.filename().string() << "/):\n"
 				  << "  [1] Keep files in asset_sample/ (Default)\n"
 				  << "  [2] Archive processed files to asset_sample/archive/\n"
 				  << "  [3] Purge (Delete) processed files from asset_sample/\n"
