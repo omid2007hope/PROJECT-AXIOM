@@ -29,9 +29,10 @@ bool test_tokenization() {
 	// Bulk directory tokenization verification
 	Input bulk_input;
 	bulk_input.embedding_dim = input.embedding_dim;
-	Parser bulk_parser(false, test_embedded_path(), test_asset_dirs());
-	size_t files_processed = bulk_parser.bulk_tokenize_directory(test_asset_dirs()[0], bulk_input);
-	test_check(files_processed > 0, "bulk_tokenize_directory processes files in asset_sample", s_pass, s_fail);
+	const std::filesystem::path bulk_test_dir = test_core_dir() / "test_sandbox_assets";
+	Parser bulk_parser(false, test_embedded_path(), {bulk_test_dir});
+	size_t files_processed = bulk_parser.bulk_tokenize_directory(bulk_test_dir, bulk_input);
+	test_check(files_processed > 0, "bulk_tokenize_directory processes files in test_sandbox_assets", s_pass, s_fail);
 	test_check(!bulk_input.tokenized_data.empty(), "bulk_tokenize_directory produces non-empty token stream", s_pass, s_fail);
 	test_check(!bulk_input.image_dictionary.empty(), "bulk_tokenize_directory populates image namespace", s_pass, s_fail);
 	test_check(!bulk_input.video_dictionary.empty(), "bulk_tokenize_directory populates video namespace", s_pass, s_fail);
@@ -40,7 +41,7 @@ bool test_tokenization() {
 
 	// Test archive exclusion: files placed in archive/ are ignored
 	std::error_code ec;
-	const std::filesystem::path test_archive_dir = test_asset_dirs()[0] / "archive";
+	const std::filesystem::path test_archive_dir = bulk_test_dir / "archive";
 	std::filesystem::create_directories(test_archive_dir, ec);
 	const std::filesystem::path dummy_archive_file = test_archive_dir / "ignored_dummy.txt";
 	{
@@ -49,7 +50,7 @@ bool test_tokenization() {
 	}
 	Input archive_test_input;
 	archive_test_input.embedding_dim = input.embedding_dim;
-	size_t archive_test_processed = bulk_parser.bulk_tokenize_directory(test_asset_dirs()[0], archive_test_input);
+	size_t archive_test_processed = bulk_parser.bulk_tokenize_directory(bulk_test_dir, archive_test_input);
 	test_check_eq(archive_test_processed, files_processed, "bulk_tokenize_directory strictly ignores archive folder", s_pass, s_fail);
 	std::filesystem::remove(dummy_archive_file, ec);
 	std::filesystem::remove(test_archive_dir, ec);

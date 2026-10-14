@@ -266,7 +266,7 @@ public:
 	std::vector<uint32_t> tokenization(Input& input, Test& test);
 
 	// Bulk directory parser: scans and tokenizes all files in a folder (Text, PDF, Images, Video, Audio, 3D Models)
-	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input);
+	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input, size_t max_files = 0);
 
 	// Returns the list of files processed in the most recent bulk tokenization run
 	const std::vector<std::filesystem::path>& get_last_bulk_files() const {

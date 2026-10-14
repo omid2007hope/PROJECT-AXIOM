@@ -78,47 +78,119 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 }
 
 // EMBEDDINGS: Convert global token IDs to a flat dense vector
-// Each unique token ID gets a fixed embedding vector (seeded by ID for
-// stability). Layout: [emb(token_0)..., emb(token_1)..., ...] size =
-// tokenized_data.size() * embedding_dim
+// Streams directly to disk in fixed-size chunks to eliminate RAM saturation
+// and SSD page thrashing on massive datasets (hundreds of millions of tokens).
 std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 	build_embedding_table(input);
 
-	input.embedded_data.clear();
-	input.embedded_data.resize(input.tokenized_data.size() * input.embedding_dim);
-	std::bfloat16_t* dst = input.embedded_data.data();
+	if (!embedded_path.parent_path().empty()) {
+		std::error_code ec;
+		std::filesystem::create_directories(embedded_path.parent_path(), ec);
+	}
+
+	std::ofstream out(embedded_path, std::ios::binary | std::ios::trunc);
+	if (!out) {
+		std::cerr << "[!] Fatal: Failed to open " << embedded_path << " for writing embeddings.\n";
+		return {};
+	}
+
+	const size_t total_tokens = input.tokenized_data.size();
+	const size_t dim = input.embedding_dim;
+
+	// For small datasets / unit tests (<= 100K tokens), keep input.embedded_data populated
+	constexpr size_t MAX_IN_MEMORY_TOKENS = 100000;
+	const bool keep_in_ram = developer_mode || (total_tokens <= MAX_IN_MEMORY_TOKENS);
+
+	if (keep_in_ram) {
+		input.embedded_data.resize(total_tokens * dim);
+	} else {
+		input.embedded_data.clear();
+		input.embedded_data.shrink_to_fit();
+	}
+
+	constexpr size_t CHUNK_TOKENS = 65536;
+	std::vector<std::bfloat16_t> chunk(CHUNK_TOKENS * dim);
+	std::vector<std::bfloat16_t> current_vec(dim);
 
 	uint32_t last_id = std::numeric_limits<uint32_t>::max();
-	const std::bfloat16_t* last_vec = nullptr;
+	size_t chunk_pos = 0;
+	size_t tokens_written = 0;
+	size_t last_pct = 0;
+	const bool show_progress = (total_tokens >= 500000);
 
-	for (size_t i = 0; i < input.tokenized_data.size(); ++i) {
+	for (size_t i = 0; i < total_tokens; ++i) {
 		const uint32_t id = input.tokenized_data[i];
 		if (id != last_id) {
-			auto it = input.embedding_table.find(id);
-			if (it == input.embedding_table.end()) {
-				std::vector<std::bfloat16_t> vec(input.embedding_dim);
-				for (uint32_t d = 0; d < input.embedding_dim; ++d) {
-					vec[d] = static_cast<std::bfloat16_t>(
-						std::sin(static_cast<double>(id) * (d + 1.0)));
-				}
-				it = input.embedding_table.emplace(id, std::move(vec)).first;
-			}
 			last_id = id;
-			last_vec = it->second.data();
+			for (size_t d = 0; d < dim; ++d) {
+				current_vec[d] = static_cast<std::bfloat16_t>(
+					std::sin(static_cast<double>(id) * (d + 1.0)));
+			}
 		}
 
-		for (size_t d = 0; d < input.embedding_dim; ++d) {
-			*dst++ = last_vec[d];
+		if (keep_in_ram) {
+			for (size_t d = 0; d < dim; ++d) {
+				input.embedded_data[i * dim + d] = current_vec[d];
+			}
+		}
+
+		for (size_t d = 0; d < dim; ++d) {
+			chunk[chunk_pos++] = current_vec[d];
+		}
+
+		if (chunk_pos == chunk.size()) {
+			out.write(reinterpret_cast<const char*>(chunk.data()),
+				  chunk.size() * sizeof(std::bfloat16_t));
+			tokens_written += CHUNK_TOKENS;
+			chunk_pos = 0;
+
+			if (show_progress) {
+				const size_t pct = (tokens_written * 100) / total_tokens;
+				if (pct != last_pct) {
+					last_pct = pct;
+					constexpr int bar_w = 24;
+					const int filled = static_cast<int>((pct / 100.0) * bar_w);
+					std::string bar = "[";
+					for (int b = 0; b < bar_w; ++b) {
+						if (b < filled) bar += '=';
+						else if (b == filled) bar += '>';
+						else bar += ' ';
+					}
+					bar += "]";
+					std::cout << "\r  [..] Synthesizing continuous embeddings " << bar
+						  << " " << pct << "% (" << tokens_written << "/" << total_tokens
+						  << " tokens)" << std::flush;
+				}
+			}
 		}
 	}
 
-	// Use our new generalized save method
-	save_data(input.embedded_data, embedded_path);
+	if (chunk_pos > 0) {
+		out.write(reinterpret_cast<const char*>(chunk.data()),
+			  chunk_pos * sizeof(std::bfloat16_t));
+		tokens_written += (chunk_pos / dim);
+	}
+	out.close();
+
+	if (show_progress) {
+		const uintmax_t bytes = total_tokens * dim * sizeof(std::bfloat16_t);
+		std::cout << "\r                                                                                \r"
+			  << "  [OK] Continuous embeddings synthesized: " << total_tokens << " tokens ("
+			  << format_file_size(bytes) << ") streamed to disk.\n"
+			  << std::flush;
+	}
 
 	return input.embedded_data;
 }
 
 void Parser::build_embedding_table(Input& input) {
+	const size_t total_unique = input.text_dictionary.size() + input.number_dictionary.size() +
+				    input.image_dictionary.size() + input.video_dictionary.size() +
+				    input.voice_dictionary.size();
+	if (total_unique > 0) {
+		input.embedding_table.reserve(total_unique);
+	}
+
 	auto ensure_embedding = [&](uint32_t id) {
 		if (input.embedding_table.find(id) == input.embedding_table.end()) {
 			std::vector<std::bfloat16_t> vec(input.embedding_dim);
@@ -313,7 +385,7 @@ static void print_progress_bar(const std::string& filename,
 		  << std::flush;
 }
 
-size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input) {
+size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input, size_t max_files) {
 	last_bulk_files.clear();
 
 	std::error_code ec;
@@ -353,6 +425,9 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path, In
 
 	size_t files_processed = 0;
 	for (const auto& fpath : files) {
+		if (max_files > 0 && files_processed >= max_files) {
+			break;
+		}
 		std::string ext = fpath.extension().string();
 		for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 

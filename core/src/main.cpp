@@ -12,12 +12,12 @@
 
 #define NOMINMAX // keep <windows.h> from defining min()/max() macros
 
-#include <conio.h> // For _kbhit() and _getch()
-#include <io.h>    // For _isatty() and _fileno()
 #include <chrono>
+#include <conio.h> // For _kbhit() and _getch()
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <io.h> // For _isatty() and _fileno()
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -56,7 +56,7 @@ namespace config {
 
 // Hyperparameters
 constexpr size_t ram_buffer_size = 100000;
-constexpr size_t token_dim = 4;
+constexpr size_t token_dim = 32;
 constexpr size_t context_window_size = 128;
 constexpr float learning_rate = 0.001f;
 
@@ -77,14 +77,7 @@ constexpr const char* vocab_file = "vocab.axiom";
 
 } // namespace config
 
-enum class AppMode {
-	Use,
-	Train,
-	BulkTrain,
-	Test,
-	Benchmark,
-	Exit
-};
+enum class AppMode { Use, Train, BulkTrain, Test, Benchmark, Exit };
 
 // core/ folder, located from the executable binary with fallbacks
 std::filesystem::path locate_core_dir() {
@@ -482,7 +475,8 @@ void print_hardware_telemetry(const Portion& portion) {
 		  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
 		  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
 		  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
-		  << "========================================================\n\n" << std::flush;
+		  << "========================================================\n\n"
+		  << std::flush;
 }
 
 // *****************************************************************************
@@ -528,29 +522,35 @@ void run_inference_engine(AI& ai,
 		  << "========================================================\n";
 
 	if (std::filesystem::exists(weights_path)) {
-		std::cout << "[..] Loading model weights from: " << weights_path.filename().string() << "\n";
+		std::cout << "[..] Loading model weights from: " << weights_path.filename().string()
+			  << "\n";
 		if (ai.load_weights(weights_path.string())) {
 			std::cout << "[OK] Model weights successfully loaded into VRAM.\n\n";
 		} else {
-			std::cerr << "[!] Failed to load model weights. Using baseline weights.\n\n";
+			std::cerr
+				<< "[!] Failed to load model weights. Using baseline weights.\n\n";
 		}
 	} else if (weights_path.filename().string() != config::weights_file) {
-		std::cerr << "[!] Specified weights file not found: " << weights_path.string() << "\n"
+		std::cerr << "[!] Specified weights file not found: " << weights_path.string()
+			  << "\n"
 			  << "[!] Running with baseline initialized weights.\n\n";
 	} else {
-		std::cout << "[!] Notice: '" << weights_path.filename().string()
-			  << "' not found.\n"
-			  << "[!] Running with baseline initialized weights.\n"
-			  << "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
+		std::cout
+			<< "[!] Notice: '" << weights_path.filename().string() << "' not found.\n"
+			<< "[!] Running with baseline initialized weights.\n"
+			<< "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
 	}
 
 	if (std::filesystem::exists(vocab_path)) {
-		std::cout << "[..] Loading vocabulary from: " << vocab_path.filename().string() << "\n";
+		std::cout << "[..] Loading vocabulary from: " << vocab_path.filename().string()
+			  << "\n";
 		if (parser.load_vocabulary(vocab_path, input)) {
-			std::cout << "[OK] Vocabulary successfully restored (" << input.text_dictionary.size() << " tokens).\n\n";
+			std::cout << "[OK] Vocabulary successfully restored ("
+				  << input.text_dictionary.size() << " tokens).\n\n";
 		}
 	} else if (vocab_path.filename().string() != config::vocab_file) {
-		std::cerr << "[!] Specified vocabulary file not found: " << vocab_path.string() << "\n";
+		std::cerr << "[!] Specified vocabulary file not found: " << vocab_path.string()
+			  << "\n";
 	}
 
 	parser.build_embedding_table(input);
@@ -617,9 +617,9 @@ void run_inference_engine(AI& ai,
 		uint32_t pred_token_id = parser.decode_embedding_to_token(input, prediction);
 		std::string pred_token_str = parser.token_to_string(input, pred_token_id);
 
-		std::cout << std::fixed << std::setprecision(4)
-			  << "[Tensor Output] [" << prediction[0] << ", " << prediction[1]
-			  << ", " << prediction[2] << ", " << prediction[3] << "]\n"
+		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] ["
+			  << prediction[0] << ", " << prediction[1] << ", " << prediction[2] << ", "
+			  << prediction[3] << "]\n"
 			  << "[Next Token ID] #" << pred_token_id << "\n"
 			  << "[Prediction]    \"" << pred_token_str << "\"\n";
 
@@ -630,9 +630,7 @@ void run_inference_engine(AI& ai,
 // *****************************************************************************
 // Hardware Benchmark
 // *****************************************************************************
-void run_hardware_benchmark(AI& ai,
-			    Parser& parser,
-			    Input& input) {
+void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 	std::cout << "\n========================================================\n"
 		  << "       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION      \n"
 		  << "========================================================\n";
@@ -641,11 +639,14 @@ void run_hardware_benchmark(AI& ai,
 	const HardwareSpecs& specs = telemetry.get_specs();
 
 	std::cout << "Hardware Device : " << specs.gpu_name << "\n"
-		  << "Architecture    : sm_" << specs.sm_major << specs.sm_minor << " (Ada Lovelace)\n"
-		  << "Memory Bus      : " << specs.bus_width_bits << "-bit | Peak Bandwidth: " << std::fixed << std::setprecision(1) << specs.peak_bandwidth_gb_s << " GB/s\n"
+		  << "Architecture    : sm_" << specs.sm_major << specs.sm_minor
+		  << " (Ada Lovelace)\n"
+		  << "Memory Bus      : " << specs.bus_width_bits
+		  << "-bit | Peak Bandwidth: " << std::fixed << std::setprecision(1)
+		  << specs.peak_bandwidth_gb_s << " GB/s\n"
 		  << "Compute Engine  : " << specs.peak_dense_tflops << " Peak Dense BF16 TFLOPs\n"
-		  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024)) << " MB Free / "
-		  << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n"
+		  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024))
+		  << " MB Free / " << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n"
 		  << "--------------------------------------------------------\n"
 		  << "[BENCHMARK 1/2] Interactive Micro-Perceptron Inference (512 -> 4)\n"
 		  << "[..] Warming up Tensor Cores (10 forward passes)...\n";
@@ -658,7 +659,8 @@ void run_hardware_benchmark(AI& ai,
 	}
 
 	constexpr int bench_passes = 100;
-	std::cout << "[..] Executing " << bench_passes << " Hardware-Timed Tensor Core Inferences...\n";
+	std::cout << "[..] Executing " << bench_passes
+		  << " Hardware-Timed Tensor Core Inferences...\n";
 
 	telemetry.begin_inference();
 	for (int i = 0; i < bench_passes; ++i) {
@@ -687,13 +689,16 @@ void run_hardware_benchmark(AI& ai,
 	double sat_bw = 0.0;
 	float sat_avg_ms = 0.0f;
 
-	if (run_cutlass_saturation_benchmark(sat_M, sat_N, sat_K, sat_iters,
-					     &sat_tflops, &sat_bw, &sat_avg_ms)) {
+	if (run_cutlass_saturation_benchmark(
+		    sat_M, sat_N, sat_K, sat_iters, &sat_tflops, &sat_bw, &sat_avg_ms)) {
 		float sat_bw_pct = static_cast<float>((sat_bw / specs.peak_bandwidth_gb_s) * 100.0);
-		float sat_mfu_pct = static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0);
-		std::string arch_tag = "sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
+		float sat_mfu_pct =
+			static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0);
+		std::string arch_tag =
+			"sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
-		AxiomTelemetry::print_saturation_hud(sat_avg_ms, sat_tflops, sat_bw, sat_bw_pct, sat_mfu_pct, arch_tag);
+		AxiomTelemetry::print_saturation_hud(
+			sat_avg_ms, sat_tflops, sat_bw, sat_bw_pct, sat_mfu_pct, arch_tag);
 	} else {
 		std::cerr << "[!] CUTLASS saturation benchmark failed.\n";
 	}
@@ -713,9 +718,11 @@ void run_training_loop(AI& ai,
 		       size_t max_steps = 0) {
 	std::cout << "Beginning continuous training loop...\n";
 	std::cout << "Controls:\n"
-		  << "  [S] Save current model weights to " << weights_path.filename().string() << "\n"
+		  << "  [S] Save current model weights to " << weights_path.filename().string()
+		  << "\n"
 		  << "  [R] Reset AI brain to chaotic state\n"
-		  << "  [Q] Save and quit training loop\n\n" << std::flush;
+		  << "  [Q] Save and quit training loop\n\n"
+		  << std::flush;
 
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
@@ -730,7 +737,8 @@ void run_training_loop(AI& ai,
 			while (std::cin.rdbuf()->in_avail() > 0) {
 				char c;
 				if (std::cin.get(c)) {
-					if (c == 'q' || c == 'Q' || c == 's' || c == 'S' || c == 'r' || c == 'R') {
+					if (c == 'q' || c == 'Q' || c == 's' || c == 'S' ||
+					    c == 'r' || c == 'R') {
 						ch = c;
 						break;
 					}
@@ -768,10 +776,12 @@ void run_training_loop(AI& ai,
 						<< "[!] Brain wipe failed: could not upload weights.\n\n";
 				}
 			} else if (ch == 's' || ch == 'S') {
-				std::cout << "\n[!] Manual Checkpoint Triggered! Saving weights...\n";
+				std::cout
+					<< "\n[!] Manual Checkpoint Triggered! Saving weights...\n";
 				if (ai.save_weights(weights_path.string())) {
 					parser.save_vocabulary(vocab_path, input);
-					std::cout << "[OK] Model checkpoint saved to " << weights_path.filename().string() << "\n\n";
+					std::cout << "[OK] Model checkpoint saved to "
+						  << weights_path.filename().string() << "\n\n";
 				} else {
 					std::cerr << "[!] Failed to save weights.\n\n";
 				}
@@ -794,7 +804,8 @@ void run_training_loop(AI& ai,
 
 		if (status == TrainStatus::Trained) {
 			++step;
-			if (step == 1 || step % config::loss_report_interval == 0 || (max_steps > 0 && step == max_steps)) {
+			if (step == 1 || step % config::loss_report_interval == 0 ||
+			    (max_steps > 0 && step == max_steps)) {
 				print_loss(ai, step, first_loss);
 			}
 			if (max_steps > 0 && step >= max_steps) {
@@ -802,7 +813,8 @@ void run_training_loop(AI& ai,
 					  << "). Saving model weights...\n";
 				ai.save_weights(weights_path.string());
 				parser.save_vocabulary(vocab_path, input);
-				std::cout << "[OK] Model checkpoint saved to " << weights_path.filename().string() << "\n";
+				std::cout << "[OK] Model checkpoint saved to "
+					  << weights_path.filename().string() << "\n";
 				break;
 			}
 		}
@@ -826,7 +838,8 @@ void restore_brain(AI& ai, Elements& elements, const std::filesystem::path& weig
 
 	ai.reset_weights(elements);
 	if (ai.upload_weights_to_gpu()) {
-		std::cout << "[OK] No checkpoint found: live brain reset to a pristine chaotic state.\n";
+		std::cout
+			<< "[OK] No checkpoint found: live brain reset to a pristine chaotic state.\n";
 	} else {
 		std::cerr << "[!] Could not upload the reset weights to VRAM.\n";
 	}
@@ -866,7 +879,8 @@ bool run_tests(const std::filesystem::path& embedded_path) {
 	// The tests are done with the generated embedding stream
 	std::error_code cleanup_ec;
 	if (std::filesystem::remove(embedded_path, cleanup_ec)) {
-		std::cout << "\n[OK] Test artifact removed: " << embedded_path.filename().string() << "\n";
+		std::cout << "\n[OK] Test artifact removed: " << embedded_path.filename().string()
+			  << "\n";
 	}
 
 	std::cout << "\n============================================\n";
@@ -897,8 +911,8 @@ struct EmbeddedDataCleanup {
 
 		std::error_code ec;
 		if (std::filesystem::remove(path, ec)) {
-			std::cout << "[OK] Temporary embedding stream removed: " << path.filename().string()
-				  << "\n";
+			std::cout << "[OK] Temporary embedding stream removed: "
+				  << path.filename().string() << "\n";
 		}
 	}
 
@@ -929,7 +943,8 @@ bool execute_training_session(AI& ai,
 	parser.developer_mode = developer_mode;
 
 	if (std::filesystem::exists(vocab_path)) {
-		std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
+		std::cout << "[..] Pre-existing vocabulary found at "
+			  << vocab_path.filename().string()
 			  << ". Loading vocabulary checkpoint...\n";
 		parser.load_vocabulary(vocab_path, input);
 	}
@@ -944,10 +959,12 @@ bool execute_training_session(AI& ai,
 			  << "========================================================\n"
 			  << "Target Directory : " << asset_dir.string() << "\n\n";
 
-		std::cout << "[..] Scanning and tokenizing all assets in " << asset_dir.filename().string() << "...\n";
+		std::cout << "[..] Scanning and tokenizing all assets in "
+			  << asset_dir.filename().string() << "...\n";
 		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input);
 		if (processed == 0 || input.tokenized_data.empty()) {
-			std::cerr << "\n[!] No training files could be parsed from " << asset_dir.string() << "\n"
+			std::cerr << "\n[!] No training files could be parsed from "
+				  << asset_dir.string() << "\n"
 				  << "[i] Instructions:\n"
 				  << "    1. Place training files into the asset directory:\n"
 				  << "       - Text (.txt, .md, .csv, code files)\n"
@@ -972,14 +989,18 @@ bool execute_training_session(AI& ai,
 	// Repeat sequence if shorter than one full context window + target to enable continuous training
 	const size_t min_training_tokens = config::context_window_size + 1;
 	if (input.tokenized_data.size() < min_training_tokens) {
-		std::cout << "[..] Dataset sequence (" << input.tokenized_data.size()
-			  << " tokens) is shorter than context window (" << config::context_window_size
-			  << " tokens). Repeating sequence to enable continuous autoregressive training...\n";
+		std::cout
+			<< "[..] Dataset sequence (" << input.tokenized_data.size()
+			<< " tokens) is shorter than context window ("
+			<< config::context_window_size
+			<< " tokens). Repeating sequence to enable continuous autoregressive training...\n";
 		const size_t orig_sz = input.tokenized_data.size();
 		const size_t target_tokens = config::context_window_size * 8;
 		input.tokenized_data.reserve(target_tokens);
 		while (input.tokenized_data.size() < target_tokens) {
-			for (size_t i = 0; i < orig_sz && input.tokenized_data.size() < target_tokens; ++i) {
+			for (size_t i = 0;
+			     i < orig_sz && input.tokenized_data.size() < target_tokens;
+			     ++i) {
 				const uint32_t tok_val = input.tokenized_data[i];
 				input.tokenized_data.push_back(tok_val);
 			}
@@ -991,9 +1012,15 @@ bool execute_training_session(AI& ai,
 	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
 	parser.embedding(input, test);
 	parser.build_embedding_table(input);
-	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size() << " tokens mapped.\n" << std::flush;
+	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size()
+		  << " tokens mapped.\n"
+		  << std::flush;
 
 	parser.save_vocabulary(vocab_path, input);
+
+	// Release the raw tokenized tokens buffer from host RAM now that it is safely streamed to disk
+	input.tokenized_data.clear();
+	input.tokenized_data.shrink_to_fit();
 
 	// Training Mode
 	if (developer_mode) {
@@ -1017,14 +1044,23 @@ bool execute_training_session(AI& ai,
 
 	// If pre-existing weights exist on disk, load them into VRAM before training
 	if (std::filesystem::exists(weights_path)) {
-		std::cout << "[..] Pre-existing weights found at " << weights_path.filename().string()
-			  << ". Loading checkpoint...\n" << std::flush;
+		std::cout << "[..] Pre-existing weights found at "
+			  << weights_path.filename().string() << ". Loading checkpoint...\n"
+			  << std::flush;
 		ai.load_weights(weights_path.string());
 	}
 
 	print_hardware_telemetry(portion);
 
-	run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path, vocab_path, max_steps);
+	run_training_loop(ai,
+			  optimizer,
+			  portion,
+			  ai_elements,
+			  parser,
+			  input,
+			  weights_path,
+			  vocab_path,
+			  max_steps);
 
 	portion.free_pinned();
 	embedded_cleanup.run();
@@ -1033,7 +1069,8 @@ bool execute_training_session(AI& ai,
 		std::cout << "\n========================================================\n"
 			  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
 			  << "========================================================\n"
-			  << "[OK] Model weights safely saved to: " << weights_path.filename().string() << "\n";
+			  << "[OK] Model weights safely saved to: "
+			  << weights_path.filename().string() << "\n";
 
 		const auto& bulk_files = parser.get_last_bulk_files();
 		if (!bulk_files.empty() && (auto_archive || auto_purge)) {
@@ -1044,16 +1081,29 @@ bool execute_training_session(AI& ai,
 				size_t archived_count = 0;
 				for (const auto& fpath : bulk_files) {
 					if (std::filesystem::exists(fpath, ec)) {
-						std::filesystem::path dest = archive_dir / fpath.filename();
+						std::filesystem::path dest =
+							archive_dir / fpath.filename();
 						if (std::filesystem::exists(dest, ec)) {
 							std::string stem = fpath.stem().string();
-							std::string ext = fpath.extension().string();
-							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
+							std::string ext =
+								fpath.extension().string();
+							dest = archive_dir /
+							       (stem + "_" +
+								std::to_string(
+									std::chrono::system_clock::now()
+										.time_since_epoch()
+										.count()) +
+								ext);
 						}
 						std::filesystem::rename(fpath, dest, ec);
 						if (ec) {
 							ec.clear();
-							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
+							std::filesystem::copy_file(
+								fpath,
+								dest,
+								std::filesystem::copy_options::
+									overwrite_existing,
+								ec);
 							if (!ec) {
 								std::filesystem::remove(fpath, ec);
 								++archived_count;
@@ -1077,8 +1127,8 @@ bool execute_training_session(AI& ai,
 					  << " file(s) from " << asset_dir.string() << "\n";
 			}
 		} else if (is_interactive && !bulk_files.empty()) {
-			std::cout << "\nProcessed Asset Management (" << bulk_files.size() << " file"
-				  << (bulk_files.size() == 1 ? "" : "s") << "):\n"
+			std::cout << "\nProcessed Asset Management (" << bulk_files.size()
+				  << " file" << (bulk_files.size() == 1 ? "" : "s") << "):\n"
 				  << "  [1] Keep files in asset_sample/ (Default)\n"
 				  << "  [2] Archive processed files to asset_sample/archive/\n"
 				  << "  [3] Purge (Delete) processed files from asset_sample/\n"
@@ -1090,22 +1140,36 @@ bool execute_training_session(AI& ai,
 			}
 
 			if (cleanup_choice == 2) {
-				const std::filesystem::path archive_dir = (core_dir / config::asset_folder) / "archive";
+				const std::filesystem::path archive_dir =
+					(core_dir / config::asset_folder) / "archive";
 				std::error_code ec;
 				std::filesystem::create_directories(archive_dir, ec);
 				size_t archived_count = 0;
 				for (const auto& fpath : bulk_files) {
 					if (std::filesystem::exists(fpath, ec)) {
-						std::filesystem::path dest = archive_dir / fpath.filename();
+						std::filesystem::path dest =
+							archive_dir / fpath.filename();
 						if (std::filesystem::exists(dest, ec)) {
 							std::string stem = fpath.stem().string();
-							std::string ext = fpath.extension().string();
-							dest = archive_dir / (stem + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ext);
+							std::string ext =
+								fpath.extension().string();
+							dest = archive_dir /
+							       (stem + "_" +
+								std::to_string(
+									std::chrono::system_clock::now()
+										.time_since_epoch()
+										.count()) +
+								ext);
 						}
 						std::filesystem::rename(fpath, dest, ec);
 						if (ec) {
 							ec.clear();
-							std::filesystem::copy_file(fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
+							std::filesystem::copy_file(
+								fpath,
+								dest,
+								std::filesystem::copy_options::
+									overwrite_existing,
+								ec);
 							if (!ec) {
 								std::filesystem::remove(fpath, ec);
 								++archived_count;
@@ -1118,8 +1182,9 @@ bool execute_training_session(AI& ai,
 				std::cout << "[OK] Successfully archived " << archived_count
 					  << " file(s) to " << archive_dir.string() << "\n";
 			} else if (cleanup_choice == 3) {
-				std::cout << "\n[!] WARNING: This will permanently delete " << bulk_files.size()
-					  << " file(s) from " << (core_dir / config::asset_folder).string() << "!\n"
+				std::cout << "\n[!] WARNING: This will permanently delete "
+					  << bulk_files.size() << " file(s) from "
+					  << (core_dir / config::asset_folder).string() << "!\n"
 					  << "Are you sure you want to proceed? (y/N): ";
 				char confirm = 0;
 				std::string confirm_line;
@@ -1141,7 +1206,8 @@ bool execute_training_session(AI& ai,
 					std::cout << "[OK] Successfully purged " << purged_count
 						  << " file(s) from asset_sample/.\n";
 				} else {
-					std::cout << "[i] Purge cancelled. Preserving all files in asset_sample/.\n";
+					std::cout
+						<< "[i] Purge cancelled. Preserving all files in asset_sample/.\n";
 				}
 			} else {
 				std::cout << "[i] Keeping all processed files in asset_sample/.\n";
@@ -1177,28 +1243,32 @@ int main(int argc, char* argv[]) {
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
 		if (a == "--test") {
-			return run_tests(locate_core_dir() / config::database_folder / config::embedded_file) ? 0 : 1;
+			return run_tests(locate_core_dir() / config::database_folder /
+					 config::embedded_file)
+				       ? 0
+				       : 1;
 		}
 		if (a == "--help" || a == "-h") {
-			std::cout << "========================================================\n"
-				  << "   PROJECT AXIOM v1.0 — Native C++23/CUDA AI Engine     \n"
-				  << "========================================================\n"
-				  << "Usage: app.exe [OPTION] [FLAGS]\n\n"
-				  << "Execution Modes:\n"
-				  << "  (no argument)       Interactive console menu\n"
-				  << "  --use               Run direct forward inference ('Use it')\n"
-				  << "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
-				  << "  --bulk [N]          Bulk train on all files in asset directory (optional N steps)\n"
-				  << "  --benchmark         Run hardware saturation & telemetry benchmark\n"
-				  << "  --test              Run all automated test suites\n"
-				  << "  --help, -h          Show this operator manual\n\n"
-				  << "Configuration Flags:\n"
-				  << "  --weights <path>    Specify custom neural weights checkpoint (default: weights.axiom)\n"
-				  << "  --vocab <path>      Specify custom vocabulary dictionary (default: vocab.axiom)\n"
-				  << "  --lr <rate>         Set optimizer learning rate (default: 0.001)\n"
-				  << "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
-				  << "  --archive           Automatically archive processed files after bulk training\n"
-				  << "  --purge             Automatically purge processed files after bulk training\n\n";
+			std::cout
+				<< "========================================================\n"
+				<< "   PROJECT AXIOM v1.0 — Native C++23/CUDA AI Engine     \n"
+				<< "========================================================\n"
+				<< "Usage: app.exe [OPTION] [FLAGS]\n\n"
+				<< "Execution Modes:\n"
+				<< "  (no argument)       Interactive console menu\n"
+				<< "  --use               Run direct forward inference ('Use it')\n"
+				<< "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
+				<< "  --bulk [N]          Bulk train on all files in asset directory (optional N steps)\n"
+				<< "  --benchmark         Run hardware saturation & telemetry benchmark\n"
+				<< "  --test              Run all automated test suites\n"
+				<< "  --help, -h          Show this operator manual\n\n"
+				<< "Configuration Flags:\n"
+				<< "  --weights <path>    Specify custom neural weights checkpoint (default: weights.axiom)\n"
+				<< "  --vocab <path>      Specify custom vocabulary dictionary (default: vocab.axiom)\n"
+				<< "  --lr <rate>         Set optimizer learning rate (default: 0.001)\n"
+				<< "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
+				<< "  --archive           Automatically archive processed files after bulk training\n"
+				<< "  --purge             Automatically purge processed files after bulk training\n\n";
 			return 0;
 		}
 		if (a == "--weights") {
@@ -1223,9 +1293,11 @@ int main(int argc, char* argv[]) {
 			if (i + 1 < argc) {
 				try {
 					learning_rate = std::stof(argv[++i]);
-					if (learning_rate <= 0.0f) throw std::invalid_argument("non-positive");
+					if (learning_rate <= 0.0f)
+						throw std::invalid_argument("non-positive");
 				} catch (...) {
-					std::cerr << "Error: --lr requires a positive float value.\n";
+					std::cerr
+						<< "Error: --lr requires a positive float value.\n";
 					return 1;
 				}
 			} else {
@@ -1235,7 +1307,8 @@ int main(int argc, char* argv[]) {
 		} else if (a.rfind("--lr=", 0) == 0) {
 			try {
 				learning_rate = std::stof(a.substr(5));
-				if (learning_rate <= 0.0f) throw std::invalid_argument("non-positive");
+				if (learning_rate <= 0.0f)
+					throw std::invalid_argument("non-positive");
 			} catch (...) {
 				std::cerr << "Error: --lr requires a positive float value.\n";
 				return 1;
@@ -1268,13 +1341,15 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		} else {
-			std::cerr << "Unknown argument: " << a << "\n"
-				  << "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --weights <path> | --vocab <path> | --lr <rate> | --data <dir> | --archive | --purge | --help]\n";
+			std::cerr
+				<< "Unknown argument: " << a << "\n"
+				<< "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --weights <path> | --vocab <path> | --lr <rate> | --data <dir> | --archive | --purge | --help]\n";
 			return 1;
 		}
 	}
 
-	const bool is_interactive = primary_mode_arg.empty() && custom_vocab_path.empty() && custom_weights_path.empty() && custom_data_dir.empty();
+	const bool is_interactive = primary_mode_arg.empty() && custom_vocab_path.empty() &&
+				    custom_weights_path.empty() && custom_data_dir.empty();
 
 	AppMode mode = AppMode::Train;
 	bool developer_mode = false;
@@ -1291,7 +1366,8 @@ int main(int argc, char* argv[]) {
 	} else if (primary_mode_arg == "--train") {
 		mode = AppMode::Train;
 		developer_mode = true;
-	} else if ((!custom_vocab_path.empty() || !custom_weights_path.empty()) && primary_mode_arg.empty()) {
+	} else if ((!custom_vocab_path.empty() || !custom_weights_path.empty()) &&
+		   primary_mode_arg.empty()) {
 		mode = AppMode::Use;
 		developer_mode = true;
 	}
@@ -1353,8 +1429,8 @@ int main(int argc, char* argv[]) {
 			? (std::filesystem::exists(custom_data_dir)
 				   ? custom_data_dir
 				   : (std::filesystem::exists(core_dir / custom_data_dir)
-					  ? (core_dir / custom_data_dir)
-					  : custom_data_dir))
+					      ? (core_dir / custom_data_dir)
+					      : custom_data_dir))
 			: (core_dir / config::asset_folder);
 
 	const std::vector<std::filesystem::path> asset_dirs = {asset_dir};
@@ -1397,10 +1473,24 @@ int main(int argc, char* argv[]) {
 			return 0;
 		}
 		if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
-			const bool ok = execute_training_session(
-				ai, optimizer, portion, ai_elements, parser, input, test,
-				weights_path, vocab_path, embedded_path, asset_dir, core_dir,
-				mode, developer_mode, max_steps, false, auto_archive, auto_purge);
+			const bool ok = execute_training_session(ai,
+								 optimizer,
+								 portion,
+								 ai_elements,
+								 parser,
+								 input,
+								 test,
+								 weights_path,
+								 vocab_path,
+								 embedded_path,
+								 asset_dir,
+								 core_dir,
+								 mode,
+								 developer_mode,
+								 max_steps,
+								 false,
+								 auto_archive,
+								 auto_purge);
 			return ok ? 0 : 1;
 		}
 		return 0;
@@ -1437,10 +1527,24 @@ int main(int argc, char* argv[]) {
 
 		if (selected_mode == AppMode::Train || selected_mode == AppMode::BulkTrain) {
 			Test empty_test;
-			execute_training_session(
-				ai, optimizer, portion, ai_elements, parser, session_input, empty_test,
-				weights_path, vocab_path, embedded_path, asset_dir, core_dir,
-				selected_mode, false, max_steps, true, auto_archive, auto_purge);
+			execute_training_session(ai,
+						 optimizer,
+						 portion,
+						 ai_elements,
+						 parser,
+						 session_input,
+						 empty_test,
+						 weights_path,
+						 vocab_path,
+						 embedded_path,
+						 asset_dir,
+						 core_dir,
+						 selected_mode,
+						 false,
+						 max_steps,
+						 true,
+						 auto_archive,
+						 auto_purge);
 			pause_menu();
 			continue;
 		}
