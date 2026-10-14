@@ -19,6 +19,11 @@ CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, int iteratio
 					       double* out_bandwidth_gb_s,
 					       float* out_avg_ms);
 
+CUDA_API bool run_vram_saturation_benchmark(size_t safety_headroom_bytes,
+					    size_t* out_allocated_bytes,
+					    double* out_bandwidth_gb_s,
+					    float* out_elapsed_ms);
+
 #ifdef __cplusplus
 }
 #endif

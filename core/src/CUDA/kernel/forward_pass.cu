@@ -319,8 +319,8 @@ extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, i
 
 	cudaStream_t stream = nullptr;
 
-	// Warm-up passes
-	for (int i = 0; i < 5; ++i) {
+	// Warm-up passes (locks Ada Lovelace Tensor Cores into P0 boost clock)
+	for (int i = 0; i < 30; ++i) {
 		gemm_op(arguments, d_workspace, stream);
 	}
 	cudaStreamSynchronize(stream);
@@ -367,4 +367,92 @@ extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, i
 
 	return true;
 }
+
+__global__ void vram_saturation_kernel(const uint4* __restrict__ src,
+				       uint4* __restrict__ dst,
+				       size_t num_elements) {
+	size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+	size_t stride = blockDim.x * gridDim.x;
+	for (size_t i = idx; i < num_elements; i += stride) {
+		dst[i] = src[i];
+	}
+}
+
+extern "C" CUDA_API bool run_vram_saturation_benchmark(size_t safety_headroom_bytes,
+						       size_t* out_allocated_bytes,
+						       double* out_bandwidth_gb_s,
+						       float* out_elapsed_ms) {
+	size_t free_vram = 0, total_vram = 0;
+	if (cudaMemGetInfo(&free_vram, &total_vram) != cudaSuccess) {
+		return false;
+	}
+
+	if (free_vram <= safety_headroom_bytes) {
+		return false;
+	}
+
+	size_t safe_budget = free_vram - safety_headroom_bytes;
+	// Allocate 2 buffers: src and dst, 16-byte aligned
+	size_t buf_size = (safe_budget / 2 / 16) * 16;
+	constexpr size_t MAX_BUF_PER_SIDE = 3ULL * 1024 * 1024 * 1024; // 3 GB each = 6 GB total max
+	if (buf_size > MAX_BUF_PER_SIDE) {
+		buf_size = MAX_BUF_PER_SIDE;
+	}
+
+	uint4* d_src = nullptr;
+	uint4* d_dst = nullptr;
+
+	if (cudaMalloc(&d_src, buf_size) != cudaSuccess ||
+	    cudaMalloc(&d_dst, buf_size) != cudaSuccess) {
+		if (d_src) cudaFree(d_src);
+		if (d_dst) cudaFree(d_dst);
+		return false;
+	}
+
+	cudaMemset(d_src, 0x3c, buf_size);
+	cudaMemset(d_dst, 0x00, buf_size);
+
+	size_t num_elements = buf_size / sizeof(uint4);
+	int threads = 256;
+	int blocks = 58 * 8; // Saturate all 58 Ada SMs
+
+	// Warmup
+	vram_saturation_kernel<<<blocks, threads>>>(d_src, d_dst, num_elements);
+	cudaDeviceSynchronize();
+
+	cudaEvent_t start = nullptr, stop = nullptr;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
+	constexpr int passes = 15;
+	cudaEventRecord(start);
+	for (int p = 0; p < passes; ++p) {
+		vram_saturation_kernel<<<blocks, threads>>>(d_src, d_dst, num_elements);
+	}
+	cudaEventRecord(stop);
+	cudaEventSynchronize(stop);
+
+	float total_ms = 0.0f;
+	cudaEventElapsedTime(&total_ms, start, stop);
+
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	cudaFree(d_src);
+	cudaFree(d_dst);
+
+	if (total_ms <= 0.0f) {
+		return false;
+	}
+
+	if (out_allocated_bytes) *out_allocated_bytes = buf_size * 2;
+	if (out_elapsed_ms) *out_elapsed_ms = total_ms;
+
+	double total_bytes_transferred = 2.0 * static_cast<double>(buf_size) * static_cast<double>(passes);
+	double achieved_bw = (total_bytes_transferred / 1e9) / (total_ms / 1000.0);
+	if (out_bandwidth_gb_s) *out_bandwidth_gb_s = achieved_bw;
+
+	return true;
+}
+
 
