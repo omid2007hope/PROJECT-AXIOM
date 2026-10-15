@@ -13,6 +13,7 @@
 #define NOMINMAX // keep <windows.h> from defining min()/max() macros
 
 #include <chrono>
+#include <cmath>
 #include <conio.h> // For _kbhit() and _getch()
 #include <cstdint>
 #include <cstdlib>
@@ -1123,6 +1124,42 @@ bool execute_training_session(AI& ai,
 	}
 
 	EmbeddedDataCleanup embedded_cleanup {optimizer, portion, embedded_path};
+
+	// Multimodal pipeline preview: demonstrate transformation of initial data items
+	const size_t preview_count = std::min<size_t>(3, input.tokenized_data.size());
+	if (preview_count > 0) {
+		parser.build_embedding_table(input);
+		std::cout << "\n--- Multimodal Tokenization & Embedding Pipeline Preview ---\n";
+		for (size_t i = 0; i < preview_count; ++i) {
+			const uint32_t token_id = input.tokenized_data[i];
+			const std::string raw_item = (developer_mode && i < test.data_txt.size())
+							     ? test.data_txt[i]
+							     : parser.token_to_string(input, token_id);
+
+			std::cout << "  \"" << raw_item << "\" assigned id: " << token_id
+				  << " -> Tokenized into -> " << token_id
+				  << " -> tokenized embedded into -> [";
+
+			auto it = input.embedding_table.find(token_id);
+			if (it != input.embedding_table.end()) {
+				for (size_t d = 0; d < it->second.size(); ++d) {
+					std::cout << std::fixed << std::setprecision(4)
+						  << static_cast<float>(it->second[d])
+						  << (d + 1 < it->second.size() ? ", " : "");
+				}
+			} else {
+				for (size_t d = 0; d < input.embedding_dim; ++d) {
+					const float val = static_cast<float>(
+						std::sin(static_cast<double>(token_id) * (d + 1.0)));
+					std::cout << std::fixed << std::setprecision(4) << val
+						  << (d + 1 < input.embedding_dim ? ", " : "");
+				}
+			}
+			std::cout << "]\n";
+		}
+		std::cout << "------------------------------------------------------------\n\n"
+			  << std::defaultfloat << std::flush;
+	}
 
 	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
 	parser.embedding(input, test);
