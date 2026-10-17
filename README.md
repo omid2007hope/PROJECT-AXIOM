@@ -31,7 +31,7 @@ _Project Axiom is not a Python wrapper. It is not an abstraction layer. It is a 
 
 ---
 
-[**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Maintenance**](#-build-test--maintenance) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Roadmap**](#-roadmap-v10-released--v20-future)
+[**Manifesto**](#eliminate-the-knowledge-gatekeepers) • [**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Run**](#️-build-test--run) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Roadmap**](#-scaling-roadmap-v10--v20)
 
 ---
 
@@ -694,7 +694,7 @@ Axiom includes **200 automated unit, integration, and resilience tests** across 
 
 ---
 
-### 3. Run the Hardware Benchmark HUD (`--benchmark`)
+### 4. Run the Hardware Benchmark HUD (`--benchmark`)
 
 To execute the hardware profiler and display the 4-variable Hardware Saturation HUD:
 
@@ -743,7 +743,7 @@ VRAM Footprint  : 11061 MB Free / 12281 MB Total
 
 ---
 
-### 4. Launch Direct Forward Inference ("Use it")
+### 5. Launch Direct Forward Inference ("Use it")
 
 To interact with the pre-trained model in real time:
 
@@ -785,7 +785,7 @@ Prompt > The quick brown fox
 
 ---
 
-### 5. Launch Continuous Training (`--train`)
+### 6. Launch Continuous Training (`--train`)
 
 To train or fine-tune the neural engine:
 
@@ -805,7 +805,7 @@ To train or fine-tune the neural engine:
 
 ---
 
-### 6. Interactive Console Menu (Default Execution)
+### 7. Interactive Console Menu (Default Execution)
 
 Launching without arguments presents the full interactive terminal menu:
 
@@ -1098,6 +1098,8 @@ For automated training or deployment scripts without user interaction:
 ```
 
 ---
+
+## 🚀 Scaling Roadmap (v1.0 & v2.0)
 
 ### 🚀 Version 1.0 (Released & Validated Foundations)
 
