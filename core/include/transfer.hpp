@@ -20,6 +20,14 @@ public:
 	static bool download_weights_from_gpu(std::vector<float>& h_weights,
 					      std::vector<float>& h_bias,
 					      const GpuWeights& gpu_weights);
+
+	// Method to move embeddings to GPU
+	static bool upload_embeddings_to_gpu(const std::vector<float>& h_embeddings,
+					      GpuEmbeddings& gpu_embeddings);
+
+	// Method to copy trained embeddings back into h_embeddings
+	static bool download_embeddings_from_gpu(std::vector<float>& h_embeddings,
+						 const GpuEmbeddings& gpu_embeddings);
 };
 
 #endif

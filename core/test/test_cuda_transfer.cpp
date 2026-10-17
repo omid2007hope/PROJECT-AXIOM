@@ -11,6 +11,7 @@
 //    Verifies cudaMalloc, cudaMemcpy H→D, cudaFree, reuse, realloc, double-free.
 //    Skipped with a clear message until MSVC Build Tools are installed.
 // ─────────────────────────────────────────────────────────────────────────────
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <iostream>
@@ -328,6 +329,70 @@ static void test_backward_pass_and_loss_drop() {
 	free_gpu_activations(&acts);
 }
 
+static void test_learnable_embeddings_and_adamw() {
+	GpuPortion gpu {};
+	GpuWeights weights {};
+	GpuActivations acts {};
+	GpuEmbeddings embeddings {};
+
+	const size_t vocab_size = 65536;
+	const size_t emb_dim = 4;
+	const size_t num_tokens = 128;
+	const size_t in_dim = num_tokens * emb_dim; // 512
+	const size_t out_dim = 4;
+
+	// 1. Allocate embeddings matrix
+	bool alloc_ok = allocate_gpu_embeddings(&embeddings, vocab_size, emb_dim);
+	check(alloc_ok, "allocate_gpu_embeddings allocates bf16 + FP32 tables and AdamW moments");
+
+	// 2. Download chaos initialized embeddings to verify chaos bounds
+	std::vector<float> h_emb(vocab_size * emb_dim);
+	bool dl_ok = download_embeddings(h_emb.data(), &embeddings);
+	check(dl_ok, "download_embeddings downloads chaos initialized embeddings");
+	float bound = 1.0f / std::sqrt(static_cast<float>(emb_dim));
+	bool bounds_ok = true;
+	for (size_t i = 0; i < 1000; ++i) {
+		if (h_emb[i] < -bound || h_emb[i] > bound) {
+			bounds_ok = false;
+			break;
+		}
+	}
+	check(bounds_ok, "Initial embeddings strictly within [-1/sqrt(D), +1/sqrt(D)]");
+
+	// 3. Setup weights
+	std::vector<float> h_w(in_dim * out_dim, 0.05f);
+	std::vector<float> h_b(out_dim, 0.0f);
+	upload_ai_weights(h_w.data(), h_w.size(), h_b.data(), h_b.size(), &weights);
+
+	// 4. Upload 128 uint32_t token IDs across PCIe
+	std::vector<uint32_t> token_ids(num_tokens);
+	for (size_t i = 0; i < num_tokens; ++i) {
+		token_ids[i] = static_cast<uint32_t>(10 + (i % 30));
+	}
+	std::vector<std::bfloat16_t> h_tgt(out_dim, static_cast<std::bfloat16_t>(1.0f));
+	bool up_tok_ok = upload_tokens_to_gpu(token_ids.data(), num_tokens, h_tgt.data(), out_dim, &gpu, 0);
+	check(up_tok_ok, "upload_tokens_to_gpu uploads 128 token IDs across PCIe");
+
+	// 5. Forward pass with embeddings gather
+	bool fwd_ok = forward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, in_dim, out_dim, 0);
+	check(fwd_ok, "forward_pass_with_embeddings gathers from d_table and executes CUTLASS GEMM");
+
+	// 6. Backward pass with AdamW + scatter into master embedding table
+	uint32_t tracked_id = token_ids[0];
+	bool bwd_ok = backward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, in_dim, out_dim, 0.01f, 0, true);
+	check(bwd_ok, "backward_pass_with_embeddings executes AdamW and scatters into embedding table");
+
+	// Verify embedding remains finite after update
+	download_embeddings(h_emb.data(), &embeddings);
+	float tracked_val_after = h_emb[tracked_id * emb_dim];
+	check(std::isfinite(tracked_val_after), "Embedding after backward scatter is finite");
+
+	free_gpu(&gpu);
+	free_gpu_weights(&weights);
+	free_gpu_activations(&acts);
+	free_gpu_embeddings(&embeddings);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 bool test_cuda_transfer() {
 	std::cout << "\n=== CUDA Transfer Test Suite ===\n";
@@ -352,6 +417,9 @@ bool test_cuda_transfer() {
 
 	std::cout << "\n[7] Backward Pass Gradients & Validation Loss Drop\n";
 	test_backward_pass_and_loss_drop();
+
+	std::cout << "\n[8] Learnable Embeddings Gather, Scatter & AdamW\n";
+	test_learnable_embeddings_and_adamw();
 
 	std::cout << "=== CUDA Transfer Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";

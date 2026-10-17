@@ -18,9 +18,11 @@ struct AxiomWeightHeader {
 	uint64_t out_dim = 0;
 	uint64_t weight_count = 0;
 	uint64_t bias_count = 0;
+	uint64_t vocab_size = 0;
+	uint64_t embedding_dim = 0;
 };
 #pragma pack(pop)
-static_assert(sizeof(AxiomWeightHeader) == 40, "AxiomWeightHeader must be exactly 40 bytes");
+static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactly 56 bytes");
 
 struct Elements {
 	size_t weight_elements = 0;
@@ -50,14 +52,19 @@ public:
 	AI(const AI&) = delete;
 	AI& operator=(const AI&) = delete;
 
+	size_t vocab_size = 65536;
+	size_t embedding_dim = 32;
+
 	// CPU Memory (High precision float for initialization and updates)
 	std::vector<float> h_weights;
 	std::vector<float> h_bias;
+	std::vector<float> h_embeddings;
 
 	// GPU Memory State (The pointers for the VRAM)
 	GpuWeights gpu_weights;
 	GpuActivations gpu_activations;
 	GpuPortion gpu_portion; // Reused across iterations to prevent reallocation
+	GpuEmbeddings gpu_embeddings;
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
 	// inside [weight_min, weight_max]

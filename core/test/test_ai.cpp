@@ -171,20 +171,24 @@ bool test_ai() {
 
 	const size_t expected_file_size = sizeof(AxiomWeightHeader) +
 					  (in_dim * out_dim * sizeof(float)) +
-					  (out_dim * sizeof(float));
+					  (out_dim * sizeof(float)) +
+					  (ai.vocab_size * ai.embedding_dim * sizeof(float));
 	test_check_eq(std::filesystem::file_size(test_weights_path), expected_file_size, "File size matches exact binary format", s_pass, s_fail);
 
 	// Snapshot of the saved parameters
 	std::vector<float> saved_weights = ai.h_weights;
 	std::vector<float> saved_bias = ai.h_bias;
+	std::vector<float> saved_embeddings = ai.h_embeddings;
 
 	// Reset memory to chaos (breaking current state)
 	ai.reset_weights(e);
 	test_check(ai.upload_weights_to_gpu(), "Upload chaotic weights to GPU VRAM", s_pass, s_fail);
 
-	// Verify host weights are different from saved
+	// Verify host weights and embeddings are different from saved
 	bool weights_differ_from_saved = (ai.h_weights != saved_weights);
 	test_check(weights_differ_from_saved, "Memory wiped: current weights differ from saved snapshot", s_pass, s_fail);
+	bool embeddings_differ_from_saved = (ai.h_embeddings != saved_embeddings);
+	test_check(embeddings_differ_from_saved, "Memory wiped: current embeddings differ from saved snapshot", s_pass, s_fail);
 
 	// Load weights from file
 	test_check(ai.load_weights(test_weights_path), "ai.load_weights() returns true", s_pass, s_fail);
@@ -192,11 +196,14 @@ bool test_ai() {
 	// Assert bit-for-bit equality on host memory
 	test_check(ai.h_weights == saved_weights, "Loaded weights match saved weights bit-for-bit", s_pass, s_fail);
 	test_check(ai.h_bias == saved_bias, "Loaded biases match saved biases bit-for-bit", s_pass, s_fail);
+	test_check(ai.h_embeddings == saved_embeddings, "Loaded embeddings match saved embeddings bit-for-bit", s_pass, s_fail);
 
 	// Verify GPU VRAM was also restored by load_weights()
 	ai.h_weights[0] = 999.0f; // Tamper with CPU memory
+	ai.h_embeddings[0] = 999.0f;
 	test_check(ai.download_weights_from_gpu(), "download_weights_from_gpu() succeeds after load", s_pass, s_fail);
 	test_check(ai.h_weights == saved_weights, "VRAM verified: weights downloaded from GPU match saved bit-for-bit", s_pass, s_fail);
+	test_check(ai.h_embeddings == saved_embeddings, "VRAM verified: embeddings downloaded from GPU match saved bit-for-bit", s_pass, s_fail);
 
 	// Test error cases: non-existent file and invalid magic header
 	test_check(!ai.load_weights("non_existent_file.axiom"), "load_weights() fails on non-existent file", s_pass, s_fail);
@@ -205,7 +212,7 @@ bool test_ai() {
 	{
 		std::string corrupt_path = "corrupt_weights.axiom";
 		std::ofstream corrupt_out(corrupt_path, std::ios::binary);
-		char bad_header[40] = {0};
+		char bad_header[sizeof(AxiomWeightHeader)] = {0};
 		corrupt_out.write(bad_header, sizeof(bad_header));
 		corrupt_out.close();
 		test_check(!ai.load_weights(corrupt_path), "load_weights() rejects invalid magic header", s_pass, s_fail);
@@ -295,6 +302,56 @@ bool test_ai() {
 	std::vector<float> prompt_pred;
 	test_check(ai.predict(prompt_ctx, prompt_pred), "ai.predict(prompt_ctx) succeeds on user prompt context", s_pass, s_fail);
 	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == 4", s_pass, s_fail);
+
+	// ── [10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning ──
+	std::cout << "\n[10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning\n";
+	{
+		// 1. Verify embedding chaos initialization
+		float emb_bound = 1.0f / sqrtf(static_cast<float>(ai.embedding_dim));
+		bool emb_in_bounds = true;
+		float emb_sum = 0.0f;
+		for (float val : ai.h_embeddings) {
+			if (val < -emb_bound || val > emb_bound) {
+				emb_in_bounds = false;
+				break;
+			}
+			emb_sum += val;
+		}
+		test_check(emb_in_bounds, "Embeddings bounded in [-1/sqrt(D), +1/sqrt(D)]", s_pass, s_fail);
+		test_check(std::abs(emb_sum) > 0.01f, "Embeddings have non-zero chaotic distribution", s_pass, s_fail);
+
+		// 2. Token-based training step
+		Portion token_portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
+		token_portion.allocate_pinned();
+
+		// Populate ram_buffer_token_ids with 200 token IDs
+		token_portion.ram_buffer_token_ids.resize(200);
+		for (size_t i = 0; i < 200; ++i) {
+			token_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 20));
+		}
+
+		// Snapshot target token embedding before training
+		uint32_t tracked_tok = token_portion.ram_buffer_token_ids[0];
+		float before_emb0 = ai.h_embeddings[tracked_tok * ai.embedding_dim];
+
+		TrainStatus tok_status = ai.train(optimizer, token_portion);
+		test_check(tok_status == TrainStatus::Trained, "ai.train() succeeds using 128 uint32_t token IDs across PCIe", s_pass, s_fail);
+		test_check(token_portion.has_token_ids, "Portion flagged has_token_ids == true", s_pass, s_fail);
+
+		double tok_loss = 0.0;
+		size_t tok_steps = 0;
+		test_check(ai.read_loss(tok_loss, tok_steps), "read_loss() succeeds after token training step", s_pass, s_fail);
+		test_check_eq(tok_steps, size_t {1}, "1 token training step recorded", s_pass, s_fail);
+		test_check(tok_loss >= 0.0 && std::isfinite(tok_loss), "Token training step produces valid finite loss", s_pass, s_fail);
+
+		// Verify backward scatter updated the embedding table
+		ai.download_weights_from_gpu();
+		float after_emb0 = ai.h_embeddings[tracked_tok * ai.embedding_dim];
+		test_check(std::isfinite(after_emb0), "Master embedding table value remains finite after backward scatter", s_pass, s_fail);
+		test_check(after_emb0 != before_emb0, "Backward scatter physically updated embedding coordinate in VRAM", s_pass, s_fail);
+
+		token_portion.free_pinned();
+	}
 
 	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";

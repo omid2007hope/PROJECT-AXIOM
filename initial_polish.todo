@@ -7,21 +7,21 @@ Project Axiom - Initial Polish & Architectural Upgrade:
       - Remove data_num and user_numbers separation in parser.hpp
       - Ingest numbers directly as textual tokens (e.g. "9.8" or "9", ".", "8")
       - Preserve semantic co-occurrence between words and numerical quantities (e.g. "gravity" and "9.8")
-    ☐ 1.2 Sanitize Document Ingestion & Eliminate PDF Byte Streaming @parser @data
+    ✔ 1.2 Sanitize Document Ingestion & Eliminate PDF Byte Streaming @done @parser @data
       - Stop treating .pdf, .docx, and formatted text documents as raw binary byte streams in bulk_tokenize_directory
       - Eliminate zlib/FlateDecode compressed entropy ingestion
       - Pass document files through a text/equation extraction pre-pass so terms like "mass" and "acceleration" enter as linguistic tokens
-    ☐ 1.3 Restrict Raw Byte Tokenization to Genuine Binary Assets @parser @multimodal
+    ✔ 1.3 Restrict Raw Byte Tokenization to Genuine Binary Assets @done @parser @multimodal
       - Route only genuine visual media (PNG, JPG, BMP) and audio waveforms (WAV, OGG) to byte-level discrete tokenizers
 
   Phase 2: Dense Contiguous Early-Fusion Indexing (Tokenizer Layer)
-    ☐ 2.1 Eradicate Billion-Scale Modality Offsets @tokenizer @memory
+    ✔ 2.1 Eradicate Billion-Scale Modality Offsets @done @tokenizer @memory
       - Delete 1,000,000,000 (numbers), 2,000,000,000 (images), 3,000,000,000 (video), and 4,000,000,000 (voice) base ID offsets in parser.hpp
       - Prevent multi-gigabyte VRAM allocation crashes caused by indexing sparse multi-billion ID tables
-    ☐ 2.2 Establish Fixed Bounded Vocabulary (V = 65,536) @tokenizer @vram
+    ✔ 2.2 Establish Fixed Bounded Vocabulary (V = 65,536) @done @tokenizer @vram
       - Cap vocabulary to a dense 16-bit addressable range [0, 65535]
       - Guarantee fixed ~4.19 MB VRAM footprint for bf16 embedding table
-    ☐ 2.3 Partition Contiguous Modality ID Blocks @tokenizer @architecture
+    ✔ 2.3 Partition Contiguous Modality ID Blocks @done @tokenizer @architecture
       - Slots [0 .. 3]: Special reserved tokens (<PAD>=0, <UNK>=1, <BOS>=2, <EOS>=3)
       - Slots [4 .. 64,511]: Text words, subwords, numbers, and mathematical symbols
       - Slots [64,512 .. 64,767]: Discrete visual bytes (256 slots for 0x00..0xFF)
@@ -29,44 +29,44 @@ Project Axiom - Initial Polish & Architectural Upgrade:
       - Slots [65,024 .. 65,535]: Reserved expansion slots for future modality codebooks
 
   Phase 3: VRAM Embedding Matrix & Memory Allocation (GPU State)
-    ☐ 3.1 Define GpuEmbeddings Structure in gpu_types.cuh @cuda @types
+    ✔ 3.1 Define GpuEmbeddings Structure in gpu_types.cuh @done @cuda @types
       - Declare d_table (__nv_bfloat16*) for fast coalesced Tensor Core / gather reads
       - Declare d_table_master (float*) for high-precision FP32 gradient accumulation
       - Track vocab_size (65,536) and embedding_dim (32)
-    ☐ 3.2 Implement Allocation & Chaos Initialization in memory_allocation.cu @cuda @memory
+    ✔ 3.2 Implement Allocation & Chaos Initialization in memory_allocation.cu @done @cuda @memory
       - Allocate d_table (65,536 * 32 * sizeof(__nv_bfloat16) = 4,194,304 bytes)
       - Allocate d_table_master (65,536 * 32 * sizeof(float) = 8,388,608 bytes)
       - Initialize table with uniform chaos in [-1/sqrt(D), +1/sqrt(D)] (approx [-0.176, +0.176] for D=32)
-    ☐ 3.3 Implement Systematic Teardown in free_gpu() @cuda @memory
+    ✔ 3.3 Implement Systematic Teardown in free_gpu() @done @cuda @memory
       - Ensure cudaFree releases d_table and d_table_master on shutdown to prevent VRAM memory leaks
 
   Phase 4: Forward Gather Kernel & PCIe Bandwidth Optimization (Compute Layer)
-    ☐ 4.1 Invert Host-to-Device Dataflow @pcie @bandwidth
+    ✔ 4.1 Invert Host-to-Device Dataflow @done @pcie @bandwidth
       - Stop CPU-side float vector generation in Parser::embedding (retire embedded_data.bin disk/RAM buffer)
       - Upload only 128 uint32_t token IDs across PCIe per context window (512 bytes vs 8,192 bytes of floats)
-    ☐ 4.2 Write Branchless Gather CUDA Kernel in forward_pass.cu @cuda @kernel
+    ✔ 4.2 Write Branchless Gather CUDA Kernel in forward_pass.cu @done @cuda @kernel
       - Implement gather_embeddings_kernel<<<grid, block, 0, stream>>>
       - Each thread maps directly to (token_idx, dim_idx) and loads d_table[token_id * 32 + d] into d_context_window
       - Zero warp divergence across multimodal tokens; 100% coalesced global memory reads
-    ☐ 4.3 Synchronize with CUTLASS EVT GEMM @cuda @kernel
+    ✔ 4.3 Synchronize with CUTLASS EVT GEMM @done @cuda @kernel
       - Ensure gather kernel writes to d_context_window prior to Tensor Core matrix multiplication
 
   Phase 5: Backward Scatter Kernel & Semantic Emergence (Learning Layer)
-    ☐ 5.1 Calculate Input Gradients (dL/dx) in backward_pass.cu @cuda @backprop
+    ✔ 5.1 Calculate Input Gradients (dL/dx) in backward_pass.cu @done @cuda @backprop
       - Compute dL/dx_j = sum_{i=0}^{out_dim-1} dz_i * W_{ij} inside backward pass
       - Pass gradient signal backward through the linear projection layer into the input context window
-    ☐ 5.2 Implement Backward Scatter Kernel with atomicAdd @cuda @kernel
+    ✔ 5.2 Implement Backward Scatter Kernel with atomicAdd @done @cuda @kernel
       - For each context token position j with token ID T_j, accumulate gradient into FP32 master table:
         atomicAdd(&d_table_master[T_j * 32 + d], -learning_rate * dx_{j, d})
       - Eliminate race conditions when common tokens (e.g. "the") appear multiple times in the same context window
-    ☐ 5.3 Round Master FP32 to Device bf16 Table @cuda @precision
+    ✔ 5.3 Round Master FP32 to Device bf16 Table @done @cuda @precision
       - Convert d_table_master[T_j * 32 + d] into d_table[T_j * 32 + d] via __float2bfloat16() for subsequent forward steps
       - Physically cluster semantically related tokens (e.g. "bulk" and "training") in 32D hyperspace over time
 
   Phase 6: Optimizer Evolution & Curing Amnesia (Optimization Layer)
-    ☐ 6.1 Allocate Momentum & Variance VRAM Buffers @cuda @optimizer
+    ✔ 6.1 Allocate Momentum & Variance VRAM Buffers @done @cuda @optimizer
       - Allocate first moment tensor m_t (float*) and second moment tensor v_t (float*) for all parameters
-    ☐ 6.2 Implement Fused AdamW Kernel in CUDA @cuda @optimizer
+    ✔ 6.2 Implement Fused AdamW Kernel in CUDA @done @cuda @optimizer
       - Update parameters using bias-corrected first and second moments:
         m_t = beta1 * m_{t-1} + (1 - beta1) * g
         v_t = beta2 * v_{t-1} + (1 - beta2) * g^2
@@ -74,9 +74,9 @@ Project Axiom - Initial Polish & Architectural Upgrade:
       - Provide directional velocity and curvature memory across training steps
 
   Phase 7: Unified Model Checkpointing (Persistence Layer)
-    ☐ 7.1 Extend AxiomWeightHeader in ai.hpp @persistence @io
+    ✔ 7.1 Extend AxiomWeightHeader in ai.hpp @done @persistence @io
       - Add vocab_size (uint64_t) and embedding_dim (uint64_t) to binary header
       - Validate header magic 'AXIOM_V1' and exact byte layout
-    ☐ 7.2 Persist Master Embedding Table in AI::save_weights / load_weights @persistence @io
+    ✔ 7.2 Persist Master Embedding Table in AI::save_weights / load_weights @done @persistence @io
       - Serialize d_table_master alongside weights and biases into weights.axiom
       - Restore learned semantic coordinates and upload to GPU VRAM on engine startup

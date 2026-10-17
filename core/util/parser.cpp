@@ -12,6 +12,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include "../include/Identifier.hpp"
+#include "../include/decompressor/decom_audio.hpp"
+#include "../include/decompressor/decom_doc.hpp"
+#include "../include/decompressor/decom_image.hpp"
+#include "../include/decompressor/decom_video.hpp"
+
 
 // Data Streaming (or Batching).
 
@@ -301,12 +307,21 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 }
 
 std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
-	if (token_id == 0) {
-		return "[Unknown #0]";
+	if (token_id == vocab::PAD) {
+		return "<PAD>";
+	}
+	if (token_id == vocab::UNK) {
+		return "<UNK>";
+	}
+	if (token_id == vocab::BOS) {
+		return "<BOS>";
+	}
+	if (token_id == vocab::EOS) {
+		return "<EOS>";
 	}
 
-	// 1. Text & Number Modality (Main Dictionary: 1 to 1,999,999,999)
-	if (token_id < 2000000000U) {
+	// 1. Text & Number Modality (Main Dictionary: 4 to 64,511)
+	if (token_id >= vocab::TEXT_START_ID && token_id <= vocab::TEXT_MAX_ID) {
 		auto it = input.reverse_main_dictionary.find(token_id);
 		if (it != input.reverse_main_dictionary.end()) {
 			return it->second;
@@ -318,37 +333,29 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		return "[Token #" + std::to_string(token_id) + "]";
 	}
 
-	// 3. Image Modality (2,000,000,000 to 2,999,999,999)
-	if (token_id < 3000000000U) {
-		for (const auto& [byte_val, id] : input.image_dictionary) {
-			if (id == token_id) {
-				return "[Image byte: " +
-				       std::to_string(static_cast<int>(byte_val)) + "]";
-			}
-		}
-		return "[Image #" + std::to_string(token_id) + "]";
-	}
-
-	// 4. Video Modality (3,000,000,000 to 3,999,999,999)
-	if (token_id < 4000000000U) {
-		for (const auto& [byte_val, id] : input.video_dictionary) {
+	// 2. Visual Modality (Images & Video frames: 64,512 to 64,767)
+	if (token_id >= vocab::VISUAL_START_ID && token_id <= vocab::VISUAL_END_ID) {
+		uint8_t byte_val = static_cast<uint8_t>(token_id - vocab::VISUAL_START_ID);
+		for (const auto& [b, id] : input.video_dictionary) {
 			if (id == token_id) {
 				return "[Video byte: " +
 				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
 		}
-		return "[Video #" + std::to_string(token_id) + "]";
+		return "[Image byte: " +
+		       std::to_string(static_cast<int>(byte_val)) + "]";
 	}
 
-	// 5. Voice Modality (4,000,000,000 to 4,200,000,000)
-	if (token_id < 4200000000U) {
-		for (const auto& [byte_val, id] : input.voice_dictionary) {
-			if (id == token_id) {
-				return "[Voice byte: " +
-				       std::to_string(static_cast<int>(byte_val)) + "]";
-			}
-		}
-		return "[Voice #" + std::to_string(token_id) + "]";
+	// 3. Acoustic Modality (Voice & Audio waveforms: 64,768 to 65,023)
+	if (token_id >= vocab::ACOUSTIC_START_ID && token_id <= vocab::ACOUSTIC_END_ID) {
+		uint8_t byte_val = static_cast<uint8_t>(token_id - vocab::ACOUSTIC_START_ID);
+		return "[Voice byte: " +
+		       std::to_string(static_cast<int>(byte_val)) + "]";
+	}
+
+	// 4. Reserved Expansion Slots (65,024 to 65,535)
+	if (token_id >= vocab::EXPANSION_START_ID && token_id <= vocab::EXPANSION_MAX_ID) {
+		return "[Expansion #" + std::to_string(token_id) + "]";
 	}
 
 	return "[Unknown #" + std::to_string(token_id) + "]";
@@ -368,9 +375,13 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	std::string word;
 	while (iss >> word) {
 		if (input.main_dictionary.find(word) == input.main_dictionary.end()) {
-			uint32_t new_id = input.next_text_id++;
-			input.main_dictionary[word] = new_id;
-			input.reverse_main_dictionary[new_id] = word;
+			if (input.next_text_id <= vocab::TEXT_MAX_ID) {
+				uint32_t new_id = input.next_text_id++;
+				input.main_dictionary[word] = new_id;
+				input.reverse_main_dictionary[new_id] = word;
+			} else {
+				input.main_dictionary[word] = vocab::UNK;
+			}
 		}
 		tokens.push_back(input.main_dictionary[word]);
 	}
@@ -524,6 +535,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		if (max_files > 0 && files_processed >= max_files) {
 			break;
 		}
+		IdentifiedFile id_file = Identifier::identify(fpath);
 		std::string ext = fpath.extension().string();
 		for (char& c : ext)
 			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -544,55 +556,35 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			 ext == ".go" || ext == ".java" || ext == ".ts" || ext == ".js" ||
 			 ext == ".sh" || ext == ".bat" || ext == ".ps1");
 
-		bool is_image_ext =
-			(ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" ||
-			 ext == ".webp" || ext == ".gif" || ext == ".tiff" || ext == ".tif" ||
-			 ext == ".ico" || ext == ".ppm" || ext == ".pgm" || ext == ".svg");
+		bool is_doc = (id_file.modality == ModalityCategory::DOCUMENT || is_text_ext ||
+			       ext == ".pdf" || ext == ".docx");
 
-		bool is_video_ext =
-			(ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov" ||
-			 ext == ".webm" || ext == ".wmv" || ext == ".flv" || ext == ".m4v" ||
-			 ext == ".mpg" || ext == ".mpeg" || ext == ".3gp");
+		bool is_image = (id_file.modality == ModalityCategory::IMAGE ||
+				 ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" ||
+				 ext == ".webp" || ext == ".gif" || ext == ".tiff" || ext == ".tif");
 
-		bool is_audio_ext =
-			(ext == ".ogg" || ext == ".wav" || ext == ".mp3" || ext == ".flac" ||
-			 ext == ".aac" || ext == ".m4a" || ext == ".wma" || ext == ".opus" ||
-			 ext == ".aiff" || ext == ".mid" || ext == ".midi");
+		bool is_video = (id_file.modality == ModalityCategory::VIDEO ||
+				 ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov" ||
+				 ext == ".webm" || ext == ".wmv");
 
-		bool is_3d_ext = (ext == ".obj" || ext == ".stl" || ext == ".gltf" ||
-				  ext == ".glb" || ext == ".ply" || ext == ".3ds" ||
-				  ext == ".fbx" || ext == ".dae" || ext == ".blend");
+		bool is_audio = (id_file.modality == ModalityCategory::AUDIO ||
+				 ext == ".ogg" || ext == ".wav" || ext == ".mp3" || ext == ".flac" ||
+				 ext == ".aac" || ext == ".m4a" || ext == ".wma" || ext == ".opus");
 
-		bool is_binary = false;
-		if (!is_text_ext && !is_image_ext && !is_video_ext && !is_audio_ext) {
-			std::ifstream probe(fpath, std::ios::binary);
-			char sample[1024];
-			probe.read(sample, sizeof(sample));
-			std::streamsize n_read = probe.gcount();
-			for (std::streamsize i = 0; i < n_read; ++i) {
-				if (sample[i] == '\0') {
-					is_binary = true;
-					break;
-				}
-			}
-		}
-
-		if (is_text_ext ||
-		    (!is_image_ext && !is_video_ext && !is_audio_ext && !is_binary)) {
-			std::ifstream in(fpath);
-			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string()
-					  << "\n";
-				continue;
-			}
+		if (is_doc) {
+			// Phase 1.2: Sanitize Document Ingestion & Eliminate PDF Byte Streaming
+			// Extract clean text from PDF, DOCX, TXT, MD so linguistic terms enter main_dictionary
+			std::string extracted_text = Decom_doc::extract_text(fpath);
+			std::istringstream iss(extracted_text);
 			std::string word;
-			while (in >> word) {
-				add_assign_increase(
-					word, input.main_dictionary, input.next_text_id, input);
+			while (iss >> word) {
+				add_assign_increase(word, input.main_dictionary, input.next_text_id, input);
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
-			report_file_done(fpath, fsize, "Text", added);
-		} else if (is_image_ext) {
+			std::string tag = (ext == ".pdf") ? "PDF Document" : ((ext == ".docx") ? "DOCX Document" : "Text");
+			report_file_done(fpath, fsize, tag, added);
+		} else if (is_image) {
+			// Phase 1.3: Genuine visual media to discrete visual byte tokenizer
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
 				std::cerr << "  [!] Failed to open " << fpath.filename().string()
@@ -629,7 +621,8 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 					<< "\r                                                                                \r";
 			}
 			report_file_done(fpath, fsize, "Image", added);
-		} else if (is_video_ext) {
+		} else if (is_video) {
+			// Video visual frames to discrete visual byte tokenizer
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
 				std::cerr << "  [!] Failed to open " << fpath.filename().string()
@@ -666,7 +659,8 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 					<< "\r                                                                                \r";
 			}
 			report_file_done(fpath, fsize, "Video", added);
-		} else if (is_audio_ext) {
+		} else if (is_audio) {
+			// Genuine audio waveforms to discrete acoustic byte tokenizer
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
 				std::cerr << "  [!] Failed to open " << fpath.filename().string()
@@ -704,49 +698,8 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			}
 			report_file_done(fpath, fsize, "Voice/Audio", added);
 		} else {
-			// PDF, 3D model, archive (.zip/.tar/.gz/.7z), or arbitrary binary document
-			std::ifstream in(fpath, std::ios::binary);
-			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string()
-					  << "\n";
-				continue;
-			}
-			char buf[65536];
-			uintmax_t bytes_read = 0;
-			uintmax_t last_progress_bytes = 0;
-			const bool show_progress = (fsize >= 5 * 1024 * 1024);
-			const std::string action_label =
-				is_3d_ext ? "Loading 3D Model"
-					  : (ext == ".pdf" ? "Parsing PDF" : "Extracting Asset");
-
-			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
-				std::streamsize n = in.gcount();
-				for (std::streamsize i = 0; i < n; ++i) {
-					add_assign_increase(static_cast<uint8_t>(buf[i]),
-							    input.image_dictionary,
-							    input.next_image_id,
-							    input);
-				}
-				bytes_read += static_cast<uintmax_t>(n);
-				if (show_progress &&
-				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
-				     bytes_read >= fsize)) {
-					last_progress_bytes = bytes_read;
-					print_progress_bar(fpath.filename().string(),
-							   action_label,
-							   bytes_read,
-							   fsize);
-				}
-			}
-			const size_t added = input.tokenized_data.size() - initial_tokens;
-			std::string tag = is_3d_ext ? "3D Model"
-						    : (ext == ".pdf" ? "PDF Document"
-								     : "Binary/Archive Asset");
-			if (show_progress) {
-				std::cout
-					<< "\r                                                                                \r";
-			}
-			report_file_done(fpath, fsize, tag, added);
+			// Phase 1.3: Non-media binary assets are NOT streamed into image_dictionary
+			report_file_done(fpath, fsize, "Binary Asset (Skipped Raw Streaming)", 0);
 		}
 	}
 

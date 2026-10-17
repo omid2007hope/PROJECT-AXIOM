@@ -65,15 +65,15 @@ bool test_inference() {
 	test_check(repeat_tokens[0] == repeat_tokens[1] && repeat_tokens[1] == repeat_tokens[2],
 		   "Repeated words share exact identical token ID", s_pass, s_fail);
 
-	// 1.5 Modality Boundary Check: Text/Number IDs must strictly reside in [1, 1,999,999,999]
+	// 1.5 Modality Boundary Check: Text/Number IDs must strictly reside in [4, 64,511]
 	bool text_ids_in_bounds = true;
 	for (const auto& [word, id] : input.main_dictionary) {
-		if (id < 1 || id >= 2000000000) {
+		if (id < vocab::TEXT_START_ID || id > vocab::TEXT_MAX_ID) {
 			text_ids_in_bounds = false;
 			break;
 		}
 	}
-	test_check(text_ids_in_bounds, "All allocated main IDs strictly within [1, 1,999,999,999]", s_pass, s_fail);
+	test_check(text_ids_in_bounds, "All allocated main IDs strictly within [4, 64,511]", s_pass, s_fail);
 
 	// ── [2] Autoregressive Context Window Generation & Padding Logistics ────────
 	std::cout << "\n[2] Autoregressive Context Window Generation & Padding Logistics\n";
@@ -137,37 +137,40 @@ bool test_inference() {
 	// ── [3] Modality Decoders across All 5 Dimensions ───────────────────────────
 	std::cout << "\n[3] Modality Decoders across All 5 Dimensions\n";
 
-	// 3.1 Main Modality (Text & Numbers)
+	// 3.1 Main Modality (Text & Numbers: 4 to 64,511)
 	input.main_dictionary["Axiom"] = 42;
 	input.reverse_main_dictionary[42] = "Axiom";
 	test_check_eq(parser.token_to_string(input, 42), std::string("Axiom"), "Text token #42 decodes to 'Axiom'", s_pass, s_fail);
 	test_check_eq(parser.token_to_string(input, 999), std::string("[Token #999]"), "Unmapped token ID decodes to '[Token #999]'", s_pass, s_fail);
 
-	input.main_dictionary["3.14159"] = 1000000005;
-	input.reverse_main_dictionary[1000000005] = "3.14159";
-	test_check(parser.token_to_string(input, 1000000005).find("3.14159") != std::string::npos,
-		   "Number token #1000000005 decodes to numeric string 3.14159", s_pass, s_fail);
-	test_check_eq(parser.token_to_string(input, 1000000099), std::string("[Token #1000000099]"),
-		      "Unmapped token ID decodes to '[Token #1000000099]'", s_pass, s_fail);
+	input.main_dictionary["3.14159"] = 1005;
+	input.reverse_main_dictionary[1005] = "3.14159";
+	test_check(parser.token_to_string(input, 1005).find("3.14159") != std::string::npos,
+		   "Number token #1005 decodes to numeric string 3.14159", s_pass, s_fail);
+	test_check_eq(parser.token_to_string(input, 1099), std::string("[Token #1099]"),
+		      "Unmapped token ID decodes to '[Token #1099]'", s_pass, s_fail);
 
-	// 3.3 Image Modality (2,000,000,000 to 2,999,999,999)
-	input.image_dictionary[static_cast<uint8_t>(255)] = 2000000010;
-	test_check_eq(parser.token_to_string(input, 2000000010), std::string("[Image byte: 255]"),
-		      "Image token #2000000010 decodes to '[Image byte: 255]'", s_pass, s_fail);
+	// 3.3 Image Modality (Discrete visual bytes: 64,512 to 64,767)
+	uint32_t img_token_255 = vocab::VISUAL_START_ID + 255;
+	input.image_dictionary[static_cast<uint8_t>(255)] = img_token_255;
+	test_check_eq(parser.token_to_string(input, img_token_255), std::string("[Image byte: 255]"),
+		      "Image token decodes to '[Image byte: 255]'", s_pass, s_fail);
 
-	// 3.4 Video Modality (3,000,000,000 to 3,999,999,999)
-	input.video_dictionary[static_cast<uint8_t>(128)] = 3000000020;
-	test_check_eq(parser.token_to_string(input, 3000000020), std::string("[Video byte: 128]"),
-		      "Video token #3000000020 decodes to '[Video byte: 128]'", s_pass, s_fail);
+	// 3.4 Video Modality (Discrete visual bytes: 64,512 to 64,767)
+	uint32_t vid_token_128 = vocab::VISUAL_START_ID + 128;
+	input.video_dictionary[static_cast<uint8_t>(128)] = vid_token_128;
+	test_check_eq(parser.token_to_string(input, vid_token_128), std::string("[Video byte: 128]"),
+		      "Video token decodes to '[Video byte: 128]'", s_pass, s_fail);
 
-	// 3.5 Voice Modality (4,000,000,000 to 4,200,000,000)
-	input.voice_dictionary[static_cast<uint8_t>(64)] = 4000000030;
-	test_check_eq(parser.token_to_string(input, 4000000030), std::string("[Voice byte: 64]"),
-		      "Voice token #4000000030 decodes to '[Voice byte: 64]'", s_pass, s_fail);
+	// 3.5 Voice Modality (Discrete acoustic bytes: 64,768 to 65,023)
+	uint32_t voice_token_64 = vocab::ACOUSTIC_START_ID + 64;
+	input.voice_dictionary[static_cast<uint8_t>(64)] = voice_token_64;
+	test_check_eq(parser.token_to_string(input, voice_token_64), std::string("[Voice byte: 64]"),
+		      "Voice token decodes to '[Voice byte: 64]'", s_pass, s_fail);
 
-	// 3.6 Unknown / Out-of-bounds Modality (>= 4,200,000,000)
-	test_check_eq(parser.token_to_string(input, 4250000000U), std::string("[Unknown #4250000000]"),
-		      "Token ID >= 4,200,000,000 decodes to '[Unknown #4250000000]'", s_pass, s_fail);
+	// 3.6 Unknown / Out-of-bounds Modality (>= 65,536)
+	test_check_eq(parser.token_to_string(input, 70000U), std::string("[Unknown #70000]"),
+		      "Token ID >= 65,536 decodes to '[Unknown #70000]'", s_pass, s_fail);
 
 	// ── [4] Nearest-Neighbor Euclidean L2 Space Invariants ───────────────────────
 	std::cout << "\n[4] Nearest-Neighbor Euclidean L2 Space Invariants\n";
@@ -259,14 +262,14 @@ bool test_inference() {
 	std::vector<float> baseline_weights = ai.h_weights;
 	std::vector<float> baseline_bias = ai.h_bias;
 
-	// 6.1 Sub-40-byte truncated header file
+	// 6.1 Sub-56-byte truncated header file
 	{
 		std::string trunc_path = "test_trunc_header.axiom";
 		std::ofstream out(trunc_path, std::ios::binary);
 		char short_bytes[20] = {'A', 'X', 'I', 'O', 'M'};
 		out.write(short_bytes, sizeof(short_bytes));
 		out.close();
-		test_check(!ai.load_weights(trunc_path), "load_weights() rejects sub-40-byte truncated file", s_pass, s_fail);
+		test_check(!ai.load_weights(trunc_path), "load_weights() rejects sub-56-byte truncated file", s_pass, s_fail);
 		std::filesystem::remove(trunc_path);
 	}
 
@@ -279,6 +282,8 @@ bool test_inference() {
 		bad_hdr.out_dim = 4;
 		bad_hdr.weight_count = 1024 * 4;
 		bad_hdr.bias_count = 4;
+		bad_hdr.vocab_size = ai.vocab_size;
+		bad_hdr.embedding_dim = ai.embedding_dim;
 		out.write(reinterpret_cast<const char*>(&bad_hdr), sizeof(bad_hdr));
 		out.close();
 		test_check(!ai.load_weights(dim_mismatch_path), "load_weights() rejects header with in_dim mismatch (1024 != 512)", s_pass, s_fail);
@@ -294,6 +299,8 @@ bool test_inference() {
 		hdr.out_dim = out_dim;
 		hdr.weight_count = in_dim * out_dim;
 		hdr.bias_count = out_dim;
+		hdr.vocab_size = ai.vocab_size;
+		hdr.embedding_dim = ai.embedding_dim;
 		out.write(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
 		float half_weights[100] = {0.0f};
 		out.write(reinterpret_cast<const char*>(half_weights), sizeof(half_weights));

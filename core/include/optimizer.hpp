@@ -98,13 +98,22 @@ struct Portion {
 	// The Input (X): pinned host buffer — 128 tokens * 4 dim = 512 bfloat16_t
 	std::bfloat16_t* context_window_tokens[2] = {nullptr, nullptr};
 
+	// Pinned host buffer for token IDs: 128 uint32_t tokens across PCIe per context window (512 bytes)
+	uint32_t* context_token_ids[2] = {nullptr, nullptr};
+
 	// The Target (Y): pinned host buffer — 1 token * 4 dim = 4 bfloat16_t
 	std::bfloat16_t* target_tokens[2] = {nullptr, nullptr};
+
+	// Flag indicating if current window in portion was loaded with token IDs
+	bool has_token_ids = false;
+
+	// RAM buffer for uint32_t token IDs
+	std::vector<uint32_t> ram_buffer_token_ids = {};
 
 	// Allocate the pinned buffers. Must be called once before the training loop.
 	// Returns false if the CUDA DLL reports an allocation failure.
 	bool allocate_pinned() {
-		if (context_window_tokens[0] || target_tokens[0]) {
+		if (context_window_tokens[0] || target_tokens[0] || context_token_ids[0]) {
 			return true; // already allocated
 		}
 
@@ -112,10 +121,13 @@ struct Portion {
 			context_window_tokens[i] = static_cast<std::bfloat16_t*>(
 				pinned_alloc(all_elements * sizeof(std::bfloat16_t)));
 
+			context_token_ids[i] = static_cast<uint32_t*>(
+				pinned_alloc(context_window_size * sizeof(uint32_t)));
+
 			target_tokens[i] = static_cast<std::bfloat16_t*>(
 				pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
 
-			if (!context_window_tokens[i] || !target_tokens[i]) {
+			if (!context_window_tokens[i] || !context_token_ids[i] || !target_tokens[i]) {
 				std::cerr << "[Portion] pinned_alloc failed\n";
 				free_pinned();
 				return false;
@@ -139,6 +151,11 @@ struct Portion {
 			if (context_window_tokens[i]) {
 				pinned_free(context_window_tokens[i]);
 				context_window_tokens[i] = nullptr;
+			}
+
+			if (context_token_ids[i]) {
+				pinned_free(context_token_ids[i]);
+				context_token_ids[i] = nullptr;
 			}
 
 			if (target_tokens[i]) {

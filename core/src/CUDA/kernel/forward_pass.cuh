@@ -14,6 +14,14 @@ CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 			   size_t output_dim,
 			   int buffer_index);
 
+CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_portion,
+					   const GpuEmbeddings* gpu_embeddings,
+					   const GpuWeights* gpu_weights,
+					   GpuActivations* gpu_activations,
+					   size_t input_dim,
+					   size_t output_dim,
+					   int buffer_index);
+
 CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, int iterations,
 					       double* out_tflops,
 					       double* out_bandwidth_gb_s,

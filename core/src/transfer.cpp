@@ -42,3 +42,13 @@ bool Transfer::download_weights_from_gpu(std::vector<float>& h_weights,
 	return download_ai_weights(
 		&gpu_weights, h_weights.data(), h_weights.size(), h_bias.data(), h_bias.size());
 }
+
+bool Transfer::upload_embeddings_to_gpu(const std::vector<float>& h_embeddings,
+					GpuEmbeddings& gpu_embeddings) {
+	return upload_embeddings(h_embeddings.data(), &gpu_embeddings);
+}
+
+bool Transfer::download_embeddings_from_gpu(std::vector<float>& h_embeddings,
+					  const GpuEmbeddings& gpu_embeddings) {
+	return download_embeddings(h_embeddings.data(), &gpu_embeddings);
+}

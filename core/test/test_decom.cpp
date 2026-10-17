@@ -85,7 +85,7 @@ bool test_decom() {
 		{
 			std::ofstream out(bmp_file, std::ios::binary);
 			uint32_t width = 4, height = 4;
-			uint32_t row_stride = 16; // 4 * 3 = 12 + 4 pad = 16
+			uint32_t row_stride = ((width * 24 + 31) / 32) * 4; // 12 bytes (4 pixels * 3 bytes, 0 pad)
 			uint32_t pixel_offset = 54;
 			uint32_t file_size = pixel_offset + row_stride * height;
 

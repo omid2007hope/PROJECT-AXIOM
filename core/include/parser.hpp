@@ -15,6 +15,32 @@
 #include <vector>
 
 
+namespace vocab {
+	constexpr uint32_t VOCAB_SIZE = 65536;
+
+	// Slots [0 .. 3]: Special reserved tokens
+	constexpr uint32_t PAD = 0;
+	constexpr uint32_t UNK = 1;
+	constexpr uint32_t BOS = 2;
+	constexpr uint32_t EOS = 3;
+
+	// Slots [4 .. 64,511]: Text words, subwords, numbers, and mathematical symbols
+	constexpr uint32_t TEXT_START_ID = 4;
+	constexpr uint32_t TEXT_MAX_ID = 64511;
+
+	// Slots [64,512 .. 64,767]: Discrete visual bytes (256 slots for 0x00..0xFF)
+	constexpr uint32_t VISUAL_START_ID = 64512;
+	constexpr uint32_t VISUAL_END_ID = 64767;
+
+	// Slots [64,768 .. 65,023]: Discrete acoustic bytes (256 slots for 0x00..0xFF)
+	constexpr uint32_t ACOUSTIC_START_ID = 64768;
+	constexpr uint32_t ACOUSTIC_END_ID = 65023;
+
+	// Slots [65,024 .. 65,535]: Reserved expansion slots for future modality codebooks
+	constexpr uint32_t EXPANSION_START_ID = 65024;
+	constexpr uint32_t EXPANSION_MAX_ID = 65535;
+}
+
 struct Test {
 	std::vector<std::string> test_input {};
 
@@ -52,12 +78,11 @@ struct Input {
 	std::vector<std::string> user_video_paths = {};
 	std::vector<std::string> user_voice_paths = {};
 
-	// Global ID Counters (Ensuring Modalities Never Overlap)
-	uint32_t next_text_id = 1;	      // 1 to 999,999,999
-	uint32_t next_number_id = 1000000000; // 1,000,000,000 to 1,999,999,999
-	uint32_t next_image_id = 2000000000;  // 2,000,000,000 to 2,999,999,999
-	uint32_t next_video_id = 3000000000;  // 3,000,000,000 to 3,999,999,999
-	uint32_t next_voice_id = 4000000000;  // 4,000,000,000 to 4,200,000,000
+	// Global ID Counters (Dense contiguous modality blocks within [0, 65535])
+	uint32_t next_text_id = vocab::TEXT_START_ID;	      // 4 to 64,511
+	uint32_t next_image_id = vocab::VISUAL_START_ID;      // 64,512 to 64,767
+	uint32_t next_video_id = vocab::VISUAL_START_ID;      // 64,512 to 64,767
+	uint32_t next_voice_id = vocab::ACOUSTIC_START_ID;    // 64,768 to 65,023
 
 	// Optimization for test
 	size_t CHUNK_TOKENS = 65536;
@@ -110,11 +135,26 @@ private:
 				 uint32_t& next_id,
 				 Input& input) {
 		if (dictionary.find(data) == dictionary.end()) {
-			dictionary[data] = next_id;
 			if constexpr (std::is_same_v<T, std::string>) {
+				if (next_id > vocab::TEXT_MAX_ID) {
+					dictionary[data] = vocab::UNK;
+					input.tokenized_data.push_back(vocab::UNK);
+					return;
+				}
+				dictionary[data] = next_id;
 				input.reverse_main_dictionary[next_id] = data;
+				next_id += 1;
+			} else if constexpr (std::is_same_v<T, uint8_t>) {
+				uint32_t byte_id = 0;
+				if (next_id >= vocab::ACOUSTIC_START_ID) {
+					byte_id = vocab::ACOUSTIC_START_ID + static_cast<uint32_t>(data);
+				} else {
+					byte_id = vocab::VISUAL_START_ID + static_cast<uint32_t>(data);
+				}
+				dictionary[data] = byte_id;
+			} else {
+				dictionary[data] = next_id++;
 			}
-			next_id += 1;
 		}
 		input.tokenized_data.push_back(dictionary[data]);
 	}

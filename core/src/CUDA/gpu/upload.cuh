@@ -1,6 +1,8 @@
 #ifndef UPLOAD_CUH
 #define UPLOAD_CUH
 
+#include <cstdint>
+
 #include "../util/gpu_types.cuh"
 
 #ifdef __cplusplus
@@ -13,6 +15,13 @@ CUDA_API bool upload_to_gpu(const void* h_context,
 			    size_t target_elements,
 			    GpuPortion* gpu,
 			    int buffer_index);
+
+CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
+				   size_t token_count,
+				   const void* h_target,
+				   size_t target_elements,
+				   GpuPortion* gpu,
+				   int buffer_index);
 
 CUDA_API void synchronize_stream(GpuPortion* gpu, int buffer_index);
 

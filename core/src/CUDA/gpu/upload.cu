@@ -73,6 +73,75 @@ extern "C" CUDA_API bool upload_to_gpu(const void* h_context,
 	return true;
 }
 
+extern "C" CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
+					       size_t token_count,
+					       const void* h_target,
+					       size_t target_elements,
+					       GpuPortion* gpu,
+					       int buffer_index) {
+	if (!gpu || !h_token_ids || !h_target || token_count == 0 || target_elements == 0) {
+		fprintf(stderr, "Invalid memory parameters in upload_tokens_to_gpu\n");
+		return false;
+	}
+
+	// ── Token IDs — Allocate both buffers if size changed ───────────────────────
+	for (size_t i = 0; i < gpu->context_ptr; ++i) {
+		if (gpu->token_count != token_count) {
+			if (gpu->d_token_ids[i]) {
+				if (!CUDA_CHECK(cudaFree(gpu->d_token_ids[i])))
+					return false;
+				gpu->d_token_ids[i] = nullptr;
+			}
+			if (!CUDA_CHECK(cudaMalloc(&gpu->d_token_ids[i],
+						   token_count * sizeof(uint32_t))))
+				return false;
+		}
+
+		if (gpu->stream[i] == nullptr) {
+			CUDA_CHECK(cudaStreamCreateWithFlags((cudaStream_t*)&gpu->stream[i],
+							     cudaStreamNonBlocking));
+		}
+
+		if (gpu->compute_done[i] == nullptr) {
+			if (!CUDA_CHECK(cudaEventCreateWithFlags((cudaEvent_t*)&gpu->compute_done[i],
+								 cudaEventDisableTiming)))
+				return false;
+		}
+	}
+	gpu->token_count = token_count;
+
+	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_token_ids[buffer_index],
+					h_token_ids,
+					token_count * sizeof(uint32_t),
+					cudaMemcpyHostToDevice,
+					(cudaStream_t)gpu->stream[buffer_index])))
+		return false;
+
+	// ── Target (Y) — Allocate both buffers if size changed ────────────────────
+	for (size_t i = 0; i < gpu->target_ptr; ++i) {
+		if (gpu->target_elements != target_elements) {
+			if (gpu->d_target[i]) {
+				if (!CUDA_CHECK(cudaFree(gpu->d_target[i])))
+					return false;
+				gpu->d_target[i] = nullptr;
+			}
+			if (!CUDA_CHECK(cudaMalloc(&gpu->d_target[i],
+						   target_elements * sizeof(__nv_bfloat16))))
+				return false;
+		}
+	}
+	gpu->target_elements = target_elements;
+
+	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_target[buffer_index],
+					h_target,
+					target_elements * sizeof(__nv_bfloat16),
+					cudaMemcpyHostToDevice,
+					(cudaStream_t)gpu->stream[buffer_index])))
+		return false;
+
+	return true;
+}
+
 __global__ static void float_to_bf16_kernel(const float* __restrict__ src,
 					    __nv_bfloat16* __restrict__ dst,
 					    size_t n) {

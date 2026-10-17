@@ -110,17 +110,85 @@ using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
 } // namespace
 
-extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
-				      const GpuWeights* gpu_weights,
-				      GpuActivations* gpu_activations,
-				      size_t input_dim,
-				      size_t output_dim,
-				      int buffer_index) {
+__global__ static void gather_embeddings_kernel(const uint32_t* __restrict__ token_ids,
+						const __nv_bfloat16* __restrict__ table,
+						__nv_bfloat16* __restrict__ context_window,
+						size_t num_tokens,
+						size_t embedding_dim,
+						size_t vocab_size) {
+	size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+	size_t total_elements = num_tokens * embedding_dim;
+	if (idx < total_elements) {
+		size_t token_idx = idx / embedding_dim;
+		size_t dim_idx = idx % embedding_dim;
+		uint32_t tok_id = token_ids[token_idx];
+		if (tok_id >= vocab_size) {
+			tok_id = 1; // UNK fallback
+		}
+		context_window[idx] = table[tok_id * embedding_dim + dim_idx];
+	}
+}
+
+extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_portion,
+						      const GpuEmbeddings* gpu_embeddings,
+						      const GpuWeights* gpu_weights,
+						      GpuActivations* gpu_activations,
+						      size_t input_dim,
+						      size_t output_dim,
+						      int buffer_index) {
 
 	// Safe Guard
 	if (!gpu_portion || !gpu_weights || !gpu_activations ||
-	    !gpu_portion->d_context_window[buffer_index] || !gpu_weights->d_weights ||
-	    !gpu_weights->d_bias || input_dim == 0 || output_dim == 0) {
+	    !gpu_weights->d_weights || !gpu_weights->d_bias || input_dim == 0 || output_dim == 0) {
+		return false;
+	}
+
+	cudaStream_t stream = (cudaStream_t)gpu_portion->stream[buffer_index];
+
+	// The two buffers share the weights and the output, so this step may only start
+	// after the previous step (other buffer) finished updating them. Its upload is
+	// already queued on this stream and still overlaps with that step.
+	cudaEvent_t previous_step_done = (cudaEvent_t)gpu_portion->compute_done[1 - buffer_index];
+	if (previous_step_done) {
+		if (!CUDA_CHECK(cudaStreamWaitEvent(stream, previous_step_done, 0)))
+			return false;
+	}
+
+	// Ensure d_context_window is allocated on GPU for the gather scratchpad or GEMM input
+	GpuPortion* non_const_gpu = const_cast<GpuPortion*>(gpu_portion);
+	for (size_t i = 0; i < non_const_gpu->context_ptr; ++i) {
+		if (non_const_gpu->context_elements != input_dim || !non_const_gpu->d_context_window[i]) {
+			if (non_const_gpu->d_context_window[i]) {
+				CUDA_CHECK(cudaFree(non_const_gpu->d_context_window[i]));
+				non_const_gpu->d_context_window[i] = nullptr;
+			}
+			if (!CUDA_CHECK(cudaMalloc(&non_const_gpu->d_context_window[i],
+						   input_dim * sizeof(__nv_bfloat16))))
+				return false;
+		}
+	}
+	non_const_gpu->context_elements = input_dim;
+
+	// Phase 4: Forward Gather Kernel & PCIe Bandwidth Optimization
+	// If token IDs and embedding table are provided, branchlessly gather tokens into d_context_window on the GPU
+	if (gpu_portion->d_token_ids[buffer_index] && gpu_embeddings && gpu_embeddings->d_table) {
+		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count : (input_dim / emb_dim);
+		int threads = 256;
+		int blocks = static_cast<int>((input_dim + threads - 1) / threads);
+
+		gather_embeddings_kernel<<<blocks, threads, 0, stream>>>(
+			static_cast<const uint32_t*>(gpu_portion->d_token_ids[buffer_index]),
+			static_cast<const __nv_bfloat16*>(gpu_embeddings->d_table),
+			static_cast<__nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+			num_tok,
+			emb_dim,
+			gpu_embeddings->vocab_size);
+		if (!CUDA_CHECK(cudaGetLastError()))
+			return false;
+	}
+
+	if (!gpu_portion->d_context_window[buffer_index]) {
 		return false;
 	}
 
@@ -142,17 +210,6 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_loss, sizeof(float))))
 			return false;
 		if (!CUDA_CHECK(cudaMemset(gpu_activations->d_loss, 0, sizeof(float))))
-			return false;
-	}
-
-	cudaStream_t stream = (cudaStream_t)gpu_portion->stream[buffer_index];
-
-	// The two buffers share the weights and the output, so this step may only start
-	// after the previous step (other buffer) finished updating them. Its upload is
-	// already queued on this stream and still overlaps with that step.
-	cudaEvent_t previous_step_done = (cudaEvent_t)gpu_portion->compute_done[1 - buffer_index];
-	if (previous_step_done) {
-		if (!CUDA_CHECK(cudaStreamWaitEvent(stream, previous_step_done, 0)))
 			return false;
 	}
 
@@ -221,6 +278,21 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 	}
 
 	return CUDA_CHECK(cudaGetLastError());
+}
+
+extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
+				      const GpuWeights* gpu_weights,
+				      GpuActivations* gpu_activations,
+				      size_t input_dim,
+				      size_t output_dim,
+				      int buffer_index) {
+	return forward_pass_with_embeddings(gpu_portion,
+					    nullptr,
+					    gpu_weights,
+					    gpu_activations,
+					    input_dim,
+					    output_dim,
+					    buffer_index);
 }
 
 extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, int iterations,

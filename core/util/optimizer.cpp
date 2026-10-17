@@ -111,20 +111,46 @@ bool Optimizer::ram_to_contextWindow(Portion& portion) {
 		portion.context_in_use.store(true, std::memory_order_release);
 		portion.buffer_in_use.store(true, std::memory_order_release);
 
-		if (portion.offset + portion.all_elements + portion.target_elements <=
-		    portion.ram_buffer_tokens.size()) {
+		int b_idx = portion.buffer_index;
 
-			int b_idx = portion.buffer_index;
+		// Guard: pinned buffers must be allocated before we write to them.
+		if (!portion.context_window_tokens[b_idx] ||
+		    !portion.target_tokens[b_idx]) {
+			std::cerr << "[Optimizer] Pinned memory not allocated. Call "
+				     "portion.allocate_pinned() first.\n";
+			portion.buffer_in_use.store(false, std::memory_order_release);
+			portion.context_in_use.store(false, std::memory_order_release);
+			return false;
+		}
 
-			// Guard: pinned buffers must be allocated before we write to them.
-			if (!portion.context_window_tokens[b_idx] ||
-			    !portion.target_tokens[b_idx]) {
-				std::cerr << "[Optimizer] Pinned memory not allocated. Call "
-					     "portion.allocate_pinned() first.\n";
+		// Priority 1: Dense Early-Fusion Token ID Streaming
+		if (!portion.ram_buffer_token_ids.empty()) {
+			if (portion.offset + portion.context_window_size + 1 <= portion.ram_buffer_token_ids.size()) {
+				if (portion.context_token_ids[b_idx]) {
+					std::memcpy(portion.context_token_ids[b_idx],
+						    portion.ram_buffer_token_ids.data() + portion.offset,
+						    portion.context_window_size * sizeof(uint32_t));
+				}
+				std::memset(portion.target_tokens[b_idx], 0,
+					    portion.target_elements * sizeof(std::bfloat16_t));
+
+				portion.has_token_ids = true;
+				portion.offset += 1;
+
+				portion.buffer_in_use.store(false, std::memory_order_release);
+				portion.context_in_use.store(false, std::memory_order_release);
+				return true;
+			} else {
+				portion.offset = 0;
 				portion.buffer_in_use.store(false, std::memory_order_release);
 				portion.context_in_use.store(false, std::memory_order_release);
 				return false;
 			}
+		}
+
+		// Priority 2: Float embeddings streaming
+		if (portion.offset + portion.all_elements + portion.target_elements <=
+		    portion.ram_buffer_tokens.size()) {
 
 			// Write X into the pinned context window buffer via memcpy.
 			// The write-combining hardware coalesces these writes and pushes them
@@ -140,6 +166,7 @@ bool Optimizer::ram_to_contextWindow(Portion& portion) {
 				    portion.target_elements * sizeof(std::bfloat16_t));
 
 			// Move the bookmark forward
+			portion.has_token_ids = false;
 			portion.offset += portion.token_dim;
 
 			// Release locks — caller trains on context_window_tokens / target_tokens
