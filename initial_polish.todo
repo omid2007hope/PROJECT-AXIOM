@@ -3,7 +3,7 @@ Project Axiom - Initial Polish & Architectural Upgrade:
   # eliminate the billion-ID partition memory wall, unify text/number namespaces, and cure optimizer amnesia.
 
   Phase 1: Ingestion & Modality Unification (Data Layer)
-    ☐ 1.1 Unify Text & Number Namespaces @parser @architecture
+    ✔ 1.1 Unify Text & Number Namespaces @done @parser @architecture
       - Remove data_num and user_numbers separation in parser.hpp
       - Ingest numbers directly as textual tokens (e.g. "9.8" or "9", ".", "8")
       - Preserve semantic co-occurrence between words and numerical quantities (e.g. "gravity" and "9.8")

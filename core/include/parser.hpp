@@ -112,7 +112,7 @@ private:
 		if (dictionary.find(data) == dictionary.end()) {
 			dictionary[data] = next_id;
 			if constexpr (std::is_same_v<T, std::string>) {
-				input.reverse_text_dictionary[next_id] = data;
+				input.reverse_main_dictionary[next_id] = data;
 			}
 			next_id += 1;
 		}

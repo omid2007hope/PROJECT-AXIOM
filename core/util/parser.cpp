@@ -222,7 +222,7 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 }
 
 void Parser::build_embedding_table(Input& input) {
-	const size_t total_unique = input.text_dictionary.size() + input.number_dictionary.size() +
+	const size_t total_unique = input.main_dictionary.size() +
 				    input.image_dictionary.size() + input.video_dictionary.size() +
 				    input.voice_dictionary.size();
 	if (total_unique > 0) {
@@ -240,9 +240,7 @@ void Parser::build_embedding_table(Input& input) {
 		}
 	};
 
-	for (const auto& [_, id] : input.text_dictionary)
-		ensure_embedding(id);
-	for (const auto& [_, id] : input.number_dictionary)
+	for (const auto& [_, id] : input.main_dictionary)
 		ensure_embedding(id);
 	for (const auto& [_, id] : input.image_dictionary)
 		ensure_embedding(id);
@@ -307,29 +305,17 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		return "[Unknown #0]";
 	}
 
-	// 1. Text Modality (1 to 999,999,999)
-	if (token_id < 1000000000U) {
-		auto it = input.reverse_text_dictionary.find(token_id);
-		if (it != input.reverse_text_dictionary.end()) {
+	// 1. Text & Number Modality (Main Dictionary: 1 to 1,999,999,999)
+	if (token_id < 2000000000U) {
+		auto it = input.reverse_main_dictionary.find(token_id);
+		if (it != input.reverse_main_dictionary.end()) {
 			return it->second;
 		}
-		for (const auto& [word, id] : input.text_dictionary) {
+		for (const auto& [word, id] : input.main_dictionary) {
 			if (id == token_id)
 				return word;
 		}
-		return "[Text #" + std::to_string(token_id) + "]";
-	}
-
-	// 2. Number Modality (1,000,000,000 to 1,999,999,999)
-	if (token_id < 2000000000U) {
-		for (const auto& [num, id] : input.number_dictionary) {
-			if (id == token_id) {
-				std::ostringstream oss;
-				oss << num;
-				return oss.str();
-			}
-		}
-		return "[Number #" + std::to_string(token_id) + "]";
+		return "[Token #" + std::to_string(token_id) + "]";
 	}
 
 	// 3. Image Modality (2,000,000,000 to 2,999,999,999)
@@ -381,12 +367,12 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	std::istringstream iss(prompt);
 	std::string word;
 	while (iss >> word) {
-		if (input.text_dictionary.find(word) == input.text_dictionary.end()) {
+		if (input.main_dictionary.find(word) == input.main_dictionary.end()) {
 			uint32_t new_id = input.next_text_id++;
-			input.text_dictionary[word] = new_id;
-			input.reverse_text_dictionary[new_id] = word;
+			input.main_dictionary[word] = new_id;
+			input.reverse_main_dictionary[new_id] = word;
 		}
-		tokens.push_back(input.text_dictionary[word]);
+		tokens.push_back(input.main_dictionary[word]);
 	}
 	build_embedding_table(input);
 	return tokens;
@@ -602,7 +588,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			std::string word;
 			while (in >> word) {
 				add_assign_increase(
-					word, input.text_dictionary, input.next_text_id, input);
+					word, input.main_dictionary, input.next_text_id, input);
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			report_file_done(fpath, fsize, "Text", added);
@@ -775,7 +761,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 }
 
 bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input& input) {
-	if (input.text_dictionary.empty()) {
+	if (input.main_dictionary.empty()) {
 		if (std::filesystem::exists(filepath)) {
 			std::cout << "[i] Preserving existing vocabulary at "
 				  << filepath.filename().string()
@@ -804,11 +790,11 @@ bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input&
 	out.write(magic, 4);
 
 	// 3. Write Dictionary Size
-	uint64_t vocab_size = static_cast<uint64_t>(input.text_dictionary.size());
+	uint64_t vocab_size = static_cast<uint64_t>(input.main_dictionary.size());
 	out.write(reinterpret_cast<const char*>(&vocab_size), sizeof(uint64_t));
 
 	// 4. Stream Key-Value Pairs [Length] [Bytes] [ID]
-	for (const auto& [word, id] : input.text_dictionary) {
+	for (const auto& [word, id] : input.main_dictionary) {
 		uint32_t word_len = static_cast<uint32_t>(word.size());
 		out.write(reinterpret_cast<const char*>(&word_len), sizeof(uint32_t));
 		out.write(word.data(), word_len);
@@ -872,10 +858,10 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 		return true;
 	}
 
-	input.text_dictionary.clear();
-	input.reverse_text_dictionary.clear();
-	input.text_dictionary.reserve(vocab_size);
-	input.reverse_text_dictionary.reserve(vocab_size);
+	input.main_dictionary.clear();
+	input.reverse_main_dictionary.clear();
+	input.main_dictionary.reserve(vocab_size);
+	input.reverse_main_dictionary.reserve(vocab_size);
 
 	// 3. Reconstruct Dictionaries
 	for (uint64_t i = 0; i < vocab_size; ++i) {
@@ -901,8 +887,8 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 			return false;
 		}
 
-		input.text_dictionary[word] = id;
-		input.reverse_text_dictionary[id] = word;
+		input.main_dictionary[word] = id;
+		input.reverse_main_dictionary[id] = word;
 		if (id >= input.next_text_id) {
 			input.next_text_id = id + 1;
 		}

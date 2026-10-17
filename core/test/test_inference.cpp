@@ -65,15 +65,15 @@ bool test_inference() {
 	test_check(repeat_tokens[0] == repeat_tokens[1] && repeat_tokens[1] == repeat_tokens[2],
 		   "Repeated words share exact identical token ID", s_pass, s_fail);
 
-	// 1.5 Modality Boundary Check: Text IDs must strictly reside in [1, 999,999,999]
+	// 1.5 Modality Boundary Check: Text/Number IDs must strictly reside in [1, 1,999,999,999]
 	bool text_ids_in_bounds = true;
-	for (const auto& [word, id] : input.text_dictionary) {
-		if (id < 1 || id >= 1000000000) {
+	for (const auto& [word, id] : input.main_dictionary) {
+		if (id < 1 || id >= 2000000000) {
 			text_ids_in_bounds = false;
 			break;
 		}
 	}
-	test_check(text_ids_in_bounds, "All allocated text IDs strictly within [1, 999,999,999]", s_pass, s_fail);
+	test_check(text_ids_in_bounds, "All allocated main IDs strictly within [1, 1,999,999,999]", s_pass, s_fail);
 
 	// ── [2] Autoregressive Context Window Generation & Padding Logistics ────────
 	std::cout << "\n[2] Autoregressive Context Window Generation & Padding Logistics\n";
@@ -137,18 +137,18 @@ bool test_inference() {
 	// ── [3] Modality Decoders across All 5 Dimensions ───────────────────────────
 	std::cout << "\n[3] Modality Decoders across All 5 Dimensions\n";
 
-	// 3.1 Text Modality
-	input.text_dictionary["Axiom"] = 42;
-	input.reverse_text_dictionary[42] = "Axiom";
+	// 3.1 Main Modality (Text & Numbers)
+	input.main_dictionary["Axiom"] = 42;
+	input.reverse_main_dictionary[42] = "Axiom";
 	test_check_eq(parser.token_to_string(input, 42), std::string("Axiom"), "Text token #42 decodes to 'Axiom'", s_pass, s_fail);
-	test_check_eq(parser.token_to_string(input, 999), std::string("[Text #999]"), "Unmapped text ID decodes to '[Text #999]'", s_pass, s_fail);
+	test_check_eq(parser.token_to_string(input, 999), std::string("[Token #999]"), "Unmapped token ID decodes to '[Token #999]'", s_pass, s_fail);
 
-	// 3.2 Number Modality (1,000,000,000 to 1,999,999,999)
-	input.number_dictionary[3.14159] = 1000000005;
+	input.main_dictionary["3.14159"] = 1000000005;
+	input.reverse_main_dictionary[1000000005] = "3.14159";
 	test_check(parser.token_to_string(input, 1000000005).find("3.14159") != std::string::npos,
 		   "Number token #1000000005 decodes to numeric string 3.14159", s_pass, s_fail);
-	test_check_eq(parser.token_to_string(input, 1000000099), std::string("[Number #1000000099]"),
-		      "Unmapped number ID decodes to '[Number #1000000099]'", s_pass, s_fail);
+	test_check_eq(parser.token_to_string(input, 1000000099), std::string("[Token #1000000099]"),
+		      "Unmapped token ID decodes to '[Token #1000000099]'", s_pass, s_fail);
 
 	// 3.3 Image Modality (2,000,000,000 to 2,999,999,999)
 	input.image_dictionary[static_cast<uint8_t>(255)] = 2000000010;

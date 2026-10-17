@@ -50,18 +50,17 @@ bool test_embeddings() {
 	check_eq(
 		tokens.size(), input.tokenized_data.size(), "return value == input.tokenized_data");
 
-	// Text: 9 words, numbers: 12 values, image/video/voice from sample files
-	check(input.text_dictionary.size() > 0, "text_dictionary populated");
-	check(input.number_dictionary.size() > 0, "number_dictionary populated");
+	// Main dictionary: text words and numbers unified
+	check(input.main_dictionary.size() > 0, "main_dictionary populated");
 
 	// Token ID ranges must not overlap between modalities
-	uint32_t max_text = 0;
-	for (auto& [k, v] : input.text_dictionary)
-		max_text = std::max(max_text, v);
-	uint32_t min_number = UINT32_MAX;
-	for (auto& [k, v] : input.number_dictionary)
-		min_number = std::min(min_number, v);
-	check(max_text < min_number, "text IDs < number IDs (no overlap)");
+	uint32_t max_main = 0;
+	for (auto& [k, v] : input.main_dictionary)
+		max_main = std::max(max_main, v);
+	uint32_t min_image = UINT32_MAX;
+	for (auto& [k, v] : input.image_dictionary)
+		min_image = std::min(min_image, v);
+	check(max_main < min_image, "main IDs < image IDs (no overlap)");
 
 	// ── [2] Embedding returns correct size ───────────────────────────────────
 	std::cout << "\n[2] Embedding size\n";
@@ -80,7 +79,7 @@ bool test_embeddings() {
 
 	// ── [3] Embedding table has one entry per unique token ───────────────────
 	std::cout << "\n[3] Embedding table\n";
-	size_t unique_tokens = input.text_dictionary.size() + input.number_dictionary.size() +
+	size_t unique_tokens = input.main_dictionary.size() +
 			       input.image_dictionary.size() + input.video_dictionary.size() +
 			       input.voice_dictionary.size();
 	// embedding_table must be <= unique_tokens (only seen tokens get an entry)

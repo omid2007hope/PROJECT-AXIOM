@@ -250,10 +250,10 @@ bool test_ai() {
 	// 2. Parser Vocabulary & Nearest-Neighbor Decoding Verification
 	Input parser_input;
 	parser_input.embedding_dim = out_dim;
-	parser_input.text_dictionary["The"] = 1;
-	parser_input.text_dictionary["quick"] = 2;
-	parser_input.text_dictionary["brown"] = 3;
-	parser_input.text_dictionary["fox"] = 4;
+	parser_input.main_dictionary["The"] = 1;
+	parser_input.main_dictionary["quick"] = 2;
+	parser_input.main_dictionary["brown"] = 3;
+	parser_input.main_dictionary["fox"] = 4;
 	parser_input.next_text_id = 5;
 
 	Parser test_parser(true, "database/test_embedded.bin", {});
@@ -287,7 +287,7 @@ bool test_ai() {
 	// 3. Prompt Tokenization & Context Window Generation
 	std::vector<uint32_t> prompt_tokens = test_parser.tokenize_prompt(parser_input, "The quick brown fox jumps");
 	test_check_eq(prompt_tokens.size(), static_cast<size_t>(5), "tokenize_prompt parses 5 tokens", s_pass, s_fail);
-	test_check_eq(parser_input.text_dictionary["jumps"], static_cast<uint32_t>(5), "New word 'jumps' assigned token ID #5", s_pass, s_fail);
+	test_check_eq(parser_input.main_dictionary["jumps"], static_cast<uint32_t>(5), "New word 'jumps' assigned token ID #5", s_pass, s_fail);
 
 	std::vector<std::bfloat16_t> prompt_ctx = test_parser.tokens_to_context_window(parser_input, prompt_tokens, 128);
 	test_check_eq(prompt_ctx.size(), static_cast<size_t>(512), "tokens_to_context_window generates exact 512 bfloat16_t elements", s_pass, s_fail);

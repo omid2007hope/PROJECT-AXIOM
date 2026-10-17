@@ -14,8 +14,7 @@ bool test_tokenization() {
 	test_check_eq(tokenized.size(), input.tokenized_data.size(), "Parser output matches input.tokenized_data", s_pass, s_fail);
 
 	// Modality dictionaries must be populated
-	test_check(!input.text_dictionary.empty(), "Text vocabulary populated", s_pass, s_fail);
-	test_check(!input.number_dictionary.empty(), "Number vocabulary populated", s_pass, s_fail);
+	test_check(!input.main_dictionary.empty(), "Main vocabulary populated", s_pass, s_fail);
 	test_check(!input.image_dictionary.empty(), "Image vocabulary populated", s_pass, s_fail);
 	test_check(!input.video_dictionary.empty(), "Video vocabulary populated", s_pass, s_fail);
 	test_check(!input.voice_dictionary.empty(), "Voice vocabulary populated", s_pass, s_fail);
@@ -68,24 +67,24 @@ bool test_tokenization() {
 	Input restored_input;
 	restored_input.embedding_dim = input.embedding_dim;
 	test_check(parser.load_vocabulary(test_vocab_file, restored_input), "parser.load_vocabulary() succeeds", s_pass, s_fail);
-	test_check_eq(restored_input.text_dictionary.size(), input.text_dictionary.size(), "Loaded text_dictionary size matches original", s_pass, s_fail);
-	test_check_eq(restored_input.reverse_text_dictionary.size(), input.text_dictionary.size(), "reverse_text_dictionary populated with all tokens", s_pass, s_fail);
+	test_check_eq(restored_input.main_dictionary.size(), input.main_dictionary.size(), "Loaded main_dictionary size matches original", s_pass, s_fail);
+	test_check_eq(restored_input.reverse_main_dictionary.size(), input.main_dictionary.size(), "reverse_main_dictionary populated with all tokens", s_pass, s_fail);
 
 	bool all_tokens_match = true;
-	for (const auto& [word, id] : input.text_dictionary) {
-		auto it = restored_input.text_dictionary.find(word);
-		if (it == restored_input.text_dictionary.end() || it->second != id) {
+	for (const auto& [word, id] : input.main_dictionary) {
+		auto it = restored_input.main_dictionary.find(word);
+		if (it == restored_input.main_dictionary.end() || it->second != id) {
 			all_tokens_match = false;
 			break;
 		}
-		auto rev_it = restored_input.reverse_text_dictionary.find(id);
-		if (rev_it == restored_input.reverse_text_dictionary.end() || rev_it->second != word) {
+		auto rev_it = restored_input.reverse_main_dictionary.find(id);
+		if (rev_it == restored_input.reverse_main_dictionary.end() || rev_it->second != word) {
 			all_tokens_match = false;
 			break;
 		}
 	}
 	test_check(all_tokens_match, "Every token and reverse mapping restored bit-for-bit", s_pass, s_fail);
-	test_check_eq(restored_input.embedding_table.size(), restored_input.text_dictionary.size(), "Embedding table automatically reconstructed on load", s_pass, s_fail);
+	test_check_eq(restored_input.embedding_table.size(), restored_input.main_dictionary.size(), "Embedding table automatically reconstructed on load", s_pass, s_fail);
 
 	// Rejection of invalid magic bytes
 	const std::filesystem::path corrupt_vocab_file = "test_corrupt.vocab";
@@ -126,10 +125,10 @@ bool test_tokenization() {
 		zero_out.write(reinterpret_cast<const char*>(&zero_sz), sizeof(uint64_t));
 	}
 	Input preloaded_in;
-	preloaded_in.text_dictionary["preserved_token"] = 101;
-	preloaded_in.reverse_text_dictionary[101] = "preserved_token";
+	preloaded_in.main_dictionary["preserved_token"] = 101;
+	preloaded_in.reverse_main_dictionary[101] = "preserved_token";
 	test_check(parser.load_vocabulary(zero_vocab_file, preloaded_in), "load_vocabulary() succeeds on 0-token file", s_pass, s_fail);
-	test_check_eq(preloaded_in.text_dictionary.size(), static_cast<size_t>(1), "load_vocabulary() preserves in-memory dictionary on 0-token file", s_pass, s_fail);
+	test_check_eq(preloaded_in.main_dictionary.size(), static_cast<size_t>(1), "load_vocabulary() preserves in-memory dictionary on 0-token file", s_pass, s_fail);
 
 	// Clean up test files
 	std::filesystem::remove(test_vocab_file, ec);

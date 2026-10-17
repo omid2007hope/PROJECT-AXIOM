@@ -107,8 +107,8 @@ std::filesystem::path locate_core_dir() {
 Test make_sample_data() {
 	Test test;
 	test.test_input = {"The",  "quick", "brown", "fox", "jumps", "over", "the",
-			   "lazy", "dog",   5.1,     3.5,   1.4,     0.2,    4.9,
-			   3.0,	   1.4,	    0.2,     4.7,   3.2,     1.3,    0.2};
+			   "lazy", "dog",   "5.1",   "3.5", "1.4",   "0.2",  "4.9",
+			   "3.0",  "1.4",   "0.2",   "4.7", "3.2",   "1.3",  "0.2"};
 
 	test.data_image = {"Photo.jpeg"};
 	test.data_video = {"Video.mp4"};
@@ -547,7 +547,7 @@ void run_inference_engine(AI& ai,
 			  << "\n";
 		if (parser.load_vocabulary(vocab_path, input)) {
 			std::cout << "[OK] Vocabulary successfully restored ("
-				  << input.text_dictionary.size() << " tokens).\n\n";
+				  << input.main_dictionary.size() << " tokens).\n\n";
 		}
 	} else if (vocab_path.filename().string() != config::vocab_file) {
 		std::cerr << "[!] Specified vocabulary file not found: " << vocab_path.string()
