@@ -21,7 +21,7 @@ SRC_DIR  = src
 TEST_DIR = test
 UTIL_DIR = util
 
-UTIL_SRCS = $(wildcard $(UTIL_DIR)/*.cpp)
+UTIL_SRCS = $(wildcard $(UTIL_DIR)/*.cpp) $(wildcard $(UTIL_DIR)/decompressor/*.cpp)
 ALL_SRCS  = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(TEST_DIR)/*.cpp) $(UTIL_SRCS)
 APP_SRCS  = $(ALL_SRCS)
 TEST_SRCS = $(ALL_SRCS)
