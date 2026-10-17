@@ -34,17 +34,11 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
 	if (developer_mode == true) {
 		// 1. Text Tokenization (IDs 1 - 9999)
-		for (std::string word : test.data_txt) {
+		for (std::string word : test.test_input) {
 			for (char& c : word)
 				c = (c >= 'A' && c <= 'Z') ? (c | 0x20) : c;
 
-			add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
-		}
-
-		// 2. Number Tokenization (IDs 10000 - 19999)
-		for (double val : test.data_num) {
-			add_assign_increase(
-				val, input.number_dictionary, input.next_number_id, input);
+			add_assign_increase(word, input.main_dictionary, input.next_text_id, input);
 		}
 
 		// 3. Image Tokenization (IDs 20000 - 29999)
@@ -72,24 +66,23 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
 	} else {
 		// Production Mode: Dynamically Tokenize User's UI Data
-		for (std::string word : input.user_text) {
+		for (std::string word : input.user_input) {
 			for (char& c : word)
 				c = (c >= 'A' && c <= 'Z') ? (c | 0x20) : c;
 
-			add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
+			add_assign_increase(word, input.main_dictionary, input.next_text_id, input);
 		}
-		for (double val : input.user_numbers) {
-			add_assign_increase(
-				val, input.number_dictionary, input.next_number_id, input);
-		}
+
 		for (const std::string& path : input.user_image_paths) {
 			tokenize_from_disk(
 				path, input.image_dictionary, input.next_image_id, input);
 		}
+
 		for (const std::string& path : input.user_video_paths) {
 			tokenize_from_disk(
 				path, input.video_dictionary, input.next_video_id, input);
 		}
+
 		for (const std::string& path : input.user_voice_paths) {
 			tokenize_from_disk(
 				path, input.voice_dictionary, input.next_voice_id, input);

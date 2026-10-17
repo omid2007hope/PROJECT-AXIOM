@@ -106,11 +106,14 @@ std::filesystem::path locate_core_dir() {
 // Raw data samples used by developer mode (--train)
 Test make_sample_data() {
 	Test test;
-	test.data_txt = {"The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"};
-	test.data_num = {5.1, 3.5, 1.4, 0.2, 4.9, 3.0, 1.4, 0.2, 4.7, 3.2, 1.3, 0.2};
+	test.test_input = {"The",  "quick", "brown", "fox", "jumps", "over", "the",
+			   "lazy", "dog",   5.1,     3.5,   1.4,     0.2,    4.9,
+			   3.0,	   1.4,	    0.2,     4.7,   3.2,     1.3,    0.2};
+
 	test.data_image = {"Photo.jpeg"};
 	test.data_video = {"Video.mp4"};
 	test.data_voice = {"Voice.ogg"};
+
 	return test;
 }
 
@@ -347,10 +350,9 @@ AppMode collect_user_input(Input& input) {
 	while (true) {
 		std::cout << "Select Data Type:\n"
 			  << "[1] Text\n"
-			  << "[2] Number\n"
-			  << "[3] Image\n"
-			  << "[4] Video\n"
-			  << "[5] Voice\n"
+			  << "[2] Image\n"
+			  << "[3] Video\n"
+			  << "[4] Voice\n"
 			  << "> ";
 
 		type = read_choice();
@@ -359,7 +361,7 @@ AppMode collect_user_input(Input& input) {
 			return AppMode::Exit;
 		}
 
-		if (type >= 1 && type <= 5) {
+		if (type >= 1 && type <= 4) {
 			break;
 		}
 
@@ -370,19 +372,17 @@ AppMode collect_user_input(Input& input) {
 	}
 
 	if (type == 1) {
-		input.user_text = Validate<std::vector<std::string>>("Enter Text: ");
+		input.user_input = Validate<std::vector<std::string>>("Enter Text: ");
 	} else if (type == 2) {
-		input.user_numbers = Validate<std::vector<double>>("Enter Number: ");
-	} else if (type == 3) {
 		input.user_image_paths = ValidatePaths("Enter Image Path: ");
-	} else if (type == 4) {
+	} else if (type == 3) {
 		input.user_video_paths = ValidatePaths("Enter Video Path: ");
-	} else if (type == 5) {
+	} else if (type == 4) {
 		input.user_voice_paths = ValidatePaths("Enter Voice Path: ");
 	}
 
 	// Text and numbers can be paired with media
-	if (type == 1 || type == 2) {
+	if (type == 1) {
 		int media = 0;
 		while (true) {
 			std::cout << "\nAdd media?\n[1] Yes\n[2] No\n> ";
@@ -679,36 +679,39 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 		  << "[STAGE 2/3] High-Capacity VRAM Allocation & Memory Bus Saturation\n"
 		  << "[..] Querying dynamic GPU memory constraints & safety margin...\n";
 
-	constexpr size_t SAFETY_HEADROOM_BYTES = 2048ULL * 1024 * 1024; // 2.0 GB Headroom for OS & DWM
+	constexpr size_t SAFETY_HEADROOM_BYTES =
+		2048ULL * 1024 * 1024; // 2.0 GB Headroom for OS & DWM
 	size_t vram_alloc_bytes = 0;
 	double vram_bw_gb_s = 0.0;
 	float vram_elapsed_ms = 0.0f;
 
-	if (run_vram_saturation_benchmark(SAFETY_HEADROOM_BYTES,
-					  &vram_alloc_bytes,
-					  &vram_bw_gb_s,
-					  &vram_elapsed_ms)) {
-		double alloc_gb = static_cast<double>(vram_alloc_bytes) / (1024.0 * 1024.0 * 1024.0);
+	if (run_vram_saturation_benchmark(
+		    SAFETY_HEADROOM_BYTES, &vram_alloc_bytes, &vram_bw_gb_s, &vram_elapsed_ms)) {
+		double alloc_gb =
+			static_cast<double>(vram_alloc_bytes) / (1024.0 * 1024.0 * 1024.0);
 		double bw_pct = (specs.peak_bandwidth_gb_s > 0.0)
 					? (vram_bw_gb_s / specs.peak_bandwidth_gb_s) * 100.0
 					: 0.0;
 		std::cout << "[OK] Dynamically allocated " << std::fixed << std::setprecision(2)
-			  << alloc_gb << " GB synthetic tensors in VRAM (leaving 2.00 GB OS safety headroom)\n"
+			  << alloc_gb
+			  << " GB synthetic tensors in VRAM (leaving 2.00 GB OS safety headroom)\n"
 			  << "[OK] Vectorized GDDR6 memory streaming bandwidth: "
 			  << std::setprecision(1) << vram_bw_gb_s << " GB/s ("
 			  << std::setprecision(1) << bw_pct << "% of physical bus)\n"
 			  << "[OK] 100% memory integrity verified; VRAM cleanly deallocated.\n";
 	} else {
-		std::cout << "[!] Insufficient free VRAM for massive allocation test (fallback to safe operational limit).\n";
+		std::cout
+			<< "[!] Insufficient free VRAM for massive allocation test (fallback to safe operational limit).\n";
 	}
 
 	// Stage 3: Ada Lovelace Tensor Core Saturation Sweep
-	std::cout << "--------------------------------------------------------\n"
-		  << "[STAGE 3/3] Ada Lovelace Tensor Core Saturation Sweep\n"
-		  << "            Configuration: M=2048, N=4096, K=4096 (68.7 GFLOPs/sweep)\n"
-		  << "[..] Saturating all 58 Streaming Multiprocessors across 2,048 thread blocks...\n"
-		  << "[..] Locking GPU into P0 Boost Clock and executing 1,000 sustained sweeps...\n"
-		  << std::flush;
+	std::cout
+		<< "--------------------------------------------------------\n"
+		<< "[STAGE 3/3] Ada Lovelace Tensor Core Saturation Sweep\n"
+		<< "            Configuration: M=2048, N=4096, K=4096 (68.7 GFLOPs/sweep)\n"
+		<< "[..] Saturating all 58 Streaming Multiprocessors across 2,048 thread blocks...\n"
+		<< "[..] Locking GPU into P0 Boost Clock and executing 1,000 sustained sweeps...\n"
+		<< std::flush;
 
 	constexpr int sat_M = 2048;
 	constexpr int sat_N = 4096;
@@ -722,21 +725,21 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 	if (run_cutlass_saturation_benchmark(
 		    sat_M, sat_N, sat_K, sat_iters, &sat_tflops, &sat_bw, &sat_avg_ms)) {
 		double best_bw = (vram_bw_gb_s > sat_bw) ? vram_bw_gb_s : sat_bw;
-		float best_bw_pct = static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0);
+		float best_bw_pct =
+			static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0);
 		float sat_mfu_pct =
 			static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0);
 		std::string arch_tag =
 			"sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
-		AxiomTelemetry::print_saturation_hud(
-			sat_avg_ms,
-			sat_tflops,
-			best_bw,
-			best_bw_pct,
-			sat_mfu_pct,
-			vram_alloc_bytes,
-			SAFETY_HEADROOM_BYTES,
-			arch_tag);
+		AxiomTelemetry::print_saturation_hud(sat_avg_ms,
+						     sat_tflops,
+						     best_bw,
+						     best_bw_pct,
+						     sat_mfu_pct,
+						     vram_alloc_bytes,
+						     SAFETY_HEADROOM_BYTES,
+						     arch_tag);
 	} else {
 		std::cerr << "[!] CUTLASS saturation benchmark failed.\n";
 	}
@@ -761,12 +764,14 @@ void run_training_loop(AI& ai,
 		total_dataset_tokens = file_bytes / (portion.token_dim * sizeof(std::bfloat16_t));
 	}
 	size_t total_dataset_steps = (total_dataset_tokens > portion.context_window_size)
-		? (total_dataset_tokens - portion.context_window_size)
-		: 0;
+					     ? (total_dataset_tokens - portion.context_window_size)
+					     : 0;
 
-	size_t target_steps = (max_steps > 0)
-		? std::min(max_steps, total_dataset_steps > 0 ? total_dataset_steps : max_steps)
-		: total_dataset_steps;
+	size_t target_steps =
+		(max_steps > 0)
+			? std::min(max_steps,
+				   total_dataset_steps > 0 ? total_dataset_steps : max_steps)
+			: total_dataset_steps;
 
 	if (target_steps == 0) {
 		std::cerr << "[!] No training data available in "
@@ -873,11 +878,12 @@ void run_training_loop(AI& ai,
 						first_loss = current_loss;
 					}
 
-					const double pct = (target_steps > 0)
-						? std::min(100.0,
-							   (static_cast<double>(step) * 100.0 /
-							    target_steps))
-						: 100.0;
+					const double pct =
+						(target_steps > 0)
+							? std::min(100.0,
+								   (static_cast<double>(step) *
+								    100.0 / target_steps))
+							: 100.0;
 					constexpr int bar_width = 24;
 					int filled = static_cast<int>((pct / 100.0) * bar_width);
 					if (filled > bar_width)
@@ -893,13 +899,14 @@ void run_training_loop(AI& ai,
 					}
 					bar += "]";
 
-					std::cout << "\r  [..] Learning " << bar << " " << std::fixed
-						  << std::setprecision(1) << pct << "% | Step " << step
-						  << "/" << target_steps << " | Loss: "
-						  << std::setprecision(4) << current_loss;
+					std::cout << "\r  [..] Learning " << bar << " "
+						  << std::fixed << std::setprecision(1) << pct
+						  << "% | Step " << step << "/" << target_steps
+						  << " | Loss: " << std::setprecision(4)
+						  << current_loss;
 					if (*first_loss > 0.0) {
-						double delta_pct =
-							(current_loss - *first_loss) / *first_loss * 100.0;
+						double delta_pct = (current_loss - *first_loss) /
+								   *first_loss * 100.0;
 						std::cout << " (" << std::showpos
 							  << std::setprecision(1) << delta_pct
 							  << "% vs 1st)" << std::noshowpos;
@@ -909,19 +916,20 @@ void run_training_loop(AI& ai,
 			}
 
 			if (step >= target_steps) {
-				std::cout << "\r  [OK] Learning [========================] 100.0% | Step "
-					  << step << "/" << target_steps << " | Loss: " << std::fixed
-					  << std::setprecision(4) << current_loss;
+				std::cout
+					<< "\r  [OK] Learning [========================] 100.0% | Step "
+					<< step << "/" << target_steps << " | Loss: " << std::fixed
+					<< std::setprecision(4) << current_loss;
 				if (first_loss && *first_loss > 0.0) {
 					double delta_pct =
 						(current_loss - *first_loss) / *first_loss * 100.0;
-					std::cout << " (" << std::showpos
-						  << std::setprecision(1) << delta_pct
-						  << "% vs 1st)" << std::noshowpos;
+					std::cout << " (" << std::showpos << std::setprecision(1)
+						  << delta_pct << "% vs 1st)" << std::noshowpos;
 				}
-				std::cout << "\n\n[OK] 100% of dataset learned: all embedded data on disk consumed.\n"
-					  << "[!] Automatically saving model checkpoint...\n"
-					  << std::flush;
+				std::cout
+					<< "\n\n[OK] 100% of dataset learned: all embedded data on disk consumed.\n"
+					<< "[!] Automatically saving model checkpoint...\n"
+					<< std::flush;
 
 				ai.save_weights(weights_path.string());
 				parser.save_vocabulary(vocab_path, input);
@@ -1132,9 +1140,10 @@ bool execute_training_session(AI& ai,
 		std::cout << "\n--- Multimodal Tokenization & Embedding Pipeline Preview ---\n";
 		for (size_t i = 0; i < preview_count; ++i) {
 			const uint32_t token_id = input.tokenized_data[i];
-			const std::string raw_item = (developer_mode && i < test.data_txt.size())
-							     ? test.data_txt[i]
-							     : parser.token_to_string(input, token_id);
+			const std::string raw_item =
+				(developer_mode && i < test.test_input.size())
+					? test.test_input[i]
+					: parser.token_to_string(input, token_id);
 
 			std::cout << "  \"" << raw_item << "\" assigned id: " << token_id
 				  << " -> Tokenized into -> " << token_id
@@ -1149,8 +1158,8 @@ bool execute_training_session(AI& ai,
 				}
 			} else {
 				for (size_t d = 0; d < input.embedding_dim; ++d) {
-					const float val = static_cast<float>(
-						std::sin(static_cast<double>(token_id) * (d + 1.0)));
+					const float val = static_cast<float>(std::sin(
+						static_cast<double>(token_id) * (d + 1.0)));
 					std::cout << std::fixed << std::setprecision(4) << val
 						  << (d + 1 < input.embedding_dim ? ", " : "");
 				}

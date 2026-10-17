@@ -16,8 +16,8 @@
 
 
 struct Test {
-	std::vector<std::string> data_txt = {};
-	std::vector<double> data_num = {};
+	std::vector<std::string> test_input {};
+
 	std::vector<std::string> data_image = {};
 	std::vector<std::string> data_video = {};
 	std::vector<std::string> data_voice = {};
@@ -37,17 +37,17 @@ struct Input {
 	uint32_t last_token = std::numeric_limits<uint32_t>::max();
 
 	// Global Vocabulary Dictionaries (The Discrete VQ-VAEs)
-	std::unordered_map<std::string, uint32_t> text_dictionary = {};
-	std::unordered_map<uint32_t, std::string> reverse_text_dictionary = {};
+	// text, number, symbols
+	std::unordered_map<std::string, uint32_t> main_dictionary = {};
+	std::unordered_map<uint32_t, std::string> reverse_main_dictionary = {};
 
-	std::unordered_map<double, uint32_t> number_dictionary = {};
 	std::unordered_map<uint8_t, uint32_t> image_dictionary = {};
 	std::unordered_map<uint8_t, uint32_t> video_dictionary = {};
 	std::unordered_map<uint8_t, uint32_t> voice_dictionary = {};
 
 	// Production Mode User Inputs (When developer_mode = false)
-	std::vector<std::string> user_text = {};
-	std::vector<double> user_numbers = {};
+	std::vector<std::string> user_input = {};
+
 	std::vector<std::string> user_image_paths = {};
 	std::vector<std::string> user_video_paths = {};
 	std::vector<std::string> user_voice_paths = {};
