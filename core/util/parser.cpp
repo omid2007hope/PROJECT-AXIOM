@@ -148,17 +148,17 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 	for (size_t i = 0; i < input.tokenized_data.size(); ++i) {
 
 		// each single token
-		const uint32_t each_token = input.tokenized_data[i];
+		const uint32_t id = input.tokenized_data[i];
 
 		// Insure it creates a new unique ID each time
-		if (each_token != input.last_token) {
-			input.last_token = each_token;
+		if (id != input.last_token) {
+			input.last_token = id;
 			for (size_t d = 0; d < input.embedding_dim; ++d) {
 
 				current_vec[d] = static_cast<std::bfloat16_t>(
 
 					// tokenized data multiply by ((1, 2, 3, 4) + 1.0)
-					std::sin(static_cast<double>(each_token) * (d + 1.0)));
+					std::sin(static_cast<double>(id) * (d + 1.0)));
 			}
 		}
 
@@ -236,27 +236,27 @@ void Parser::build_embedding_table(Input& input) {
 		input.embedding_table.reserve(total_unique);
 	}
 
-	auto ensure_embedding = [&](uint32_t each_token) {
-		if (input.embedding_table.find(each_token) == input.embedding_table.end()) {
+	auto ensure_embedding = [&](uint32_t id) {
+		if (input.embedding_table.find(id) == input.embedding_table.end()) {
 			std::vector<std::bfloat16_t> vec(input.embedding_dim);
 			for (uint32_t d = 0; d < input.embedding_dim; ++d) {
 				vec[d] = static_cast<std::bfloat16_t>(
-					std::sin(static_cast<double>(each_token) * (d + 1.0)));
+					std::sin(static_cast<double>(id) * (d + 1.0)));
 			}
-			input.embedding_table[each_token] = std::move(vec);
+			input.embedding_table[id] = std::move(vec);
 		}
 	};
 
-	for (const auto& [_, each_token] : input.text_dictionary)
-		ensure_embedding(each_token);
-	for (const auto& [_, each_token] : input.number_dictionary)
-		ensure_embedding(each_token);
-	for (const auto& [_, each_token] : input.image_dictionary)
-		ensure_embedding(each_token);
-	for (const auto& [_, each_token] : input.video_dictionary)
-		ensure_embedding(each_token);
-	for (const auto& [_, each_token] : input.voice_dictionary)
-		ensure_embedding(each_token);
+	for (const auto& [_, id] : input.text_dictionary)
+		ensure_embedding(id);
+	for (const auto& [_, id] : input.number_dictionary)
+		ensure_embedding(id);
+	for (const auto& [_, id] : input.image_dictionary)
+		ensure_embedding(id);
+	for (const auto& [_, id] : input.video_dictionary)
+		ensure_embedding(id);
+	for (const auto& [_, id] : input.voice_dictionary)
+		ensure_embedding(id);
 }
 
 uint32_t Parser::decode_embedding_to_token(const Input& input,
@@ -272,8 +272,8 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 		input.decode_ids.reserve(input.embedding_table.size());
 		input.decode_vectors.reserve(input.embedding_table.size() * input.embedding_dim);
 
-		for (const auto& [each_token, vec] : input.embedding_table) {
-			input.decode_ids.push_back(each_token);
+		for (const auto& [id, vec] : input.embedding_table) {
+			input.decode_ids.push_back(id);
 			for (size_t d = 0; d < input.embedding_dim; ++d) {
 				input.decode_vectors.push_back(
 					d < vec.size() ? static_cast<float>(vec[d]) : 0.0f);
@@ -320,8 +320,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 		if (it != input.reverse_text_dictionary.end()) {
 			return it->second;
 		}
-		for (const auto& [word, each_token] : input.text_dictionary) {
-			if (each_token == token_id)
+		for (const auto& [word, id] : input.text_dictionary) {
+			if (id == token_id)
 				return word;
 		}
 		return "[Text #" + std::to_string(token_id) + "]";
@@ -329,8 +329,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 	// 2. Number Modality (1,000,000,000 to 1,999,999,999)
 	if (token_id < 2000000000U) {
-		for (const auto& [num, each_token] : input.number_dictionary) {
-			if (each_token == token_id) {
+		for (const auto& [num, id] : input.number_dictionary) {
+			if (id == token_id) {
 				std::ostringstream oss;
 				oss << num;
 				return oss.str();
@@ -341,8 +341,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 	// 3. Image Modality (2,000,000,000 to 2,999,999,999)
 	if (token_id < 3000000000U) {
-		for (const auto& [byte_val, each_token] : input.image_dictionary) {
-			if (each_token == token_id) {
+		for (const auto& [byte_val, id] : input.image_dictionary) {
+			if (id == token_id) {
 				return "[Image byte: " +
 				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
@@ -352,8 +352,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 	// 4. Video Modality (3,000,000,000 to 3,999,999,999)
 	if (token_id < 4000000000U) {
-		for (const auto& [byte_val, each_token] : input.video_dictionary) {
-			if (each_token == token_id) {
+		for (const auto& [byte_val, id] : input.video_dictionary) {
+			if (id == token_id) {
 				return "[Video byte: " +
 				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
@@ -363,8 +363,8 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 	// 5. Voice Modality (4,000,000,000 to 4,200,000,000)
 	if (token_id < 4200000000U) {
-		for (const auto& [byte_val, each_token] : input.voice_dictionary) {
-			if (each_token == token_id) {
+		for (const auto& [byte_val, id] : input.voice_dictionary) {
+			if (id == token_id) {
 				return "[Voice byte: " +
 				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
@@ -815,11 +815,11 @@ bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input&
 	out.write(reinterpret_cast<const char*>(&vocab_size), sizeof(uint64_t));
 
 	// 4. Stream Key-Value Pairs [Length] [Bytes] [ID]
-	for (const auto& [word, each_token] : input.text_dictionary) {
+	for (const auto& [word, id] : input.text_dictionary) {
 		uint32_t word_len = static_cast<uint32_t>(word.size());
 		out.write(reinterpret_cast<const char*>(&word_len), sizeof(uint32_t));
 		out.write(word.data(), word_len);
-		out.write(reinterpret_cast<const char*>(&each_token), sizeof(uint32_t));
+		out.write(reinterpret_cast<const char*>(&id), sizeof(uint32_t));
 	}
 
 	out.close();
@@ -901,17 +901,17 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 			return false;
 		}
 
-		uint32_t each_token = 0;
-		in.read(reinterpret_cast<char*>(&each_token), sizeof(uint32_t));
+		uint32_t id = 0;
+		in.read(reinterpret_cast<char*>(&id), sizeof(uint32_t));
 		if (!in) {
 			std::cerr << "[!] Incomplete vocabulary token ID at index " << i << "\n";
 			return false;
 		}
 
-		input.text_dictionary[word] = each_token;
-		input.reverse_text_dictionary[each_token] = word;
-		if (each_token >= input.next_text_id) {
-			input.next_text_id = each_token + 1;
+		input.text_dictionary[word] = id;
+		input.reverse_text_dictionary[id] = word;
+		if (id >= input.next_text_id) {
+			input.next_text_id = id + 1;
 		}
 	}
 
