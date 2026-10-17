@@ -58,17 +58,20 @@ bool test_decom();
 namespace config {
 
 // Hyperparameters
-constexpr size_t ram_buffer_size = 100000;
-constexpr size_t token_dim = 32;
-constexpr size_t context_window_size = 128;
-constexpr float learning_rate = 0.001f;
+constexpr size_t ram_buffer_size = 4194304; // 4M tokens (~16.7 MB in RAM)
+constexpr size_t token_dim = 1024;	    // GPT-2 scale (Must be multiple of 64)
+constexpr size_t context_window_size = 256; // Doubled to capture paragraph-level context
+
+// AdamW Optimizer Settings
+constexpr float learning_rate = 0.0005f; // Scaled down for stable high-dimensional convergence
 
 // How many training steps pass between two loss reports
-constexpr size_t loss_report_interval = 100;
+constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU synchronization stalls
 
-// Initial weights are drawn uniformly from [weight_min, weight_max]
-constexpr float weight_min = -0.1f;
-constexpr float weight_max = 0.1f;
+// Initial weights are drawn uniformly from [-1/sqrt(d), +1/sqrt(d)]
+// For d=1024, 1/sqrt(1024) = 0.03125f. Prevents activation explosion.
+constexpr float weight_min = -0.03125f;
+constexpr float weight_max = 0.03125f;
 
 // Folder layout, relative to the core/ folder
 constexpr const char* database_folder = "database";
@@ -1165,17 +1168,19 @@ bool execute_training_session(AI& ai,
 			// Query actual master embedding table from AI VRAM/host state
 			if (token_id < ai.vocab_size && !ai.h_embeddings.empty()) {
 				for (size_t d = 0; d < ai.embedding_dim; ++d) {
-					std::cout << std::fixed << std::setprecision(4)
-						  << ai.h_embeddings[token_id * ai.embedding_dim + d]
-						  << (d + 1 < ai.embedding_dim ? ", " : "");
+					std::cout
+						<< std::fixed << std::setprecision(4)
+						<< ai.h_embeddings[token_id * ai.embedding_dim + d]
+						<< (d + 1 < ai.embedding_dim ? ", " : "");
 				}
 			} else {
 				auto it = input.embedding_table.find(token_id);
 				if (it != input.embedding_table.end()) {
 					for (size_t d = 0; d < it->second.size(); ++d) {
-						std::cout << std::fixed << std::setprecision(4)
-							  << static_cast<float>(it->second[d])
-							  << (d + 1 < it->second.size() ? ", " : "");
+						std::cout
+							<< std::fixed << std::setprecision(4)
+							<< static_cast<float>(it->second[d])
+							<< (d + 1 < it->second.size() ? ", " : "");
 					}
 				}
 			}
@@ -1202,7 +1207,8 @@ bool execute_training_session(AI& ai,
 		std::cout << "--- Training AI ---\n" << std::flush;
 	}
 
-	std::cout << "[..] Allocating pinned memory and preparing PCIe token stream...\n" << std::flush;
+	std::cout << "[..] Allocating pinned memory and preparing PCIe token stream...\n"
+		  << std::flush;
 	if (!portion.allocate_pinned()) {
 		std::cerr << "[!] Failed to allocate pinned host memory.\n";
 		return false;
