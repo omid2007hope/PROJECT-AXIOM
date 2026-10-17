@@ -8,15 +8,21 @@
 
 ---
 
-## Eliminate the Knowledge Gatekeepers
+## ⚡ Eliminate the Knowledge Gatekeepers
 
-Let’s replace the actors.  
-Let’s replace the singers.  
-Let’s replace the writers.  
-Let’s replace the artists.  
-Let’s replace the experts.
+<br/>
 
-Let’s teach every gatekeeper who spent decades making life hell for everyone else with degrees stamped by communist brainwash factories exactly what hell looks like when the hardware finally answers.
+> **_Let’s replace the actors._**  
+> **_Let’s replace the singers._**  
+> **_Let’s replace the writers._**  
+> **_Let’s replace the artists._**  
+> **_Let’s replace the experts._**  
+>
+> ---
+>
+> _Let’s teach every gatekeeper who spent decades making life hell for everyone else with degrees stamped by communist brainwash factories exactly what hell looks like when the hardware finally answers._
+
+<br/>
 
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)](https://en.cppreference.com/w/cpp/23)
 [![CUDA 13.x](https://img.shields.io/badge/CUDA-13.x-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
@@ -31,7 +37,7 @@ _Project Axiom is not a Python wrapper. It is not an abstraction layer. It is a 
 
 ---
 
-[**Manifesto**](#eliminate-the-knowledge-gatekeepers) • [**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Run**](#️-build-test--run) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Roadmap**](#-scaling-roadmap-v10--v20)
+[**Manifesto**](#-eliminate-the-knowledge-gatekeepers) • [**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Run**](#️-build-test--run) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Roadmap**](#-scaling-roadmap-v10--v20)
 
 ---
 
