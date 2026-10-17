@@ -1,8 +1,22 @@
 <div align="center">
 
 # 🌌 PROJECT AXIOM
+
 ### The Silicon-Native, Zero-Overhead Multimodal AI Engine
+
 **Engineered from Scratch in Modern C++23 & Bare-Metal NVIDIA CUDA**
+
+---
+
+## Eliminate the Knowledge Gatekeepers
+
+Let’s replace the actors.  
+Let’s replace the singers.  
+Let’s replace the writers.  
+Let’s replace the artists.  
+Let’s replace the experts.
+
+Let’s teach every gatekeeper who spent decades making life hell for everyone else with degrees stamped by communist brainwash factories exactly what hell looks like when the hardware finally answers.
 
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)](https://en.cppreference.com/w/cpp/23)
 [![CUDA 13.x](https://img.shields.io/badge/CUDA-13.x-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
@@ -11,9 +25,9 @@
 [![Precision](https://img.shields.io/badge/Precision-Hardware_bfloat16-orange?style=for-the-badge)](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format)
 [![DMA](https://img.shields.io/badge/PCIe-Direct_DMA_Zero--Copy-purple?style=for-the-badge)]()
 [![Status](https://img.shields.io/badge/Status-Version_1.0_Platinum_Complete-success?style=for-the-badge)]()
-[![Tests](https://img.shields.io/badge/Tests-206%20Passing%20(100%25%20Green)-brightgreen?style=for-the-badge)]()
+[![Tests](<https://img.shields.io/badge/Tests-206%20Passing%20(100%25%20Green)-brightgreen?style=for-the-badge>)]()
 
-*Project Axiom is not a Python wrapper. It is not an abstraction layer. It is a hardcore, bare-metal rewrite of deep learning mechanics engineered directly in C++23 and NVIDIA CUDA. By stripping away garbage collectors, runtime interpreters, and framework bloat, Axiom achieves absolute mastery over modern silicon: 100% Tensor Core saturation, zero-latency PCIe DMA streaming, sub-millisecond prefill latency, and seamless continuous learning.*
+_Project Axiom is not a Python wrapper. It is not an abstraction layer. It is a hardcore, bare-metal rewrite of deep learning mechanics engineered directly in C++23 and NVIDIA CUDA. By stripping away garbage collectors, runtime interpreters, and framework bloat, Axiom achieves absolute mastery over modern silicon: 100% Tensor Core saturation, zero-latency PCIe DMA streaming, sub-millisecond prefill latency, and seamless continuous learning._
 
 ---
 
@@ -26,21 +40,25 @@
 ## 🎯 The Philosophy & Mission
 
 ### The Industry's Flawed Premise
+
 Modern Artificial Intelligence is drowning in software bloat. Enterprise workflows rely on colossal, heavily abstracted Python frameworks (PyTorch, TensorFlow, JAX) that introduce massive architectural penalties:
+
 1. **Garbage Collection Pauses:** Python runtimes trigger non-deterministic memory reclamation, inducing micro-stutters during high-throughput training and inference.
 2. **Interpreter & Driver Overhead:** CPU thread orchestration takes longer to submit work through layered driver shims than the GPU spends executing tensor operations.
 3. **Severe VRAM Fragmentation:** Continuous allocation and deallocation of dynamic activation tensors fragment GPU address spaces, leading to premature Out-Of-Memory (OOM) crashes.
 4. **Indiscriminate Data Ingestion:** Traditional models scrape uncurated internet sludge, triggering synthetic feedback loops, bias amplification, and catastrophic model collapse.
 
 ### The Axiom Paradigm
+
 **Project Axiom** rejects this paradigm entirely.
+
 - **Bare-Metal Silicon Control:** Axiom controls the exact byte layout of every buffer in physical host RAM and device VRAM.
 - **Hardware-Native Primitives:** Computations are dispatched via custom `.cu` device kernels and NVIDIA CUTLASS v4.8 templates directly targeting Tensor Cores on Ada Lovelace (`sm_89`) hardware.
 - **Total Privacy & Local Execution:** Axiom runs 100% offline and locally on consumer GPUs (e.g., RTX 4080 Laptop / Desktop), providing an autonomous sandbox to train, experiment with, inspect, save, or wipe custom neural weights in milliseconds.
 - **Curated Single-Model Philosophy:** Axiom delivers a unified neural architecture designed to master handpicked, verified datasets. End-users run pre-trained checkpoints with zero friction (`.\app.exe --use`), while developers fork the engine to train continuously on custom knowledge bases.
 - **The Scientific Horizon (The Rewind Test):** Axiom serves as an empirical research sandbox to test the boundaries of computational determinism. By feeding hardware thermal entropy (`std::random_device`) into Axiom's unified mathematical space, we test whether a neural network can reverse-engineer physical entropy generators and predict physical jitter.
 
-> *"An idiot admires complexity; a genius admires simplicity."* — Terry A. Davis
+> _"An idiot admires complexity; a genius admires simplicity."_ — Terry A. Davis
 
 ---
 
@@ -145,9 +163,11 @@ graph TB
 ## 🔥 Core Innovations
 
 ### 1. 🌌 True Native Multimodality & The Four-Stage Ingestion Pipeline
-Unlike traditional LLMs that treat text as primary and graft foreign modalities through cross-attention shims, Axiom maps **all modalities into a single, unified mathematical space**. 
+
+Unlike traditional LLMs that treat text as primary and graft foreign modalities through cross-attention shims, Axiom maps **all modalities into a single, unified mathematical space**.
 
 #### The Raw Byte Compression Trap
+
 A foundational insight derived from frontier AI architectures is that **reading raw compressed bytes directly into a tokenizer is a fatal trap**. When files like `.pdf`, `.docx`, `.mp4`, or `.png` are ingested as raw byte streams, the neural network spends its finite representational capacity attempting to reverse-engineer entropy-coding algorithms (zlib, DEFLATE, Huffman tables, h.264 bitstreams) rather than learning language semantics, physical principles, or visual geometry.
 
 To eliminate this entropy barrier, Project Axiom implements a strict **Four-Stage Multimodal Ingestion Pipeline**:
@@ -163,19 +183,21 @@ To eliminate this entropy barrier, Project Axiom implements a strict **Four-Stag
 ```
 
 #### Dual Ingestion Workflows
+
 1. **Workflow 1 (File Path / Bulk Assets):** Executes the full four-stage pipeline (`Identifier` $\to$ `Decompressor` $\to$ `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder`). Documents have formatting and zlib compression stripped; videos have container wrappers stripped to raw frames; audio is stripped to linear PCM.
 2. **Workflow 2 (Raw Manual CLI Text):** Bypasses the Identifier and Decompressor entirely. Because human CLI inputs are already pure uncompressed UTF-8 semantics, they funnel directly into `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder`.
 
 #### Dense Contiguous Early-Fusion Codebook ($V = 65,536$)
+
 Project Axiom eliminates sparse multi-billion / 10-million offsets, unifying text and numerical quantities into a single `main_dictionary` so physical co-occurrence semantics (e.g., `"gravity"` and `"9.8"`) are directly preserved:
 
-| Codebook Slot Range | Modality / Data Representation | Semantic Ingestion Source |
-| :--- | :--- | :--- |
-| **`[0 .. 3]`** | Special Reserved Tokens (`<PAD>`, `<UNK>`, `<BOS>`, `<EOS>`) | Engine Control Primitives |
-| **`[4 .. 64,511]`** | Unified Text Words, Subwords, Numbers, & Math | Decompressed Documents, Code, Raw Text |
-| **`[64,512 .. 64,767]`** | Discrete Quantized Visual Tokens (`0x00 .. 0xFF`) | Decompressed Raw RGB Pixel Frames |
-| **`[64,768 .. 65,023]`** | Discrete Acoustic Waveform Tokens (`0x00 .. 0xFF`) | Decompressed Linear PCM Audio |
-| **`[65,024 .. 65,535]`** | Reserved Expansion Slots | Future Multimodal Codebooks |
+| Codebook Slot Range      | Modality / Data Representation                               | Semantic Ingestion Source              |
+| :----------------------- | :----------------------------------------------------------- | :------------------------------------- |
+| **`[0 .. 3]`**           | Special Reserved Tokens (`<PAD>`, `<UNK>`, `<BOS>`, `<EOS>`) | Engine Control Primitives              |
+| **`[4 .. 64,511]`**      | Unified Text Words, Subwords, Numbers, & Math                | Decompressed Documents, Code, Raw Text |
+| **`[64,512 .. 64,767]`** | Discrete Quantized Visual Tokens (`0x00 .. 0xFF`)            | Decompressed Raw RGB Pixel Frames      |
+| **`[64,768 .. 65,023]`** | Discrete Acoustic Waveform Tokens (`0x00 .. 0xFF`)           | Decompressed Linear PCM Audio          |
+| **`[65,024 .. 65,535]`** | Reserved Expansion Slots                                     | Future Multimodal Codebooks            |
 
 > [!NOTE]
 > Bounding the codebook to a dense 16-bit address space guarantees an ultra-compact ~4.19 MB VRAM footprint for the GPU embedding table, fitting completely inside the Ada Lovelace L2 cache!
@@ -183,6 +205,7 @@ Project Axiom eliminates sparse multi-billion / 10-million offsets, unifying tex
 ---
 
 ### 2. ♾️ "The Seam": Continuous Sliding Window & Carry-Forward
+
 Standard machine learning batch loaders chunk datasets into isolated blocks. When a buffer runs out of data, standard loaders discard it and load the next, causing **Historical Amnesia** at the boundaries and breaking sequential continuity.
 
 Axiom introduces **The Seam (Carry-Forward Mechanism)**:
@@ -203,24 +226,28 @@ Axiom introduces **The Seam (Carry-Forward Mechanism)**:
 ```
 
 #### The Analogy: The Library, The Book, and The Page
-* **The Library = NVMe Hard Drive:** Massive storage, but too slow to access randomly per step.
-* **The Book = System RAM Buffer:** One $100,000$-token chunk ($400,000$ `bfloat16` elements) resting on the desk.
-* **The Page = Context Window:** Exactly $128$ tokens ($512$ elements) fed to the Perceptron at a time.
-* **Ripping the Last Page Out = The Carry-Forward:** When reaching the final page of Book 1, Axiom preserves the final $128$ tokens and staples them to the front of Book 2 before streaming from the NVMe. The AI's context stream is never severed.
+
+- **The Library = NVMe Hard Drive:** Massive storage, but too slow to access randomly per step.
+- **The Book = System RAM Buffer:** One $100,000$-token chunk ($400,000$ `bfloat16` elements) resting on the desk.
+- **The Page = Context Window:** Exactly $128$ tokens ($512$ elements) fed to the Perceptron at a time.
+- **Ripping the Last Page Out = The Carry-Forward:** When reaching the final page of Book 1, Axiom preserves the final $128$ tokens and staples them to the front of Book 2 before streaming from the NVMe. The AI's context stream is never severed.
 
 ---
 
 ### 3. ⚡ Zero-Latency Pinned Memory & PCIe DMA
+
 Standard C++ heap allocations (`std::vector`, `malloc`) reside in **pageable virtual memory**. When transferring pageable memory to the GPU via `cudaMemcpyAsync`, the CUDA driver cannot perform Direct Memory Access (DMA) because the OS might swap the memory page to disk at any time. The driver silently degrades into a synchronous, blocking transfer through a hidden staging buffer, stalling the CPU.
 
 Axiom eliminates this bottleneck:
-* **`cudaHostAllocWriteCombined`:** Locks host memory physical pages into pinned RAM and applies write-combining cache flags.
-* **Bypassing CPU Caches:** Write-combining bypasses the CPU's L1/L2 caches, writing directly across the PCIe bus interface. This accelerates PCIe bandwidth throughput by up to **40%**.
-* **Direct DMA:** The GPU's independent DMA copy engine directly accesses physical host RAM without interrupting CPU execution.
+
+- **`cudaHostAllocWriteCombined`:** Locks host memory physical pages into pinned RAM and applies write-combining cache flags.
+- **Bypassing CPU Caches:** Write-combining bypasses the CPU's L1/L2 caches, writing directly across the PCIe bus interface. This accelerates PCIe bandwidth throughput by up to **40%**.
+- **Direct DMA:** The GPU's independent DMA copy engine directly accesses physical host RAM without interrupting CPU execution.
 
 ---
 
 ### 4. 🏓 Asynchronous Multi-Stream Ping-Pong Buffering
+
 To ensure the GPU never waits for data, Axiom implements a double-buffered execution pipeline over two independent non-blocking streams (`cudaStreamNonBlocking`):
 
 ```
@@ -238,21 +265,24 @@ CPU Host: [ Prep Buffer 0 ]           [ Prep Buffer 1 ]                    [ Pre
 ---
 
 ### 5. 🚀 CUTLASS v4.8.0 Tensor Core Saturation
+
 Basic CUDA kernels with nested loops dispatch to scalar CUDA cores, leaving over **95% of Ada Lovelace's computing power unutilized**.
 
 Axiom integrates **NVIDIA CUTLASS v4.8.0**:
-* **Operation Class:** `cutlass::arch::OpClassTensorOp` targeting `cutlass::arch::Sm80` / `sm_89`.
-* **Hardware Instruction:** `mma.sync.aligned.m16n8k16.row.col` hardware matrix multiply-accumulate instructions.
-* **Precision:** `cutlass::bfloat16_t` input operands with `float` (FP32) accumulation.
-* **Tiling Hierarchy:**
-  * Threadblock Tile: $64 \times 64 \times 32$
-  * Warp Tile: $32 \times 32 \times 32$
-  * Instruction Shape: $16 \times 8 \times 16$
-  * Pipeline Stages: 4 shared-memory pipeline stages.
+
+- **Operation Class:** `cutlass::arch::OpClassTensorOp` targeting `cutlass::arch::Sm80` / `sm_89`.
+- **Hardware Instruction:** `mma.sync.aligned.m16n8k16.row.col` hardware matrix multiply-accumulate instructions.
+- **Precision:** `cutlass::bfloat16_t` input operands with `float` (FP32) accumulation.
+- **Tiling Hierarchy:**
+  - Threadblock Tile: $64 \times 64 \times 32$
+  - Warp Tile: $32 \times 32 \times 32$
+  - Instruction Shape: $16 \times 8 \times 16$
+  - Pipeline Stages: 4 shared-memory pipeline stages.
 
 ---
 
 ### 6. 🌲 Linear Epilogue Visitor Trees & Elimination of Dying ReLU
+
 In standard frameworks, a layer computes matrix multiplication, writes the intermediate tensor to VRAM, launches a bias-addition kernel, writes back to VRAM, and launches an activation kernel. These round-trips waste massive memory bandwidth.
 
 Axiom integrates **CUTLASS Epilogue Visitor Trees (Sm80EVT)** directly targeting Tensor Cores. Crucially, during development against continuous signed target coordinates, fusing ReLU into the EVT epilogue triggered the fatal "Dying ReLU" collapse, freezing all activations at zero. To permanently eliminate this failure mode, Axiom implements a **Linear Identity Epilogue**:
@@ -270,41 +300,49 @@ The GEMM accumulator and bias addition are fused into a **single kernel** ($y = 
 ---
 
 ### 7. 🧠 Learnable VRAM Embedding Matrix & PCIe Bandwidth Inversion
+
 Project Axiom completely abandons synthetic sinusoidal embedding formulas (`sin(id * (d+1))`), replacing them with a persistent, learnable **$65,536 \times 32$ VRAM Embedding Table**:
 
-* **PCIe Bandwidth Inversion (93.75% Traffic Reduction):** The host data loader no longer streams large floating-point vectors across PCIe. Instead, it uploads only 128 integer token IDs (`uint32_t`, 512 bytes) per context window across the bus—slashing PCIe traffic by **93.75%** (512 bytes vs. 8,192 bytes of uncompressed floats).
-* **Branchless Gather CUDA Kernel:** A high-throughput CUDA kernel gathers 32D geometric vectors directly from `d_embedding_table` into `d_context_window` in VRAM with zero warp divergence.
-* **Backward Scatter Kernel via `atomicAdd`:** Gradients backpropagated from the projection layer ($dL/dx$) are scattered into the FP32 master embedding table (`d_table_master`) using `atomicAdd`. Semantically correlated tokens (e.g., `"bulk"` and `"training"`, or `"gravity"` and `"9.8"`) are physically pulled into identical geometric clusters over training epochs.
+- **PCIe Bandwidth Inversion (93.75% Traffic Reduction):** The host data loader no longer streams large floating-point vectors across PCIe. Instead, it uploads only 128 integer token IDs (`uint32_t`, 512 bytes) per context window across the bus—slashing PCIe traffic by **93.75%** (512 bytes vs. 8,192 bytes of uncompressed floats).
+- **Branchless Gather CUDA Kernel:** A high-throughput CUDA kernel gathers 32D geometric vectors directly from `d_embedding_table` into `d_context_window` in VRAM with zero warp divergence.
+- **Backward Scatter Kernel via `atomicAdd`:** Gradients backpropagated from the projection layer ($dL/dx$) are scattered into the FP32 master embedding table (`d_table_master`) using `atomicAdd`. Semantically correlated tokens (e.g., `"bulk"` and `"training"`, or `"gravity"` and `"9.8"`) are physically pulled into identical geometric clusters over training epochs.
 
 ---
 
 ### 8. 🧭 Curing AI Amnesia: The AdamW Optimizer State (`optimizer.axiom`)
+
 Standard neural networks suffer from total amnesia: restarting training resets gradient velocity to zero, forcing the model to re-explore the loss landscape from scratch.
 
 Axiom permanently cures this by persisting the complete **AdamW Optimizer State** in a binary companion file (`optimizer.axiom`):
-* **Momentum ($m_t$, First Moment / Velocity):** Records the historical direction and speed of each parameter update.
-* **Variance ($v_t$, Second Moment / Volatility):** Tracks per-parameter gradient variance, automatically dampening updates for volatile weights.
-* **Fused AdamW CUDA Kernel:** Executes parameter and moment updates in a single kernel pass, allowing Axiom to pause and resume training instantly at full velocity without cold-start divergence.
+
+- **Momentum ($m_t$, First Moment / Velocity):** Records the historical direction and speed of each parameter update.
+- **Variance ($v_t$, Second Moment / Volatility):** Tracks per-parameter gradient variance, automatically dampening updates for volatile weights.
+- **Fused AdamW CUDA Kernel:** Executes parameter and moment updates in a single kernel pass, allowing Axiom to pause and resume training instantly at full velocity without cold-start divergence.
 
 ---
 
 ### 9. 📦 Generative Multimodal Output Codecs (The Output Compressor)
+
 A generative multimodal AI engine does not natively output formatted `.mp4` or `.pdf` files; it predicts continuous vector probabilities and discrete token sequences. To translate mathematical activations back into human-perceptible media, Axiom implements dedicated **Output Codecs**:
-* **Text Detokenizer:** Reverses integer IDs into clean UTF-8 text via the vocabulary map.
-* **Visual Codec:** Unrolls predicted discrete visual tokens into spatial RGB pixel arrays, formatting them into images or video frame sequences.
-* **Acoustic Codec:** Converts discrete acoustic tokens into linear PCM waveforms and formats them into standard audio files.
+
+- **Text Detokenizer:** Reverses integer IDs into clean UTF-8 text via the vocabulary map.
+- **Visual Codec:** Unrolls predicted discrete visual tokens into spatial RGB pixel arrays, formatting them into images or video frame sequences.
+- **Acoustic Codec:** Converts discrete acoustic tokens into linear PCM waveforms and formats them into standard audio files.
 
 ---
 
 ### 10. ⚡ Sparse Mixture of Experts (MoE) Architecture
+
 Currently, Axiom routes all multimodal inputs through a dense matrix layer. For scalable multimodal parameter capacity without proportional compute costs, Axiom introduces **Sparse Mixture of Experts (MoE)**:
-* **Specialized Expert Blocks:** The weight matrix is partitioned into independent expert stacks (e.g., 8 specialized parameter blocks).
-* **Lightweight Router Network:** Evaluates incoming token representations and dispatches each token exclusively to the Top-1 or Top-2 most relevant experts (e.g., routing visual tokens to visual experts and linguistic logic to language experts).
-* **Zero-Compute Inactive Pruning:** Inactive experts are bypassed entirely on Tensor Cores, keeping inference latency sub-millisecond while dramatically scaling effective parameter capacity.
+
+- **Specialized Expert Blocks:** The weight matrix is partitioned into independent expert stacks (e.g., 8 specialized parameter blocks).
+- **Lightweight Router Network:** Evaluates incoming token representations and dispatches each token exclusively to the Top-1 or Top-2 most relevant experts (e.g., routing visual tokens to visual experts and linguistic logic to language experts).
+- **Zero-Compute Inactive Pruning:** Inactive experts are bypassed entirely on Tensor Cores, keeping inference latency sub-millisecond while dramatically scaling effective parameter capacity.
 
 ---
 
 ### 11. 💾 Unified Binary Persistence (`weights.axiom` & `optimizer.axiom`)
+
 To guarantee permanent neural parameter retention with zero external serialization dependencies, Axiom implements a compiler-safe direct binary weight format:
 
 ```text
@@ -321,16 +359,18 @@ To guarantee permanent neural parameter retention with zero external serializati
 [Embedding Payload: 8,388,608 Bytes] -> 65536 * 32 * sizeof(float)
 ```
 
-* **Companion Optimizer Checkpoint (`optimizer.axiom`):** Persists step count, hyperparameters, and $m_t$ / $v_t$ moment tensors.
-* **Atomic Serialization:** Flushes to a temporary file (`.tmp`) and commits via atomic filesystem rename, guaranteeing corruption immunity against unexpected process termination.
+- **Companion Optimizer Checkpoint (`optimizer.axiom`):** Persists step count, hyperparameters, and $m_t$ / $v_t$ moment tensors.
+- **Atomic Serialization:** Flushes to a temporary file (`.tmp`) and commits via atomic filesystem rename, guaranteeing corruption immunity against unexpected process termination.
 
 ---
 
 ### 12. 🔮 Forward-Only Inference Engine ("Use it" / `--use`)
+
 Axiom features an ultra-low-latency forward inference pipeline that completely bypasses gradient calculation:
-* **Interactive Real-Time Prompting:** Users input natural text prompts (`Prompt > `). Axiom dynamically parses, maps vocabulary subwords, and pads/slices into the 128-token context window ($512$ `bfloat16` floats).
-* **Fused Hardware Evaluation:** The input context traverses the PCIe bus via DMA and executes on the Ada Lovelace Tensor Cores via fused CUTLASS EVT kernels in microseconds.
-* **$L_2$ Nearest-Neighbor Decoding:** The 4-dimensional predicted embedding $Y \in \mathbb{R}^{1 \times 4}$ is matched against the vocabulary embedding space via Euclidean distance:
+
+- **Interactive Real-Time Prompting:** Users input natural text prompts (`Prompt > `). Axiom dynamically parses, maps vocabulary subwords, and pads/slices into the 128-token context window ($512$ `bfloat16` floats).
+- **Fused Hardware Evaluation:** The input context traverses the PCIe bus via DMA and executes on the Ada Lovelace Tensor Cores via fused CUTLASS EVT kernels in microseconds.
+- **$L_2$ Nearest-Neighbor Decoding:** The 4-dimensional predicted embedding $Y \in \mathbb{R}^{1 \times 4}$ is matched against the vocabulary embedding space via Euclidean distance:
   $$\hat{t} = \arg\min_{t \in \mathcal{V}} \|\mathbf{y} - \mathbf{e}(t)\|_2^2$$
   The nearest token identifier is resolved and formatted directly back to human-readable strings across text, numerical, or multimodal byte tokens.
 
@@ -339,13 +379,14 @@ Axiom features an ultra-low-latency forward inference pipeline that completely b
 ## 📊 Hardware Saturation & Telemetry HUD
 
 ### The Driver-Level CUDA Profiler vs. The CPU Timer Fallacy
+
 Standard benchmarks rely on CPU timers (`std::chrono`), which are **fundamentally flawed for GPU profiling**. Because CUDA kernel launches and memory copies are asynchronous, the CPU returns immediately while the GPU is still queued.
 
 Axiom uses **hardware-level driver profiling** via `cudaEvent_t` event pairs recorded on active GPU hardware streams. With strict `cudaEventSynchronize(stop_event)` barriers, timing is calculated at nanosecond accuracy directly by the GPU timer clock:
 
 ```text
 ========================================================
-       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION      
+       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION
 ========================================================
 Hardware Device : NVIDIA GeForce RTX 4080 Laptop GPU
 Architecture    : sm_89 (Ada Lovelace)
@@ -384,33 +425,38 @@ VRAM Footprint  : 11061 MB Free / 12281 MB Total
 
 ### The Two-Stage Benchmark Architecture Explained
 
-| Stage | Benchmark Focus | Measured Metrics | What It Physically Proves |
-| :--- | :--- | :--- | :--- |
-| **[1/2] Micro-Perceptron** | **Interactive Dispatch Latency** | **$0.1\text{ ms}$ TTFT**<br>**$\sim 9,300+\text{ tok/s}$** ($0.11\text{ ms/tok}$)<br>**$0.04\text{ GB/s}$** ($<0.1\%$ peak)<br>**$0.0\%\text{ MFU}$** (L1-Resident) | Proves ultra-low driver latency and instant PCIe DMA dispatch. Because all 2,048 weights fit entirely in L1/L2 cache, VRAM bus saturation and MFU are near-zero as expected for a micro-model. |
-| **[2/2] CUTLASS EVT** | **Hardware Saturation Sweep**<br>($M=128, N=4096, K=4096$) | **$0.13\text{ ms}$ Sweep Time**<br>**$33.6\text{ TFLOPs}$ Sustained**<br>**$278.9\text{ GB/s}$** ($64.5\%$ peak)<br>**$49.6\%\text{ MFU}$** (SM Saturation) | Exercises all Streaming Multiprocessors with transformer-scale matrix tiles (34 MB VRAM footprint). Proves the CUTLASS Epilogue Visitor Tree (EVT) kernel saturates Ada Lovelace Tensor Cores and memory bus without kernel-launch overhead. |
+| Stage                      | Benchmark Focus                                            | Measured Metrics                                                                                                                                                    | What It Physically Proves                                                                                                                                                                                                                    |
+| :------------------------- | :--------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **[1/2] Micro-Perceptron** | **Interactive Dispatch Latency**                           | **$0.1\text{ ms}$ TTFT**<br>**$\sim 9,300+\text{ tok/s}$** ($0.11\text{ ms/tok}$)<br>**$0.04\text{ GB/s}$** ($<0.1\%$ peak)<br>**$0.0\%\text{ MFU}$** (L1-Resident) | Proves ultra-low driver latency and instant PCIe DMA dispatch. Because all 2,048 weights fit entirely in L1/L2 cache, VRAM bus saturation and MFU are near-zero as expected for a micro-model.                                               |
+| **[2/2] CUTLASS EVT**      | **Hardware Saturation Sweep**<br>($M=128, N=4096, K=4096$) | **$0.13\text{ ms}$ Sweep Time**<br>**$33.6\text{ TFLOPs}$ Sustained**<br>**$278.9\text{ GB/s}$** ($64.5\%$ peak)<br>**$49.6\%\text{ MFU}$** (SM Saturation)         | Exercises all Streaming Multiprocessors with transformer-scale matrix tiles (34 MB VRAM footprint). Proves the CUTLASS Epilogue Visitor Tree (EVT) kernel saturates Ada Lovelace Tensor Cores and memory bus without kernel-launch overhead. |
 
 ---
 
 ## 🧮 Mathematical Nucleus
 
 ### 1. Autoregressive Prediction
+
 Given a sequence of multimodal tokens $T = \{t_1, t_2, \dots, t_N\}$, the objective is to predict the dense embedding vector of token $t_{i+1}$ given the preceding context window of size $C = 128$ tokens:
 $$X = [\mathbf{e}(t_{i-C+1}), \mathbf{e}(t_{i-C+2}), \dots, \mathbf{e}(t_i)] \in \mathbb{R}^{1 \times K}$$
 where $K = C \times D = 128 \times 4 = 512$ elements.
 
 ### 2. Forward Pass (Linear EVT Epilogue)
+
 $$Y = X \cdot W^T + \mathbf{b}$$
 where:
-* $X \in \mathbb{R}^{1 \times 512}$ (Context Window gathered from `d_embedding_table`)
-* $W \in \mathbb{R}^{4 \times 512}$ (Weight Matrix)
-* $\mathbf{b} \in \mathbb{R}^{1 \times 4}$ (Bias Vector)
-* $Y \in \mathbb{R}^{1 \times 4}$ (Predicted Target Embedding)
+
+- $X \in \mathbb{R}^{1 \times 512}$ (Context Window gathered from `d_embedding_table`)
+- $W \in \mathbb{R}^{4 \times 512}$ (Weight Matrix)
+- $\mathbf{b} \in \mathbb{R}^{1 \times 4}$ (Bias Vector)
+- $Y \in \mathbb{R}^{1 \times 4}$ (Predicted Target Embedding)
 
 ### 3. Loss Formulation
+
 Mean Squared Error (MSE) computed against target token embedding $\mathbf{t} \in \mathbb{R}^{1 \times 4}$:
 $$L = \frac{1}{2} \sum_{k=1}^{4} (y_k - t_k)^2$$
 
 ### 4. Gradient Derivation, Linear Updates, & Embedding Scatter
+
 Using the chain rule with the Linear Epilogue ($dz_k = dy_k$):
 $$\delta_k = \frac{\partial L}{\partial z_k} = \frac{\partial L}{\partial y_k} = y_k - t_k$$
 $$\frac{\partial L}{\partial W_{kj}} = \delta_k \cdot x_j, \quad \frac{\partial L}{\partial b_k} = \delta_k$$
@@ -421,6 +467,7 @@ For each token position $m \in [0, C-1]$ mapping to token ID $T_m$, the scatter 
 $$\mathbf{e}_d(T_m) \leftarrow \mathbf{e}_d(T_m) - \eta \cdot \frac{\partial L}{\partial x_{m, d}}$$
 
 ### 5. Curing Amnesia: Fused AdamW Optimizer Dynamics
+
 Rather than standard SGD, parameter updates incorporate momentum and curvature moments persisted in `optimizer.axiom`:
 $$m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t$$
 $$v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$$
@@ -429,6 +476,7 @@ $$\theta_t = \theta_{t-1} - \eta \left( \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \eps
 where $g_t = \nabla_\theta L$, $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$, and $\lambda = 0.01$ (weight decay).
 
 ### 6. Gradient Stability & Learning Rate Bounds
+
 For a linear step over an unnormalized input vector $X$, the maximum stable learning rate before mathematical divergence is governed by the spectral norm:
 $$\eta_{\max} = \frac{2}{\|X\|_2^2 + 1}$$
 For 512-dimensional inputs with $\|X\|_2^2 \approx 50$, any learning rate $\eta > 0.04$ guarantees oscillatory divergence. Axiom sets $\eta = 0.001$, guaranteeing strict monotonic descent.
@@ -438,7 +486,9 @@ For 512-dimensional inputs with $\|X\|_2^2 \approx 50$, any learning rate $\eta 
 ## 🛡️ Defensive Systems Engineering
 
 ### 1. The Strict Three-Step Pointer Lifecycle
+
 To guarantee zero VRAM leaks and eliminate dangling pointers, every GPU resource adheres to the **Null Guard $\rightarrow$ Free $\rightarrow$ Neutralize** protocol:
+
 ```cpp
 // 1. Null Guard
 if (gpu->d_context_window[i]) {
@@ -450,13 +500,16 @@ if (gpu->d_context_window[i]) {
 ```
 
 ### 2. Concurrency Safety
-* **`std::atomic<bool>` Synchronization:** Pinned memory transfers and buffer swaps utilize atomic flags to prevent torn reads across CPU data loader threads and GPU execution streams.
-* **No Spin-Lock CPU Thrashing:** Stream synchronization uses `cudaStreamSynchronize` and CUDA events (`cudaStreamWaitEvent`), letting idle CPU threads yield naturally without pegging processor cores at 100%.
+
+- **`std::atomic<bool>` Synchronization:** Pinned memory transfers and buffer swaps utilize atomic flags to prevent torn reads across CPU data loader threads and GPU execution streams.
+- **No Spin-Lock CPU Thrashing:** Stream synchronization uses `cudaStreamSynchronize` and CUDA events (`cudaStreamWaitEvent`), letting idle CPU threads yield naturally without pegging processor cores at 100%.
 
 ### 3. Clean DLL Encapsulation
+
 The entire CUDA backend compiles into a standalone dynamic link library (`cuda_transfer.dll`). All GPU internals, `__nv_bfloat16` structs, and CUTLASS templates are encapsulated behind an `extern "C"` API with opaque `void*` pointers.
-* **Zero Header Leakage:** The CPU application compiles cleanly with GCC 14+ (`g++ -std=c++23`) without requiring CUDA headers or MSVC compiler extensions.
-* **Universal Interop:** The compiled `cuda_transfer.dll` can be hooked by Python (via `ctypes`), C#, Rust, or Electron/Node without exposing internal engine mechanics.
+
+- **Zero Header Leakage:** The CPU application compiles cleanly with GCC 14+ (`g++ -std=c++23`) without requiring CUDA headers or MSVC compiler extensions.
+- **Universal Interop:** The compiled `cuda_transfer.dll` can be hooked by Python (via `ctypes`), C#, Rust, or Electron/Node without exposing internal engine mechanics.
 
 ---
 
@@ -569,75 +622,89 @@ Project Axiom features an exhaustive 13-document engineering whitepaper suite lo
 ## 🛠️ Build, Test & Run
 
 ### Prerequisites
-* **Operating System:** Windows 10 / 11 (64-bit)
-* **GPU:** NVIDIA GPU with Compute Capability $\ge$ 8.0 (Ada Lovelace `sm_89`, RTX 40-series recommended)
-* **CUDA Toolkit:** v12.x or v13.x (with `nvcc` on `PATH`)
-* **Host Compilers:**
-  * MSVC Build Tools 2022 (`cl.exe` v14.40+)
-  * GCC 14+ (`g++` with `-std=c++23` support, e.g., MSYS2 UCRT64)
-  * `mingw32-make`
+
+- **Operating System:** Windows 10 / 11 (64-bit)
+- **GPU:** NVIDIA GPU with Compute Capability $\ge$ 8.0 (Ada Lovelace `sm_89`, RTX 40-series recommended)
+- **CUDA Toolkit:** v12.x or v13.x (with `nvcc` on `PATH`)
+- **Host Compilers:**
+  - MSVC Build Tools 2022 (`cl.exe` v14.40+)
+  - GCC 14+ (`g++` with `-std=c++23` support, e.g., MSYS2 UCRT64)
+  - `mingw32-make`
 
 ### 1. Build the Complete Engine
+
 From the `core/` directory:
+
 ```powershell
 cd core
 mingw32-make all
 ```
+
 This automatically invokes:
+
 1. `nvcc` targeting `sm_89` with MSVC `cl.exe` to compile `core/src/CUDA/**/*.cu` into `cuda_transfer.dll`.
 2. `g++ -std=c++23` to link `src/ai.cpp`, `util/optimizer.cpp`, `util/parser.cpp`, and `src/main.cpp` against `cuda_transfer.dll`, producing `app.exe` and `test.exe`.
 
 ---
 
 ### 2. Deep Clean Build & Test Artifacts (`mingw32-make clean`)
+
 To purge all compiled binaries, intermediate objects, libraries, test artifacts, and generated datasets:
+
 ```powershell
 mingw32-make clean
 ```
+
 **Artifacts Purged by `clean`:**
-* **Executables:** `app.exe`, `test.exe`, and any temporary test executables (`test_*.exe`)
-* **Dynamic & Import Libraries:** `cuda_transfer.dll`, `cuda_transfer.lib`, `cuda_transfer.exp`
-* **Compiler Object Caches:** `*.o`, `*.obj`, `*.exp`, `*.lib`, `*.tmp`
-* **Test Scratch Checkpoints:** `test_*.axiom`, `corrupt_*.axiom`
-* **Generated Binary Datasets:** `database/*.bin` (e.g., `embedded_data.bin`)
-*(Note: Pre-trained production checkpoints such as `weights.axiom` are preserved.)*
+
+- **Executables:** `app.exe`, `test.exe`, and any temporary test executables (`test_*.exe`)
+- **Dynamic & Import Libraries:** `cuda_transfer.dll`, `cuda_transfer.lib`, `cuda_transfer.exp`
+- **Compiler Object Caches:** `*.o`, `*.obj`, `*.exp`, `*.lib`, `*.tmp`
+- **Test Scratch Checkpoints:** `test_*.axiom`, `corrupt_*.axiom`
+- **Generated Binary Datasets:** `database/*.bin` (e.g., `embedded_data.bin`)
+  _(Note: Pre-trained production checkpoints such as `weights.axiom` are preserved.)_
 
 ---
 
 ### 3. Run the Automated Test Suites (Platinum Guarantee)
+
 Axiom includes **200 automated unit, integration, and resilience tests** across 9 comprehensive suites (100% Green, 0 failed):
+
 ```powershell
 .\test.exe --test
 ```
 
 ```text
 ============================================
-  ALL TEST SUITES PASSED (100% GREEN)       
+  ALL TEST SUITES PASSED (100% GREEN)
 ============================================
 ```
 
 **Test Suite Breakdown:**
-* `test_path`: 4 tests (Filesystem directory resolution)
-* `test_ifstream`: 6 tests (Zero-syscall streaming descriptor validation)
-* `test_embeddings`: 14 tests (Deterministic BF16 embedding table invariants)
-* `test_tokenization`: 10 tests (Orthogonal multimodal namespace offsets)
-* `test_optimizer`: 38 tests (4-tier streaming logistics, carry-forward Seam, lock safety)
-* `test_cuda_transfer`: 40 tests (DMA transfers, CUTLASS EVT saturation, backward gradients)
-* `test_transfer`: 7 tests (GPU master weights upload/download roundtrips)
-* `test_ai`: 44 tests (Initialization, convergence, atomic `weights.axiom` serialization)
-* `test_inference`: 37 tests (Tokenization edge cases, L2 clustering, VRAM leak immunity, corruption rejection)
+
+- `test_path`: 4 tests (Filesystem directory resolution)
+- `test_ifstream`: 6 tests (Zero-syscall streaming descriptor validation)
+- `test_embeddings`: 14 tests (Deterministic BF16 embedding table invariants)
+- `test_tokenization`: 10 tests (Orthogonal multimodal namespace offsets)
+- `test_optimizer`: 38 tests (4-tier streaming logistics, carry-forward Seam, lock safety)
+- `test_cuda_transfer`: 40 tests (DMA transfers, CUTLASS EVT saturation, backward gradients)
+- `test_transfer`: 7 tests (GPU master weights upload/download roundtrips)
+- `test_ai`: 44 tests (Initialization, convergence, atomic `weights.axiom` serialization)
+- `test_inference`: 37 tests (Tokenization edge cases, L2 clustering, VRAM leak immunity, corruption rejection)
 
 ---
 
 ### 3. Run the Hardware Benchmark HUD (`--benchmark`)
+
 To execute the hardware profiler and display the 4-variable Hardware Saturation HUD:
+
 ```powershell
 .\app.exe --benchmark
 ```
 
 ```text
 ========================================================
-       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION      
+       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION
 ========================================================
 Hardware Device : NVIDIA GeForce RTX 4080 Laptop GPU
 Architecture    : sm_89 (Ada Lovelace)
@@ -677,15 +744,18 @@ VRAM Footprint  : 11061 MB Free / 12281 MB Total
 ---
 
 ### 4. Launch Direct Forward Inference ("Use it")
+
 To interact with the pre-trained model in real time:
+
 ```powershell
 .\app.exe --use
 ```
 
 **Interactive Prompt Session:**
+
 ```text
 ========================================================
-             AXIOM INFERENCE ENGINE ('Use it')          
+             AXIOM INFERENCE ENGINE ('Use it')
 ========================================================
 [..] Loading model weights from: weights.axiom
 [OK] Model weights successfully loaded into VRAM.
@@ -716,7 +786,9 @@ Prompt > The quick brown fox
 ---
 
 ### 5. Launch Continuous Training (`--train`)
+
 To train or fine-tune the neural engine:
+
 ```powershell
 # Continuous training with interactive controls:
 .\app.exe --train
@@ -726,21 +798,24 @@ To train or fine-tune the neural engine:
 ```
 
 **Interactive Runtime Controls:**
-* `[S]`: Checkpoint current weights directly to `weights.axiom`.
-* `[R]`: Wipe neural parameters and re-initialize brain to chaotic state in $<1\text{ ms}$.
-* `[Q]`: Save checkpoint and cleanly exit the training loop.
+
+- `[S]`: Checkpoint current weights directly to `weights.axiom`.
+- `[R]`: Wipe neural parameters and re-initialize brain to chaotic state in $<1\text{ ms}$.
+- `[Q]`: Save checkpoint and cleanly exit the training loop.
 
 ---
 
 ### 6. Interactive Console Menu (Default Execution)
+
 Launching without arguments presents the full interactive terminal menu:
+
 ```powershell
 .\app.exe
 ```
 
 ```text
 ======================================
-           Welcome to AXIOM           
+           Welcome to AXIOM
 ======================================
 [1] Use it (Inference)
 [2] Train it (Training)
@@ -748,7 +823,7 @@ Launching without arguments presents the full interactive terminal menu:
 [4] Benchmark Hardware (Telemetry HUD)
 [5] Bulk Training (asset_sample)
 [6] Exit
-> 
+>
 ```
 
 ---
@@ -759,22 +834,24 @@ Project Axiom is designed to train and infer across multiple modalities with sil
 
 ### 🧭 Operational Modes Matrix
 
-| Command / Option | Primary Use Case | Supported Data Modalities | Telemetry & Output |
-| :--- | :--- | :--- | :--- |
-| **`.\app.exe`** | Interactive Dashboard | All (Text, Numbers, Images, Video, Voice, Bulk) | Real-time menus, training loss reports, HUDs |
-| **`.\app.exe --use`** | Low-latency inference | Text prompts (autoregressive 128 tokens) | TTFT, decode throughput (tok/s), predicted token ID & word |
-| **`.\app.exe --use --vocab <file>`** | Inference with custom dictionary | Text prompts & domain vocabularies | Restores custom `.vocab` file, $O(1)$ reverse text decoding |
-| **`.\app.exe --train [N]`** | Batch/continuous training | Interactive prompt / sample data | Step-by-step MSE loss reduction, % convergence |
-| **`.\app.exe --bulk [N]`** | Mass bulk dataset training | All files in `asset_sample` (Text, PDF, Img, Vid, Voice, 3D) | Auto-format detection, multi-file token counts, MSE loss |
-| **`.\app.exe --benchmark`** | Hardware profiling | Tensor sweeps & micro-inferences | 4-variable HUD (TTFT, tok/s, GB/s bus, % MFU) |
-| **`.\test.exe --test`** | Full validation | Unit & integration assertions across all layers | 9 test suites, 206 automated checks (100% Green) |
+| Command / Option                     | Primary Use Case                 | Supported Data Modalities                                    | Telemetry & Output                                          |
+| :----------------------------------- | :------------------------------- | :----------------------------------------------------------- | :---------------------------------------------------------- |
+| **`.\app.exe`**                      | Interactive Dashboard            | All (Text, Numbers, Images, Video, Voice, Bulk)              | Real-time menus, training loss reports, HUDs                |
+| **`.\app.exe --use`**                | Low-latency inference            | Text prompts (autoregressive 128 tokens)                     | TTFT, decode throughput (tok/s), predicted token ID & word  |
+| **`.\app.exe --use --vocab <file>`** | Inference with custom dictionary | Text prompts & domain vocabularies                           | Restores custom `.vocab` file, $O(1)$ reverse text decoding |
+| **`.\app.exe --train [N]`**          | Batch/continuous training        | Interactive prompt / sample data                             | Step-by-step MSE loss reduction, % convergence              |
+| **`.\app.exe --bulk [N]`**           | Mass bulk dataset training       | All files in `asset_sample` (Text, PDF, Img, Vid, Voice, 3D) | Auto-format detection, multi-file token counts, MSE loss    |
+| **`.\app.exe --benchmark`**          | Hardware profiling               | Tensor sweeps & micro-inferences                             | 4-variable HUD (TTFT, tok/s, GB/s bus, % MFU)               |
+| **`.\test.exe --test`**              | Full validation                  | Unit & integration assertions across all layers              | 9 test suites, 206 automated checks (100% Green)            |
 
 ---
 
 ### 🎨 Detailed Modality Training Scenarios
 
 #### Scenario A: Training on Pure Text Data
+
 Use this scenario to train the neural network on language patterns, technical documentation, code snippets, or conversational text.
+
 1. Launch `.\app.exe` (or run `.\app.exe --train`).
 2. At the main menu, type `2` and press Enter for **`[2] Train it (Training)`**.
 3. At the data selection prompt, type `1` and press Enter for **`[1] Text`**.
@@ -793,7 +870,9 @@ Use this scenario to train the neural network on language patterns, technical do
 ---
 
 #### Scenario B: Training on Numerical & Telemetry Data
+
 Use this scenario for scientific sensor data, financial tickers, mathematical streams, or telemetry metrics.
+
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. At the data type menu, type `2` for **`[2] Number`**.
 3. Enter space-delimited numerical values (positive floats or integers):
@@ -809,7 +888,9 @@ Use this scenario for scientific sensor data, financial tickers, mathematical st
 ---
 
 #### Scenario C: Training on Image Assets (Computer Vision)
+
 Use this scenario to train the neural network on visual data (JPEG, PNG, WebP, BMP).
+
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. At the data type menu, type `3` for **`[3] Image`**.
 3. Enter the image path:
@@ -826,7 +907,9 @@ Use this scenario to train the neural network on visual data (JPEG, PNG, WebP, B
 ---
 
 #### Scenario D: Training on Video Assets (Temporal Vision)
+
 Use this scenario to train on temporal visual sequences (MP4, MKV, AVI).
+
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. At the data type menu, type `4` for **`[4] Video`**.
 3. Enter the video path:
@@ -843,7 +926,9 @@ Use this scenario to train on temporal visual sequences (MP4, MKV, AVI).
 ---
 
 #### Scenario E: Training on Audio / Voice Assets (Acoustic Waveforms)
+
 Use this scenario to train on voice recordings, speech, or acoustic sensor waveforms (OGG, WAV, MP3).
+
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. At the data type menu, type `5` for **`[5] Voice`**.
 3. Enter the audio file path:
@@ -860,7 +945,9 @@ Use this scenario to train on voice recordings, speech, or acoustic sensor wavef
 ---
 
 #### Scenario F: Multimodal Early Fusion (Text + Media Pairing)
+
 Use this scenario to teach the network associations between language descriptions and raw visual or acoustic data (e.g., image captioning, video description, or voice transcription).
+
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. Select data type `[1] Text`.
 3. Enter your description text:
@@ -881,7 +968,9 @@ Use this scenario to teach the network associations between language description
 ---
 
 #### Scenario G: Scientific Sensor Fusion (Numbers + Media Pairing)
+
 Use this scenario to align numerical telemetry (temperatures, radar distances, timestamps) with sensor feeds.
+
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. Select data type `[2] Number`.
 3. Enter numeric readings: `101.3 298.15 45.2 0.98 12.4`
@@ -893,7 +982,9 @@ Use this scenario to align numerical telemetry (temperatures, radar distances, t
 ---
 
 #### Scenario H: Bulk Dataset Ingestion from `asset_sample` (Mass Files & Repeat Cycle)
+
 Use this scenario to feed hundreds or thousands of arbitrary files into the model at once without typing individual paths.
+
 1. Place any training files into [`core/asset_sample/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample):
    - **Text & Notes:** `.txt`, `.md`, `.csv`, `.json`, `.py`, `.cpp`, `.log`, etc.
    - **Documents:** `.pdf`, `.docx` (routed through `decom_doc` for clean text & equation extraction)
@@ -901,6 +992,7 @@ Use this scenario to feed hundreds or thousands of arbitrary files into the mode
    - **Videos:** `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm` (routed through `decom_video`)
    - **Audio & Voice:** `.ogg`, `.wav`, `.mp3`, `.flac`, `.aac` (routed through `decom_audio`)
 2. Launch `.\app.exe` $\to$ Select Option **`[5] Bulk Training (asset_sample)`**, or execute:
+
    ```powershell
    # Continuous bulk training
    .\app.exe --bulk
@@ -908,6 +1000,7 @@ Use this scenario to feed hundreds or thousands of arbitrary files into the mode
    # Or targeted batch steps with automatic save
    .\app.exe --bulk 50000
    ```
+
 3. **Internal Execution & Multi-Gigabyte Progress Reporting:**
    - Axiom recursively walks `core/asset_sample/`, sorting all files alphabetically for deterministic execution.
    - Any `archive/` subfolder is automatically excluded from directory scans to avoid re-ingesting archived data.
@@ -926,18 +1019,20 @@ Use this scenario to feed hundreds or thousands of arbitrary files into the mode
 
 During training, Axiom's continuous engine listens for non-blocking keyboard interrupts (`_kbhit()` / `_getch()`):
 
-| Hotkey | Action | Mechanism |
-| :---: | :--- | :--- |
-| **`[S]`** | **Atomic Save Checkpoint** | Drains GPU streams, downloads FP32 master weights, master embeddings, and AdamW moments ($m_t, v_t$), writing atomically to `weights.axiom` and `optimizer.axiom`. |
+|  Hotkey   | Action                       | Mechanism                                                                                                                                                                        |
+| :-------: | :--------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`[S]`** | **Atomic Save Checkpoint**   | Drains GPU streams, downloads FP32 master weights, master embeddings, and AdamW moments ($m_t, v_t$), writing atomically to `weights.axiom` and `optimizer.axiom`.               |
 | **`[R]`** | **Chaos Reset (Wipe Brain)** | Re-initializes all weights on CPU via Mersenne Twister (`std::mt19937`), resets optimizer moments, pushes chaotic weights to VRAM in $<1\text{ ms}$, and restarts loss tracking. |
-| **`[Q]`** | **Save & Clean Exit** | Performs atomic checkpoint writes (`weights.axiom` & `optimizer.axiom`), releases pinned host RAM buffers, neutralizes GPU pointers, and exits cleanly. |
+| **`[Q]`** | **Save & Clean Exit**        | Performs atomic checkpoint writes (`weights.axiom` & `optimizer.axiom`), releases pinned host RAM buffers, neutralizes GPU pointers, and exits cleanly.                          |
 
 **Monitoring Convergence:**
 Every 10,000 steps, Axiom reports live loss metrics:
+
 ```text
 [Step 10000] loss 0.084120  (-92.3% vs first)
 [Step 20000] loss 0.041050  (-96.2% vs first)
 ```
+
 A falling loss number and negative percentage prove that the model weights are converging on the training patterns.
 
 ---
@@ -945,6 +1040,7 @@ A falling loss number and negative percentage prove that the model weights are c
 ### 🔍 Interactive Inference Session ("Use it")
 
 To run inference and test what the model has learned:
+
 1. Run `.\app.exe --use` (or select Option `[1]` from the main menu).
 2. Axiom automatically discovers and loads `weights.axiom` into VRAM.
 3. Enter your prompt text:
@@ -967,10 +1063,13 @@ To run inference and test what the model has learned:
 ### 📊 Hardware Saturation Telemetry Benchmark (`--benchmark`)
 
 To profile and verify that your GPU's Tensor Cores and memory bus are performing at peak efficiency:
+
 ```powershell
 .\app.exe --benchmark
 ```
+
 Axiom executes a rigorous two-stage hardware benchmark:
+
 1. **Benchmark 1/2 (Inference Dispatch Latency):** Measures 100 rapid hardware-timed forward passes of the micro-perceptron model.
 2. **Benchmark 2/2 (CUTLASS EVT Kernel Saturation):** Allocates a transformer-scale 34 MB tensor problem ($M=128, N=4096, K=4096$) and executes 50 hardware-timed fused GEMM + Bias + ReLU passes directly across all Streaming Multiprocessors.
    - On an **RTX 4080 Laptop GPU**, this demonstrates **>50% MFU** and **>300 GB/s** sustained bandwidth saturation.
@@ -980,6 +1079,7 @@ Axiom executes a rigorous two-stage hardware benchmark:
 ### 🤖 Headless Scripting & Automated CI/CD Pipelines
 
 For automated training or deployment scripts without user interaction:
+
 ```powershell
 # Train on prompt/sample for exactly 50,000 steps and save weights automatically:
 .\app.exe --train 50000
@@ -1000,6 +1100,7 @@ For automated training or deployment scripts without user interaction:
 ---
 
 ### 🚀 Version 1.0 (Released & Validated Foundations)
+
 - [x] **Hardware Precision:** Native `std::bfloat16_t` CPU/GPU conversion, cutting memory bandwidth by 50%.
 - [x] **Asynchronous Data Logistics:** Zero-syscall streaming loader with persistent file descriptors.
 - [x] **The Seam:** Surgical carry-forward mechanism eliminating boundary amnesia across 100,000-token chunks.
@@ -1014,6 +1115,7 @@ For automated training or deployment scripts without user interaction:
 - [x] **Automated Verification Suite:** Complete unit, integration, and resilience test harness (100% Green).
 
 ### 🌌 Version 2.0 (Frontier Multimodal Scaling Roadmap)
+
 - [ ] **Phase 1: Ingestion Sanitization & Specialized Decompressors**
   - Connect `decom_doc`, `decom_image`, `decom_audio`, and `decom_video` to strip container entropy before tokenization.
   - Enforce the Four-Stage Ingestion Pipeline across all bulk assets.
