@@ -2,6 +2,7 @@
 #include "Identifier.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 
