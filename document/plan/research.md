@@ -9,12 +9,33 @@ This comprehensive architectural report provides a forensic analysis of the exis
 Retrospective Analysis of Current Codebase Operations
 An architectural audit of the project’s recent development cycles reveals a hybrid of exceptional systems engineering and precarious concurrency patterns. The implementation of the parser, the embedding layer, and the preliminary data loader establishes a solid mathematical foundation, but the synchronization mechanisms require immediate and extensive refactoring to survive in a concurrent hardware environment.
 
-Architectural Triumphs: Precision and Namespace Isolation
-The codebase demonstrates several highly optimized design decisions that reflect a mature understanding of deep learning infrastructure. The migration from floating-point double identifiers to unsigned 32-bit integers (uint32_t) prevents the precision loss and mantissa degradation inherent to floating-point arithmetic when handling categorical token identifiers. Furthermore, establishing a 10,000,000-slot numerical offset between text, numerical, image, video, and voice modalities guarantees that categorical namespaces will never collide, ensuring deterministic hash mapping during the embedding phase of inference.
+Architectural Triumphs: Precision and Dense Early-Fusion Codebook
+The codebase demonstrates several highly optimized design decisions that reflect a mature understanding of deep learning infrastructure. The migration from floating-point double identifiers to unsigned 32-bit integers (`uint32_t`) prevents precision loss and mantissa degradation when handling categorical token identifiers. 
 
-The most critical success in the current iteration is the precision refactoring for Tensor Cores. Downgrading the massive 33.1 million floating-point sequence from 64-bit double precision to 16-bit std::bfloat16_t (Brain Float) aligns the software directly with the physical capabilities of modern NVIDIA silicon. Standard 64-bit precision is strictly incompatible with NVIDIA Tensor Cores, which are hardwired to multiply matrices of 16-bit or 32-bit numbers. The bfloat16 format preserves the 8-bit exponent of a 32-bit float, preventing the gradient underflow and overflow issues inherent to standard fp16, while concurrently slicing memory bandwidth requirements and VRAM footprint by 75 percent. The successful compilation of this C++23 feature natively aligns the CPU memory layout with the \_\_nv_bfloat16 hardware type expected by the Ada Lovelace (sm_89) and Hopper (sm_90) architectures.
+While the initial prototype utilized wide 10,000,000-slot numerical offsets between modalities, this introduced a severe sparse-memory wall when transitioning to persistent VRAM embedding tables. Under Project Axiom v2.0, this has evolved into a **Dense Contiguous Early-Fusion Codebook ($V = 65,536$)** paired with a **unified text and number namespace (`main_dictionary`)**. Unifying numbers directly into the linguistic vocabulary preserves critical physical co-occurrence semantics (e.g., `"gravity"` and `"9.8"`), while partitioning the contiguous 16-bit address space into dedicated blocks:
+- **`[0 .. 3]`:** Special reserved tokens (`<PAD>`, `<UNK>`, `<BOS>`, `<EOS>`)
+- **`[4 .. 64,511]`:** Text words, subwords, numbers, and mathematical symbols (`main_dictionary`)
+- **`[64,512 .. 64,767]`:** Discrete visual bytes (`0x00 .. 0xFF`)
+- **`[64,768 .. 65,023]`:** Discrete acoustic bytes (`0x00 .. 0xFF`)
+- **`[65,024 .. 65,535]`:** Reserved expansion slots
+
+The most critical success in the current iteration is the precision refactoring for Tensor Cores. Downgrading the massive 33.1 million floating-point sequence from 64-bit double precision to 16-bit `std::bfloat16_t` (Brain Float) aligns the software directly with the physical capabilities of modern NVIDIA silicon. Standard 64-bit precision is strictly incompatible with NVIDIA Tensor Cores, which are hardwired to multiply matrices of 16-bit or 32-bit numbers. The bfloat16 format preserves the 8-bit exponent of a 32-bit float, preventing the gradient underflow and overflow issues inherent to standard fp16, while concurrently slicing memory bandwidth requirements and VRAM footprint by 75 percent. The successful compilation of this C++23 feature natively aligns the CPU memory layout with the `__nv_bfloat16` hardware type expected by the Ada Lovelace (`sm_89`) and Hopper (`sm_90`) architectures.
 
 Furthermore, the implementation of the two-tiered streaming data loader correctly resolves the Out-Of-Memory (OOM) paradigm. By loading 100,000 tokens into host RAM and slicing them into 128-token context windows, the architecture perfectly mimics the batch-feeding mechanisms of professional frameworks, ensuring the host system is never overwhelmed by gigabyte-scale multimedia files. At the boundary of these 100,000-token chunks, slicing algorithms natively suffer from historical amnesia, as the context window splits across memory loads. The developer's implementation of a carry-forward mechanism—copying the last elements of the exhausted buffer to the front of the newly loaded buffer—is a flawless execution of sequential continuity that prevents the neural network from experiencing data corruption at the chunk seams.
+
+The Multimodal Ingestion Trap & The Four-Stage Pipeline
+A fundamental realization derived from frontier models (GPT-4o, Gemini) is that **reading raw compressed bytes directly into a discrete tokenizer is a catastrophic trap**. When `.pdf`, `.docx`, `.mp4`, or compressed image files are streamed as raw byte streams, the neural network spends its finite representational capacity trying to reverse-engineer entropy-coding algorithms (zlib, DEFLATE, Huffman, h.264) rather than learning linguistic semantics, physical laws, or visual geometry.
+
+To eliminate this entropy barrier, Project Axiom implements a strict **Four-Stage Multimodal Ingestion Pipeline**:
+1. **The Identifier (The Switchboard):** Inspects file headers, magic bytes (`0xFF 0xD8` for JPEG, `%PDF` for PDF), or extensions to route incoming data to the appropriate handler before any parsing occurs.
+2. **The Decompressor (The Extractor):** Strips away container bitstreams and compression wrappers. For `.pdf` and `.docx`, it extracts clean UTF-8 text and mathematical equations; for `.mp4`, it decodes raw RGB pixel frames; for `.wav`, it strips RIFF headers to output raw linear PCM audio waveforms.
+3. **The Sanitizer & Tokenizer (The Quantizer):** Cleans extracted text (lowercasing, punctuation stripping) and maps data to dense integer IDs within the $0 \dots 65,535$ codebook. Because extraction precedes tokenization, words from PDFs and TXT files receive identical token IDs.
+4. **The Embedder (The VRAM Matrix):** Transmits compact 128-token integer sequences across PCIe, where a CUDA gather kernel pulls 32D geometric vectors directly from `d_embedding_table` in VRAM.
+
+### Dual Ingestion Workflows
+The pipeline cleanly bifurcates based on input source:
+- **Workflow 1 (File Path / Bulk Ingestion):** Full four-stage processing (`Identifier` $\to$ `Decompressor` $\to$ `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder`).
+- **Workflow 2 (Raw Manual CLI Text):** Bypasses the Identifier and Decompressor entirely (as user strings are already pure uncompressed UTF-8 semantics), funnelling directly into `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder`.
 
 Architectural Liabilities: Concurrency and the Spin-Lock Trap
 Despite the robust data routing, the control flow and synchronization logic contain critical vulnerabilities that violate standard concurrent programming paradigms. The ram_to_contextWindow function utilizes a while (training_in_use) loop to pause the data loader until the neural network finishes computing. This constructs a catastrophic spin-lock. In a single-threaded environment, this causes an inescapable deadlock because the CPU cannot exit the while loop to execute the neural network code that would eventually release the lock. In a multi-threaded environment, polling a primitive boolean without explicit memory barriers (such as std::atomic with std::memory_order_acquire) causes torn reads and undefined behavior across CPU cores. It also pins a CPU core at 100 percent utilization, generating unnecessary thermal throttling and wasting power on busy-waiting.
@@ -51,12 +72,27 @@ Modern NVIDIA architectures feature independent DMA copy engines and Streaming M
 
 To manage the synchronization between the host data loader and the GPU without resorting to primitive spin-locks, the architecture should employ lock-free Single-Producer Single-Consumer (SPSC) ring buffers. The host enqueues pointers to ready buffers, and the GPU consumes them. By utilizing std::atomic variables with std::memory_order_release and std::memory_order_acquire, the threads safely exchange state without ever invoking kernel-level mutexes, preventing deadlocks and priority inversion. When cross-stream dependencies are required on the GPU itself, cudaEvent_t markers provide a zero-CPU-overhead mechanism to force one stream to wait for another.
 
-Phase III: Hardware Computation and Tensor Core Saturation
-With data successfully arriving asynchronously in the GPU's Video Random Access Memory (VRAM), the Perceptron requires a mathematical implementation that strictly targets the hardware multipliers. The AI structure currently initializes its 512×4 weight matrix with random, chaotic floating-point numbers. This is mathematically critical. Initializing a weight matrix with all zeros induces absolute symmetry; every calculation in the network results in zero, and the subsequent backpropagation gradients apply identical updates to every parameter. Symmetry breaking ensures every parameter navigates a distinct trajectory through the loss landscape, allowing the 2,048 weights to learn unique features rather than collapsing into identical clones.
+Phase III: Hardware Computation, Epilogue Fusion, and Learnable VRAM Embeddings
+With data successfully arriving asynchronously in the GPU's Video Random Access Memory (VRAM), the Perceptron requires a mathematical implementation that strictly targets the hardware multipliers. The AI structure initializes its 512×4 weight matrix with random, chaotic floating-point numbers. Initializing with non-zero chaos breaks symmetry: every parameter navigates a distinct trajectory through the loss landscape, allowing the weights to learn unique geometric features rather than collapsing into identical clones.
 
-The neural network forward pass, defined by the equation y=ReLU(Wx+b), is executed via a General Matrix Multiply (GEMM) operation. Writing a custom CUDA C++ kernel using standard nested for loops will force the compiler to utilize legacy FP32 CUDA cores, yielding less than five percent of the RTX 4080's peak compute capabilities. To engage the hardware Tensor Cores, the architecture must utilize NVIDIA's cuBLAS library or the open-source CUTLASS C++ templates.
+The General Matrix Multiply (GEMM) forward pass targets NVIDIA Tensor Cores natively in `__nv_bfloat16` via CUTLASS v4.8.0 templates (`cutlass::gemm::device::GemmUniversalAdapter`). Crucially, in Phase 4 of development, fusing non-linear ReLU into the EVT epilogue against signed sinusoidal targets induced the fatal "Dying ReLU" collapse, permanently freezing all activations at zero. To resolve this, Project Axiom replaced the epilogue with a **Linear Identity EVT Store** ($y = Wx + b$) and un-gated backward gradients ($dz = dy$), completely restoring active continuous descent across the full $[-1.0, +1.0]$ coordinate space.
 
-The data must be strictly passed into these libraries as \_\_nv_bfloat16, ensuring that the Tensor Cores perform massive parallel multiplication without implicit upcasting penalties. Furthermore, to prevent launching three sequential kernels—one for matrix multiplication, one for bias addition, and one for the Rectified Linear Unit (ReLU) activation—the framework should utilize CUTLASS Epilogue Visitor Trees (EVT). EVT fuses the bias addition and the non-linear activation function directly into the GEMM kernel's shared memory registers before the data is written back to global VRAM. Because global memory access is orders of magnitude slower than shared memory or register access, this fusion drastically reduces memory bandwidth requirements and maximizes the arithmetic intensity of the operation.
+Furthermore, Project Axiom eliminates synthetic sine-wave coordinates (`sin(id * (d+1))`), replacing them with a **Learnable VRAM Embedding Matrix** ($65,536 \times 32$ in `__nv_bfloat16`):
+- **PCIe Bandwidth Inversion:** The host transmits only 128 integer token IDs (512 bytes) per context window instead of 8,192 bytes of uncompressed floats, slashing PCIe traffic by 93.75%.
+- **Forward Gather Kernel:** A branchless CUDA kernel gathers 32D geometric vectors directly from `d_embedding_table` into `d_context_window` in VRAM.
+- **Backward Scatter Kernel:** Input gradients ($dL/dx$) are backpropagated into an FP32 master table (`d_table_master`) using `atomicAdd`, dynamically pulling semantically related concepts (e.g., `"bulk"` and `"training"`) into identical geometric clusters over training epochs.
+
+Phase III-B: Curing AI Amnesia (The Optimizer State)
+Standard neural networks suffer from total amnesia: restarting training resets gradient velocity, forcing the engine to rediscover optimization trajectories. Project Axiom solves this by persisting the full **Optimizer State** in a dedicated binary companion file (`optimizer.axiom`):
+- **First Moment ($m_t$, Momentum/Velocity):** Preserves directional learning inertia across sessions.
+- **Second Moment ($v_t$, Variance/Volatility):** Tracks per-parameter learning rate scaling, dampening volatile weights.
+- A fused AdamW CUDA kernel updates these states in VRAM, allowing the model to resume training at full velocity without cold-start divergence.
+
+Phase III-C: The Output Codecs / Detokenizers (The Output Compressor)
+A generative multimodal engine outputs continuous probability distributions or discrete token sequences rather than formatted `.mp4` or `.pdf` files. To translate mathematical activations back into human-perceptible media, the engine implements dedicated **Output Codecs**:
+- **Text Detokenizer:** Reverses integer IDs into UTF-8 token strings via the vocabulary map.
+- **Visual Codec:** Unrolls discrete visual tokens into spatial RGB pixel arrays and wraps them in an image/video container.
+- **Acoustic Codec:** Converts discrete acoustic tokens into linear PCM waveforms and serializes them to audio files.
 
 Compute Strategy Precision Format Kernel Execution Tensor Core Utilization Memory Bandwidth Cost
 Naive C++ Loops 64-bit double Three separate kernels 0% (Fallback to CUDA Cores) Extreme (Multiple VRAM round-trips)
@@ -100,12 +136,19 @@ Every mathematical operation (e.g., add, matmul) must route through a central C+
 
 Crucially, this architecture inherently supports automatic differentiation. If the tensor's key includes Autograd, the dispatcher intercepts the call, dynamically records the operation's metadata in the backward computational graph, strips the autograd key, and then re-dispatches the operation to the appropriate hardware kernel. To manage the combinatorial explosion of operators and backends, the system should adopt a declarative approach, utilizing configuration files (akin to PyTorch's native_functions.yaml) to auto-generate the C++ routing boilerplate, type conversions, and Python bindings. This cleanly separates device-agnostic algorithmic logic from hardware-specific kernel optimization, paving the way for seamless integration of specialized backends like OpenVINO or custom hardware accelerators in the future.
 
+Phase VII-B: Sparse Mixture of Experts (MoE) Architecture
+Currently, Axiom evaluates all inputs against a single dense weight matrix. For massive multimodal scaling without proportional computational costs, the architecture introduces **Sparse Mixture of Experts (MoE)**:
+- **Expert Partitioning:** Deep layers are divided into independent expert blocks (e.g., 8 specialized weight stacks).
+- **Gating / Router Network:** A lightweight routing layer evaluates incoming token representations and dynamically dispatches tokens to Top-1 or Top-2 experts (e.g., visual tokens route to visual experts, textual logic to language experts).
+- **Zero-Compute Inactive Pruning:** Inactive experts consume zero arithmetic FLOPs on Tensor Cores, keeping inference latency minimal while expanding effective parameter capacity.
+
 Conclusions and Scaling Recommendations
-The native C++ and CUDA deep learning engine has successfully crossed the primary developmental chasm. By refactoring the fundamental data types to std::bfloat16_t and isolating categorical namespaces with wide offsets, the data is now properly formatted, safely scaled, and deterministically initialized to prevent symmetry collapse during backpropagation. The dual-compiler toolchain utilizing nvcc and g++ is fully operational.
+The native C++ and CUDA deep learning engine has successfully crossed the primary developmental chasm. By refactoring the fundamental data types to `std::bfloat16_t`, unifying text and numbers into a single `main_dictionary`, establishing a dense contiguous early-fusion codebook ($V = 65,536$), and deterministically initializing weights with non-zero chaos, the data is properly formatted, safely scaled, and mathematically protected against Dying ReLU collapse. The dual-compiler toolchain utilizing nvcc and g++ is fully operational.
 
-However, continuing to govern the GPU with sequential, CPU-bound logic will invariably strangle the hardware. The immediate critical path requires abandoning pageable std::vector transfers in favor of cudaHostAllocWriteCombined pinned memory, completely bypassing the host cache hierarchy to maximize PCIe throughput. Concurrently, the engine must dismantle the existing spin-lock mechanisms, replacing them with multi-stream double buffering governed by lock-free SPSC queues.
-
-Once the data is flowing asynchronously, the integration of CUTLASS for Tensor Core execution, followed by the deployment of a PyTorch-style BFC Caching Allocator, will stabilize VRAM utilization. Ultimately, adopting an ATen-style dispatch architecture and PagedAttention virtual memory management will elevate this project from a custom educational script into a high-performance, modular deep learning engine capable of operating at the theoretical thermodynamic limits of the underlying NVIDIA silicon.
+Moving forward, the critical path executes across three core engineering vectors:
+1. **The Multimodal Ingestion Pipeline:** Enforce the Four-Stage Pipeline (`Identifier` $\to$ `Decompressor` $\to$ `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder`) across bulk assets while allowing raw manual CLI text to bypass file-decompression stages directly into sanitization.
+2. **GPU Memory & Latency Logistics:** Invert PCIe dataflow by streaming compact 128-token ID sequences across `cudaHostAllocWriteCombined` pinned memory, expanding to 32D vectors in VRAM via branchless CUDA gather kernels and learning representations via `atomicAdd` scatter kernels.
+3. **Curing AI Amnesia & Scaling:** Persist optimizer velocity ($m_t, v_t$) in `optimizer.axiom` so training velocity is preserved across restarts, before scaling through BFC caching allocators, PagedAttention, CUDA Graph DAGs, and Sparse Mixture of Experts.
 
 report.md
 
@@ -349,31 +392,36 @@ Opens in a new window
 guillesanbri.com
 PyTorch Compilation: From TorchScript to torch.compile - Guillesanbri
 
-This architectural roadmap outlines a rigorous, mathematically sound transition from a sequential CPU-bound prototype to a fully asynchronous, stream-ordered deep learning pipeline. The foundational work—specifically the 10-million-slot multimodal token offset and the native C++23 integration of `std::bfloat16_t`—establishes a deterministic and memory-efficient base.
+This architectural roadmap outlines a rigorous, mathematically sound transition from a sequential CPU-bound prototype to a fully asynchronous, stream-ordered deep learning pipeline. The foundational work—specifically the native C++23 integration of `std::bfloat16_t`, the dense early-fusion codebook ($V = 65,536$), and the unified text/number `main_dictionary`—establishes a deterministic and memory-efficient base.
 
 However, scaling this custom framework to fully saturate an RTX 4080 requires completely dismantling the current synchronous paradigms. Moving forward, the framework must treat the PCIe bus and VRAM as continuous, asynchronous streams rather than discrete, blocking stages.
 
 Here is the strategic breakdown of the migration path, organized by execution priority:
 
-### 1. Immediate Refactoring: The Asynchronous Data Pipeline (Phases I & II)
+### 1. Ingestion & Asynchronous Data Pipeline (Phases I & II)
 
-The most critical bottleneck in the current implementation is the combination of spin-locks and pageable memory transfers. The hardware is being starved while the CPU waits.
+The most critical bottleneck in data loading is the combination of spin-locks, uncompressed file streaming, and pageable memory transfers.
 
+- **Four-Stage Multimodal Ingestion:** Enforce `Identifier` $\to$ `Decompressor` $\to$ `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder` for bulk files, stripping container entropy (PDF text extraction, video frame decoding, audio PCM extraction) so the codebook operates on pure semantic primitives. Manual CLI text cleanly bypasses decompression.
 - **Pin and Combine:** Replace all pageable `std::vector` heap allocations for PCIe-bound data with `cudaHostAllocWriteCombined`. Bypassing the CPU’s L1/L2 cache and locking the physical memory addresses will immediately enable true Direct Memory Access (DMA), allowing `cudaMemcpyAsync` to function as intended without silent synchronous degradation.
 - **Lock-Free Concurrency:** Eliminate the `while (training_in_use)` spin-lock. Implement a double-buffering (ping-pong) system across at least two non-blocking CUDA streams (Stream 1 for compute, Stream 2 for the next DMA transfer).
 - **SPSC Ring Buffers:** Thread synchronization between the host data loader and the GPU should be strictly managed by lock-free Single-Producer Single-Consumer (SPSC) ring buffers using `std::atomic` (with acquire/release memory semantics) to prevent priority inversion and CPU throttling.
 
-### 2. Compute & Memory Optimization (Phases III & IV)
+### 2. Compute, Embeddings, & Memory Optimization (Phases III & IV)
 
 Once data flows asynchronously, the mathematical operations must align strictly with the Ada Lovelace architecture's Tensor Cores.
 
-- **CUTLASS & EVT:** Standard C++ loops will bottleneck on legacy CUDA cores. Implement CUTLASS with Epilogue Visitor Trees (EVT) to fuse the GEMM matrix multiplication, bias addition, and ReLU activation into a single kernel. Keeping this operation within the shared memory registers avoids catastrophic round-trips to global VRAM.
+- **CUTLASS & Linear EVT:** Standard C++ loops will bottleneck on legacy CUDA cores. Implement CUTLASS with Epilogue Visitor Trees (EVT) to fuse the GEMM matrix multiplication and bias addition into a single kernel with a linear identity output epilogue and un-gated backward gradient ($dz = dy$), permanently preventing the Dying ReLU collapse.
+- **Learnable VRAM Embedding Gather/Scatter:** Upload 128 integer token IDs (512 bytes) per window across PCIe; expand to 32D vectors in VRAM via a branchless gather kernel, and scatter gradients back into the FP32 master embedding table using `atomicAdd`.
+- **Curing AI Amnesia (Optimizer State):** Persist AdamW first and second moments ($m_t, v_t$) to `optimizer.axiom` so training velocity is preserved across sessions.
 - **BFC Caching Allocator:** Halt all dynamic `cudaMalloc` calls in the training loop. Transition immediately to `cudaMallocAsync` via CUDA's memory pools. For long-term stability, building a custom PyTorch-style Best-Fit with Coalescing (BFC) allocator in userspace will reduce allocation latency from microseconds to nanoseconds and prevent VRAM fragmentation as the architecture scales to complex transformers.
 
-### 3. Advanced Engine Modularity (Phases V, VI, & VII)
+### 3. Advanced Engine Modularity & Scaling (Phases V, VI, & VII)
 
-To evolve this from a hardcoded perceptron into a generalized, multi-modal LLM engine, the architecture requires advanced state management and operation dispatching.
+To evolve this from a hardcoded perceptron into a generalized, multi-modal LLM engine, the architecture requires advanced state management, operation dispatching, and sparse computation.
 
 - **PagedAttention for GPTs:** Standard contiguous VRAM allocation for Key/Value caches wastes up to 80% of memory. Implementing a CPU-side Block Table (PagedAttention) will chunk the KV cache into fixed physical VRAM blocks, eliminating external fragmentation and enabling zero-overhead Copy-On-Write (COW) for system prompt caching.
 - **CUDA Graphs:** Once memory addresses are stabilized by the caching allocator, wrapping iterations in `cudaStreamBeginCapture` will create a Directed Acyclic Graph (DAG). Launching this DAG offloads all scheduling to the GPU hardware, reducing CPU kernel launch overhead to zero.
 - **ATen-Style Dispatcher:** Separate the tensor handles from their underlying data arrays. Routing all operations through a central C++ dispatcher based on a `DispatchKeySet` (e.g., CPU, CUDA, Autograd) will cleanly decouple the mathematical logic from hardware-specific kernels, paving the way for automatic differentiation.
+- **Sparse Mixture of Experts (MoE):** Implement specialized Expert Blocks governed by a top-K Router Network, allowing parameter scale to expand dramatically while keeping per-token compute FLOPs and inference latency low.
+- **Output Codecs (Detokenizers):** Invert generation through dedicated output compressors, converting discrete token sequences into UTF-8 text, RGB video/image containers, and PCM audio waveforms.

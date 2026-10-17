@@ -97,17 +97,43 @@ Axiom is engineered to run 100% local, offline, and air-gapped on consumer hardw
 2. **Offline Training:** The network ingests the parsed tokens via the streaming data loader, adapting its internal weight matrices.
 3. **Air-Gapped Operation:** The machine disconnects from the internet entirely, preserving total operational security, zero telemetry, and permanent local sovereignty over the resulting intelligence.
 
+### The Raw Compressed Byte Trap vs. Pure Semantic Payloads
+Reading raw compressed bytes directly into a neural tokenizer is an architectural trap. When an engine ingests raw `.pdf`, `.docx`, or `.mp4` binary streams without decompression, the neural network spends its parameter capacity trying to reverse-engineer the zlib/FlateDecode compression tables or container bitstream packing rather than learning the physics, linguistics, or visual geometries inside.
+
+Axiom enforces a strict separation: **File Formats $\ne$ Semantic Data**.
+* To learn physics from a PDF, the system must decompress and extract clean UTF-8 text and mathematical equations before tokenization.
+* To learn visual features from video, the system must decode the h.264 wrapper into raw RGB pixel arrays.
+* To learn acoustic phonemes, the system must strip RIFF/OGG container headers into raw PCM amplitudes.
+
+### The Dual Ingestion Workflow Architecture
+Axiom cleanly separates ingestion based on data origins:
+1. **Workflow 1 (File Path / Bulk Assets):** Compressed file formats require the full pipeline:
+   $$\text{Identifier (Magic Bytes)} \longrightarrow \text{Decompressor (Strip Wrapper)} \longrightarrow \text{Sanitizer} \longrightarrow \text{Tokenizer} \longrightarrow \text{Embedder}$$
+2. **Workflow 2 (Raw Manual CLI Input):** When an operator types or pastes text directly into the terminal, the semantic payload is already in pure UTF-8 format. The Identifier and Decompressor are completely bypassed:
+   $$\text{Raw String} \longrightarrow \text{Sanitizer (Lowercase \& Punctuation Strip)} \longrightarrow \text{Tokenizer} \longrightarrow \text{Embedder}$$
+
+Both workflows converge on the exact same unified, dense early-fusion codebook ($V = 65,536$) before hitting the VRAM embedding matrix.
+
+### Curing AI Amnesia: The Optimizer State
+A neural network with saved weights alone suffers from historical amnesia upon restart: it remembers *what* parameters were chosen, but loses the directional velocity and curvature experience of *how* it was learning. Axiom introduces persistent **Optimizer States** via `optimizer.axiom`:
+* **Momentum ($m_t$, Velocity):** Retains parameter trajectory across thousands of gradient updates.
+* **Variance ($v_t$, Volatility):** Tracks parameter friction and surface roughness to scale learning rates adaptively.
+When training resumes, loading `optimizer.axiom` restores full momentum instantaneously.
+
 ---
 
 ## 5. Architectural Roadmap & Execution Workflows
 
 Project Axiom supports two distinct engineering paradigms:
 
-1. **Version 1.0 (Current Release):**
+1. **Version 1.0 (Current Baseline):**
    - **Form Factor:** Zero-overhead, pure native C++23 terminal executable ([`core/app.exe`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/app.exe)).
    - **Guiding Rule:** Zero UI/UX overhead. Pure computation, instant terminal streaming, and deterministic command-line flags.
-2. **Version 2.0 (Ecosystem Expansion):**
+   - **Ingestion:** Four-Stage Ingestion Pipeline with specialized decompressors (`decom_doc`, `decom_image`, `decom_audio`, `decom_video`), dense early-fusion codebook ($V=65,536$), unified text/number `main_dictionary`, and uncompressed semantic extraction.
+2. **Version 2.0 (Ecosystem Expansion & Frontier Horizons):**
    - **Native GPU GUI:** Low-latency C++/DirectX/Dear ImGui diagnostic telemetry interface.
    - **Web Interface:** High-performance local web server pairing the C++23 CUDA backend with a React, TypeScript, and Tailwind frontend for interactive multimodal exploration.
+   - **Output Codecs (The Compressor):** Inverting the ingestion pipeline during generation—mapping latent token predictions into structured UTF-8 text strings, raw RGB video buffers, and PCM audio files.
+   - **Sparse Mixture of Experts (MoE):** Partitioning monolithic parameter matrices into specialized Expert Blocks governed by a lightweight Router Network, activating only task-relevant parameters to maximize capacity while slashing compute latency.
 
 By adhering strictly to Terry Davis's principle of simplicity, Project Axiom demonstrates that high-performance artificial intelligence does not require massive cloud clusters or convoluted software stacks—it requires clean mathematics, precise memory logistics, and direct mastery over the silicon.

@@ -47,13 +47,15 @@ To prevent the operating system from thrashing physical storage or exhausting ho
 
 ### Tier 2: Pinned Context Windows (The Portion Structure)
 The neural network operates on discrete sliding context windows of 128 tokens. [`DataLoader::ram_to_contextWindow()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/loader.cpp) slices the 100,000-token RAM array into [`Portion`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) structures:
-- **Input Tensor ($X$):** 128 context tokens mapped across 4 embedding dimensions ($128 \times 4 = 512$ elements).
-- **Target Tensor ($Y$):** The 129th token ($1 \times 4 = 4$ elements) serving as the self-supervised ground truth.
+- **Input Tensor ($X$):** 128 context token IDs (`uint32_t` integers = 512 bytes). Uploading integer token IDs across PCIe rather than high-dimensional floating-point vectors slashes bus traffic by over **93%**.
+- **Target Tensor ($Y$):** The 129th target token serving as the self-supervised ground truth.
 
-Crucially, these buffers are allocated in page-locked, write-combined physical memory to enable direct hardware transfer without CPU intervention.
+Crucially, these buffers are allocated in page-locked, write-combined physical memory (`cudaHostAllocWriteCombined`) to enable true asynchronous hardware Direct Memory Access (DMA) without CPU intervention or cache pollution.
 
 ### Tier 3: GPU Video Memory (VRAM)
-Data arriving over the PCIe bus lands in dedicated VRAM allocated via [`allocate_gpu_memory()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/tensor_cores.cu). Here, device weights and intermediate activation tensors are processed by Tensor Cores within shared memory registers.
+Data arriving over the PCIe bus lands in dedicated VRAM allocated via [`allocate_gpu_memory()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/tensor_cores.cu). Here:
+1. **Branchless Gather Kernel:** Maps the 128 integer token IDs directly into 32-dimensional vectors from the learnable VRAM embedding table `d_embedding_table` ($65,536 \times 32$ in `__nv_bfloat16`).
+2. **Tensor Core GEMM:** CUTLASS v4.8.0 templates execute the matrix multiplication directly within high-speed shared memory registers before linear EVT write-back.
 
 ---
 
@@ -116,7 +118,7 @@ To conceptualize the memory hierarchy and concurrency flow, Project Axiom implem
 | :--- | :--- | :--- | :--- |
 | **The Library** | NVMe Solid-State Disk | Raw Storage Corpora | Terabytes of uncompressed text and multimedia. |
 | **The Book** | Host System RAM | [`DataLoader::buffer`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) | 100,000 categorical tokens held in volatile physical memory. |
-| **The Page** | Pinned Host RAM / VRAM | [`Portion`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) Context Window | 128 tokens ($512$ floats) being actively computed by Tensor Cores. |
+| **The Page** | Pinned Host RAM / VRAM | [`Portion`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) Context Window | 128 token IDs uploaded via PCIe $\rightarrow$ gathered into $128 \times 32$ VRAM matrix for Tensor Cores. |
 
 - You do not bring the entire **Library** onto your desk (this causes an Out-Of-Memory crash).
 - You take a single **Book** (100,000 tokens) off the shelf and place it on your desk (System RAM).
@@ -149,7 +151,62 @@ The engine is partitioned into four decoupled subsystems:
                                              +--------------------+
 ```
 
-1. **[`Parser`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/parser.h):** Transforms raw multimodal inputs (text, numbers, images, audio) into discrete categorical tokens mapped across 10,000,000-slot orthogonal namespaces.
-2. **[`DataLoader`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h):** Manages disk-to-RAM streaming, the 100,000-token circular buffer, and sliding context window generation.
-3. **[`AI`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.h):** Manages CPU-side master weights, deterministic embedding tables, weight persistence (`weights.axiom`), forward pass predictions, loss calculations, and the interactive terminal inference engine.
-4. **[`TensorCores`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/tensor_cores.h):** Compiled into [`core/cuda_transfer.dll`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/cuda_transfer.dll) behind an un-mangled `extern "C"` ABI boundary. Manages physical VRAM allocations, pinned write-combined memory, dual non-blocking CUDA streams, and CUTLASS matrix multiplication.
+1. **[`Parser`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/parser.h) & Decompressors (`core/include/decompressor/`):** Orchestrates the Four-Stage Ingestion Pipeline. Detects file formats, strips compression/container wrappers (`decom_doc`, `decom_image`, `decom_audio`, `decom_video`), sanitizes text, and quantizes tokens into the dense early-fusion codebook ($V = 65,536$).
+2. **[`DataLoader`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h):** Manages disk-to-RAM streaming, the 100,000-token circular buffer, the seam carry-forward window, and pinned write-combined context allocations.
+3. **[`AI`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.h):** Manages master weights, the master learnable embedding matrix, binary persistence (`weights.axiom` and `optimizer.axiom`), forward pass predictions, loss evaluations, and interactive inference.
+4. **[`TensorCores`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/tensor_cores.h):** Compiled into [`core/cuda_transfer.dll`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/cuda_transfer.dll) behind an un-mangled `extern "C"` ABI boundary. Manages physical VRAM buffers, the branchless embedding gather kernel, CUTLASS v4.8.0 EVT matrix multiplications, and dual non-blocking CUDA streams.
+
+---
+
+## 5. The Four-Stage Multimodal Ingestion Pipeline
+
+Project Axiom implements the exact ingestion architecture mandated by modern frontier omni-models (such as GPT-4o and Gemini). Reading raw compressed bytes directly into a tokenizer is an architectural trap: the model wastes its capacity reverse-engineering zlib compression headers or MP4 container framing instead of learning semantics.
+
+Axiom enforces a strict four-stage pipeline:
+
+```
+  Stage 1: THE IDENTIFIER (The Switchboard)
+  • Inspects file extensions & magic bytes (e.g. 0xFF 0xD8 for JPEG, %PDF for PDF, RIFF for WAV)
+  • Routes raw file streams to the appropriate specialized decompressor
+                       │
+                       ▼
+  Stage 2: THE DECOMPRESSOR (The Extractor)
+  • Strips container wrappers to expose the raw semantic payload:
+    - .pdf / .docx  ──► Clean UTF-8 text & equations (zlib stripped via decom_doc)
+    - .mp4 / .mov   ──► Raw RGB pixel arrays (h.264 stripped via decom_video)
+    - .wav / .ogg   ──► Raw PCM audio amplitudes (RIFF headers stripped via decom_audio)
+    - .png / .jpg   ──► Uncompressed RGB bitmaps (decom_image)
+                       │
+                       ▼
+  Stage 3: THE SANITIZER & TOKENIZER (The Quantizer)
+  • Lowercases characters, strips punctuation, and maps clean tokens to dense IDs
+  • Unified Contiguous Codebook: V = 65,536 (Words, numbers, pixels, and audio share index space)
+                       │
+                       ▼
+  Stage 4: THE EMBEDDER (The VRAM Matrix)
+  • Transmits 128 integer token IDs (512 bytes) across PCIe to GPU
+  • Fast CUDA gather kernel pulls 32D geometric vectors from d_embedding_table in VRAM
+```
+
+### The Dual Ingestion Workflows
+The engine differentiates cleanly between file processing and manual input:
+
+1. **Workflow 1: File Ingestion (Bulk or Single Asset):**
+   $$\text{File on Disk} \longrightarrow \text{Identifier} \longrightarrow \text{Decompressor} \longrightarrow \text{Sanitizer} \longrightarrow \text{Tokenizer} \longrightarrow \text{Embedder}$$
+   Requires full extraction because semantic data is trapped inside compressed containers.
+
+2. **Workflow 2: Raw Manual Text Input (CLI Console):**
+   $$\text{Raw String} \longrightarrow [\text{Identifier Bypassed}] \longrightarrow [\text{Decompressor Bypassed}] \longrightarrow \text{Sanitizer} \longrightarrow \text{Tokenizer} \longrightarrow \text{Embedder}$$
+   When a user types text directly into the CLI, the data is already uncompressed UTF-8. The engine bypasses Stages 1 and 2, passing the string straight to the sanitizer and tokenizer.
+
+---
+
+## 6. The Output Codec & Detokenizer (The Compressor)
+
+Generative AI models do not output formatted `.mp4` or `.pdf` files directly; they output a sequence of discrete token probabilities. To render output for humans, Axiom defines the inverse pipeline via **Output Codecs**:
+
+* **Text Detokenizer:** Inspects predicted token IDs in $[4, 64511]$, performs reverse lookup in `reverse_main_dictionary`, and streams UTF-8 strings to the console.
+* **Visual Output Codec:** Takes discrete visual tokens $[64512, 64767]$, converts them back into RGB pixel grids, and packages them into standard image or video formats.
+* **Acoustic Output Codec:** Takes discrete audio tokens $[64768, 65023]$, converts them to PCM amplitudes, and wraps them in RIFF/WAV headers.
+
+This symmetry ensures that the core neural matrix remains modality-agnostic: the GPU processes pure geometric vectors, while the modular edges handle decompression upon entry and compression upon exit.

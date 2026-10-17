@@ -42,7 +42,7 @@ Data access latency increases by orders of magnitude as you move further away fr
 In standard C++, dynamic data structures such as `std::vector` allocate memory on the pageable host heap:
 
 ```cpp
-std::vector<float> context_window(512); // ALLOCATED IN PAGEABLE OS MEMORY
+std::vector<uint32_t> context_window(128); // ALLOCATED IN PAGEABLE OS MEMORY
 ```
 
 ### The Operating System Paging Trap
@@ -61,16 +61,17 @@ Page-locked memory informs the operating system kernel that the physical address
 
 ---
 
-## 3. Cache Bypassing via Write-Combined Memory
+## 3. Cache Bypassing & PCIe Token ID Bandwidth Inversion
 
-A standard CPU writes data to memory through its L1 and L2 cache hierarchy. When writing massive token buffers to host RAM:
-1. The CPU loads cache lines from RAM into L1/L2.
-2. It modifies the cache lines with the new token values.
-3. The cache lines are eventually written back to main memory.
+A standard naive deep learning pipeline generates high-dimensional floating-point embeddings on the host CPU and streams large float arrays across the PCIe bus. For a 128-token context window with 32 dimensions, uploading floating-point vectors requires $128 \times 32 \times 2 = 8,192\text{ bytes}$ per step (or $16,384\text{ bytes}$ in FP32).
 
-This standard pipeline incurs two major penalties:
-1. **Cache Pollution:** The streaming tokens evict hot application data and code from the CPU's L1/L2 caches, causing cache misses elsewhere in the engine.
-2. **Read-For-Ownership Overhead:** The CPU performs unnecessary read cycles before overwriting memory.
+### The Inverted Token ID Dataflow
+Project Axiom eliminates this bus bottleneck entirely by **inverting the embedding dataflow**:
+1. **Host Uploads Compact Token IDs:** The CPU only uploads the 128 raw categorical `uint32_t` token IDs across the PCIe bus:
+   $$128 \times 4\text{ bytes} = 512\text{ bytes per context window}$$
+   This slashes PCIe bus utilization by **93.75%**.
+2. **GPU VRAM Gather Kernel:** Once the 512-byte token array arrives in device memory via DMA, a branchless CUDA gather kernel (`gather_embeddings_kernel`) pulls the corresponding 32-dimensional vectors from the device embedding matrix `d_embedding_table` directly inside GDDR6X VRAM.
+3. Because VRAM operates at over **432 GB/s to 716 GB/s** (compared to ~31.5 GB/s on PCIe Gen 4), embedding expansion occurs at native silicon speeds without ever choking the motherboard bus.
 
 ### The `cudaHostAllocWriteCombined` Optimization
 In Project Axiom, the context window buffer is allocated with the `cudaHostAllocWriteCombined` flag:

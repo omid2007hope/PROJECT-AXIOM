@@ -8,29 +8,30 @@ This document defines the binary layout of the file format, the atomic two-stage
 
 ## 1. The `weights.axiom` Binary File Format
 
-The `weights.axiom` file is divided into a 40-byte compiler-safe header followed immediately by contiguous floating-point parameter payloads:
+The `weights.axiom` file is divided into a 56-byte compiler-safe header followed immediately by contiguous floating-point parameter payloads (projection weights, biases, and the master learnable embedding table):
 
 ```
 +-------------------------------------------------------------------------------+
-|                       AXIOM WEIGHT HEADER (40 Bytes)                          |
+|                       AXIOM WEIGHT HEADER (56 Bytes)                          |
 |  +-------------------------------------------------------------------------+  |
-|  |  magic[8]     : "AXIOM_W1" (8 ASCII bytes)                              |  |
-|  |  version      : uint32_t (Value = 1)                                    |  |
-|  |  in_dim       : uint32_t (Value = 512)                                  |  |
-|  |  out_dim      : uint32_t (Value = 4)                                    |  |
-|  |  dtype        : uint32_t (Value = 0: IEEE 754 FP32)                     |  |
-|  |  data_bytes   : uint64_t (Value = 8,208 bytes)                          |  |
-|  |  crc32        : uint32_t (Payload checksum)                             |  |
-|  |  reserved     : uint32_t (Zero padding for 64-bit alignment)            |  |
-|  +-------------------------------------------------------------------------+  |
-+-------------------------------------------------------------------------------+
-|                       RAW TENSOR PAYLOAD (8,208 Bytes)                        |
-|  +-------------------------------------------------------------------------+  |
-|  |  Weight Matrix W : 2,048 floats * 4 bytes = 8,192 Bytes                 |  |
-|  |  Bias Vector b   : 4 floats * 4 bytes     = 16 Bytes                    |  |
+|  |  magic[8]        : "AXIOM_W1" (8 ASCII bytes)                           |  |
+|  |  version         : uint32_t (Value = 1)                                 |  |
+|  |  in_dim          : uint32_t (Input context dimension)                   |  |
+|  |  out_dim         : uint32_t (Output projection dimension)               |  |
+|  |  vocab_size      : uint32_t (Value = 65,536 dense codebook tokens)      |  |
+|  |  embedding_dim   : uint32_t (Value = 32 dimensions)                     |  |
+|  |  dtype           : uint32_t (Value = 0: IEEE 754 FP32)                  |  |
+|  |  data_bytes      : uint64_t (Total tensor payload byte length)          |  |
+|  |  crc32           : uint32_t (Payload checksum)                          |  |
+|  |  reserved        : uint32_t (Zero padding for 64-bit alignment)         |  |
 |  +-------------------------------------------------------------------------+  |
 +-------------------------------------------------------------------------------+
-|                       TOTAL FILE SIZE = 8,248 Bytes                           |
+|                       RAW TENSOR PAYLOAD                                      |
+|  +-------------------------------------------------------------------------+  |
+|  |  Projection Weights W : (out_dim * in_dim) floats                       |  |
+|  |  Projection Biases b  : out_dim floats                                  |  |
+|  |  Master Embed Table   : (vocab_size * embedding_dim) floats (8,388,608 B)| |
+|  +-------------------------------------------------------------------------+  |
 +-------------------------------------------------------------------------------+
 ```
 
@@ -42,10 +43,12 @@ In [`core/include/ai.h`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include
 struct AxiomWeightHeader {
     char magic[8];        // "AXIOM_W1"
     uint32_t version;     // Format version (1)
-    uint32_t in_dim;      // Input dimensions (512)
-    uint32_t out_dim;     // Output dimensions (4)
+    uint32_t in_dim;      // Input dimensions
+    uint32_t out_dim;     // Output dimensions
+    uint32_t vocab_size;  // Dense vocabulary capacity (65,536)
+    uint32_t embedding_dim; // Vector dimensions per token (32)
     uint32_t dtype;       // Data type (0 = FP32, 1 = BF16)
-    uint64_t data_bytes;  // Total size of following tensor payload (8208)
+    uint64_t data_bytes;  // Total size of following tensor payload
     uint32_t crc32;       // Checksum / validation hash
     uint32_t reserved;    // Padding / future flags
 };
@@ -166,6 +169,69 @@ bool AI::load_weights(const std::string& path) {
 
 ### Forensic Defenses
 1. **Magic Mismatch:** Files missing the exact 8-byte `"AXIOM_W1"` identifier are immediately rejected without attempting to parse payload data.
-2. **Dimension Mismatch:** Models saved with incompatible layer dimensions ($512 \times 4$) are rejected to prevent buffer overflows during matrix multiplication.
+2. **Dimension Mismatch:** Models saved with incompatible layer dimensions are rejected to prevent buffer overflows during matrix multiplication.
 3. **Partial File Immunity:** If a truncated file is passed, `file.gcount()` detects the missing bytes, aborts the read, and prevents memory corruption.
 4. **Graceful Fallback:** If `weights.axiom` does not exist or fails validation, the engine does not crash. It logs an explanatory message and falls back to random symmetry-breaking initialization, allowing training to begin from scratch safely.
+
+---
+
+## 5. The `optimizer.axiom` Binary Specification (Curing AI Amnesia)
+
+To prevent the engine from experiencing amnesia across training sessions, Axiom persists the entire optimization state—including the first and second moments of the AdamW optimizer—into a companion binary file: `optimizer.axiom`.
+
+```
++-------------------------------------------------------------------------------+
+|                       AXIOM OPTIMIZER HEADER (64 Bytes)                       |
+|  +-------------------------------------------------------------------------+  |
+|  |  magic[8]        : "AXIOM_O1" (8 ASCII bytes)                           |  |
+|  |  version         : uint32_t (Value = 1)                                 |  |
+|  |  step_count      : uint64_t (Cumulative training steps completed)      |  |
+|  |  learning_rate   : float    (Current active learning rate)              |  |
+|  |  beta1           : float    (First moment decay coefficient, e.g. 0.90) |  |
+|  |  beta2           : float    (Second moment decay coefficient, e.g. 0.999)| |
+|  |  eps             : float    (Numerical stability constant, 1e-8)        |  |
+|  |  weight_decay    : float    (Decoupled weight decay coefficient)        |  |
+|  |  num_tensors     : uint32_t (Total parameter tensor count)              |  |
+|  |  payload_bytes   : uint64_t (Total bytes of serialized moment arrays)   |  |
+|  |  crc32           : uint32_t (CRC32 checksum of moment payload)          |  |
+|  |  reserved        : uint32_t (Zero padding for 64-bit alignment)         |  |
+|  +-------------------------------------------------------------------------+  |
++-------------------------------------------------------------------------------+
+|                       RAW MOMENT TENSOR PAYLOAD                               |
+|  +-------------------------------------------------------------------------+  |
+|  |  Momentum Array m_t (Projection W & b)   : IEEE FP32 floats             |  |
+|  |  Variance Array v_t (Projection W & b)   : IEEE FP32 floats             |  |
+|  |  Momentum Array m_t (Embedding Table)   : (65,536 * 32) FP32 floats    |  |
+|  |  Variance Array v_t (Embedding Table)   : (65,536 * 32) FP32 floats    |  |
+|  +-------------------------------------------------------------------------+  |
++-------------------------------------------------------------------------------+
+```
+
+### Compiler-Safe Optimizer Header Struct
+```cpp
+#pragma pack(push, 1)
+struct AxiomOptimizerHeader {
+    char magic[8];         // "AXIOM_O1"
+    uint32_t version;      // Format version (1)
+    uint64_t step_count;   // Completed global steps
+    float learning_rate;   // Active learning rate
+    float beta1;           // 0.90f
+    float beta2;           // 0.999f
+    float eps;             // 1e-8f
+    float weight_decay;    // Weight decay rate
+    uint32_t num_tensors;  // Parameter groups count
+    uint64_t payload_bytes;// Byte count of moment data
+    uint32_t crc32;        // Integrity checksum
+    uint32_t reserved;     // 64-bit boundary alignment
+};
+#pragma pack(pop)
+```
+
+### Two-Stage Atomic Write for Optimizer States
+Just like `weights.axiom`, writing the optimizer state uses the two-stage atomic protocol:
+1. Stream synchronize GPU memory to settle all active AdamW updates.
+2. Serialize state to `optimizer.axiom.tmp`.
+3. Flush and close file handles.
+4. Atomically rename `optimizer.axiom.tmp` $\longrightarrow$ `optimizer.axiom`.
+
+When training is resumed with `app.exe --train`, Axiom detects `optimizer.axiom`, restores momentum and variance vectors directly into GPU memory, and continues gradient updates with zero loss of acceleration.

@@ -108,19 +108,19 @@ using Gemm = cutlass::gemm::device::Gemm<
 
 ## 4. Epilogue Visitor Trees (EVT): Fused Kernel Execution
 
-The forward pass of a neural network layer computes linear matrix multiplication followed by bias addition and non-linear activation:
+The forward pass of a neural network layer computes linear matrix multiplication followed by bias addition and epilogue operations:
 
-$$\mathbf{y} = \text{ReLU}(\mathbf{W}\mathbf{x} + \mathbf{b})$$
+$$\mathbf{y} = \mathbf{W}\mathbf{x} + \mathbf{b}$$
 
 ### The Traditional Multi-Kernel Bottleneck
-In naive frameworks, this requires three separate CUDA kernel dispatches:
+In naive frameworks, this requires multiple separate CUDA kernel dispatches:
 1. **Kernel 1 (GEMM):** $\mathbf{Z} = \mathbf{W}\mathbf{x}$ $\rightarrow$ Writes intermediate matrix $\mathbf{Z}$ to global VRAM.
 2. **Kernel 2 (Bias Addition):** $\mathbf{Z}' = \mathbf{Z} + \mathbf{b}$ $\rightarrow$ Reads $\mathbf{Z}$ from VRAM, adds $\mathbf{b}$, writes $\mathbf{Z}'$ to VRAM.
-3. **Kernel 3 (Activation):** $\mathbf{y} = \max(0, \mathbf{Z}')$ $\rightarrow$ Reads $\mathbf{Z}'$ from VRAM, applies ReLU, writes $\mathbf{y}$ to VRAM.
+3. **Kernel 3 (Activation/Store):** Writes $\mathbf{y}$ to VRAM.
 
 Because global VRAM access requires 200–400 clock cycles, this naive pipeline wastes 80% of execution time continuously transferring intermediate data back and forth across the memory bus.
 
-### The Axiom EVT Solution
+### The Axiom Linear EVT Solution (Eliminating Dying ReLU)
 Axiom leverages CUTLASS **Epilogue Visitor Trees (EVT)** to fuse the entire operation into a single hardware pass:
 
 ```
@@ -140,8 +140,8 @@ Axiom leverages CUTLASS **Epilogue Visitor Trees (EVT)** to fuse the entire oper
 |           │                                                                       |
 |           ▼ [Shared Memory]                                                       |
 |  +--------------------+                                                           |
-|  |  ReLU Activation   | ===> Fused in shared memory before global write-back!     |
-|  |   max(0.0f, val)   |                                                           |
+|  | Linear / Identity  | ===> Direct un-gated linear store epilogue                |
+|  |   Store Epilogue   |      (Allows full signed coordinate space [-1.0, +1.0])    |
 |  +--------------------+                                                           |
 |           │                                                                       |
 |           ▼                                                                       |
@@ -152,4 +152,47 @@ Axiom leverages CUTLASS **Epilogue Visitor Trees (EVT)** to fuse the entire oper
 +-----------------------------------------------------------------------------------+
 ```
 
-By performing bias addition and ReLU activation inside accumulator registers and shared memory while the data is already hot on the chip, EVT completely eliminates intermediate global memory read/write cycles, operating at the theoretical thermodynamic limits of the graphics hardware.
+By performing bias addition inside accumulator registers and shared memory while data is already hot on the chip, EVT completely eliminates intermediate global memory round-trips. Furthermore, by adopting a linear store epilogue rather than a hard ReLU gate, Axiom prevents Dying ReLU deadlocks on signed continuous regression targets.
+
+---
+
+## 5. Branchless Embedding Gather Kernel
+
+To support the learnable VRAM embedding matrix without CPU-side float overhead, Axiom implements a fast CUDA gather kernel:
+
+```cpp
+__global__ void gather_embeddings_kernel(
+    const uint32_t* __restrict__ d_tokens,
+    const __nv_bfloat16* __restrict__ d_embedding_table,
+    __nv_bfloat16* __restrict__ d_context_window,
+    int num_tokens,
+    int embedding_dim)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total_elements = num_tokens * embedding_dim;
+    if (idx < total_elements) {
+        int token_pos = idx / embedding_dim;
+        int dim_idx = idx % embedding_dim;
+        uint32_t token_id = d_tokens[token_pos];
+        d_context_window[idx] = d_embedding_table[token_id * embedding_dim + dim_idx];
+    }
+}
+```
+
+### Hardware Efficiency Highlights
+- **Zero Warp Divergence:** All threads in a warp follow identical linear index math.
+- **Coalesced Global Memory Reads:** Adjacent threads read consecutive dimension slots along memory lines, saturating the GPU L2 cache line width.
+- **Latency Hiding:** Executed in the compute stream immediately preceding the CUTLASS GEMM kernel.
+
+---
+
+## 6. Frontier Horizon: Sparse Mixture of Experts (MoE)
+
+In dense neural networks, every token is multiplied against *every parameter* in the model—including weights specialized for audio when the input is purely text.
+
+Axiom's roadmap incorporates **Sparse Mixture of Experts (MoE)**:
+1. **Expert Blocks:** The monolithic weight matrix is partitioned into distinct, specialized sub-networks (e.g. 8 experts).
+2. **The Router Network:** A lightweight gating layer inspects incoming tokens and computes a sparse routing vector.
+3. **Selective Hardware Dispatch:** If a token represents visual data, it routes exclusively to Expert #4; the other 7 experts are completely bypassed on the GPU.
+
+MoE expands the total parameter capacity to trillions of weights while keeping per-token compute latency within milliseconds.

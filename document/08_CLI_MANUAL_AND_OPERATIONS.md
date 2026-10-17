@@ -96,55 +96,45 @@ Axiom trains directly across multiple orthogonal modalities. Training can be ini
 
 ### Detailed Modality Training Scenarios
 
-#### 1. Pure Text Training
-* **Interactive Path:** Select `[2] Train it` $\to$ Select `[1] Text`.
-* **Input:** Type or paste arbitrary text strings (sentences, paragraphs, technical documentation).
-* **Tokenization:** Whitespace-delimited words are assigned unique token IDs in the range `[1, 9,999,999]`.
+#### 1. Unified Text & Numerical Training
+* **Interactive Path:** Select `[2] Train it` $\to$ Enter text, sentences, or numerical data.
+* **Input:** Natural language sentences, technical corpora, or space-separated numerical values (e.g. `"The acceleration due to gravity is 9.8 m/s^2"`).
+* **Tokenization:** Ingested into the unified `main_dictionary` within the dense codebook range `[4, 64,511]`. Words and numbers share context, allowing the engine to learn semantic co-occurrence between concepts and mathematical quantities.
 * **Auto-Tiling:** Sequences shorter than 129 tokens are tiled seamlessly to fill the 128-token sliding context window.
-* **Storage & Ingestion:** Mapped to 4D BF16 vectors in `database/embedded_data.bin`, streamed to RAM, and pushed to VRAM.
+* **Direct Workflow 2 Bypass:** Raw manual CLI text inputs completely bypass file extraction, feeding directly into character sanitization and tokenization.
 
-#### 2. Numerical & Telemetry Training
-* **Interactive Path:** Select `[2] Train it` $\to$ Select `[2] Number`.
-* **Input:** Space-separated positive floats or integers (e.g., `5.1 3.5 1.4 0.2 4.9 3.0 1.4`).
-* **Tokenization:** Values are converted into discrete tokens in the range `[10,000,000, 19,999,999]`.
-* **Application:** Ideal for sequential sensor telemetry, financial time-series, and quantitative metrics.
+#### 2. Image Decompression & Visual Token Training
+* **Interactive Path:** Select `[2] Train it` $\to$ Select Image asset or folder.
+* **Input:** Path to an image file (e.g., `asset_sample/Photo.jpeg`, `"C:\Data\Image.png"`).
+* **Decompression Pipeline:** Routed to `decom_image` to strip container encodings (JPEG, PNG headers) and extract raw uncompressed RGB pixel arrays.
+* **Tokenization:** Discrete visual tokens are mapped into the visual codebook block `[64,512, 64,767]`.
 
-#### 3. Image Byte-Stream Training (Computer Vision)
-* **Interactive Path:** Select `[2] Train it` $\to$ Select `[3] Image`.
-* **Input:** Path to an image file (e.g., `asset_sample/Photo.jpeg`, `"C:\Data\Image.png"`) or an entire directory folder.
-* **Tokenization:** Ingests raw binary bytes (`uint8_t` values 0–255) into the visual namespace `[20,000,000, 29,999,999]`.
-* **Application:** Trains the network on byte-level spatial distributions and image container representations.
-
-#### 4. Video Byte-Stream Training (Temporal Vision)
-* **Interactive Path:** Select `[2] Train it` $\to$ Select `[4] Video`.
+#### 3. Video Decompression & Frame Token Training
+* **Interactive Path:** Select `[2] Train it` $\to$ Select Video asset.
 * **Input:** Video file path (e.g., `asset_sample/Video.mp4`).
-* **Tokenization:** Sequentially ingests video container and frame bytes into the video namespace `[30,000,000, 39,999,999]`.
-* **Application:** Learns temporal frame byte dynamics without requiring external video decoders or heavy dependencies.
+* **Decompression Pipeline:** Routed to `decom_video` to strip h.264/container bitstreams, exposing raw RGB pixel frames rather than compressed zlib/h.264 entropy.
+* **Tokenization:** Frames are quantized into spatial codebook tokens in `[64,512, 64,767]`.
 
-#### 5. Audio / Voice Byte-Stream Training (Acoustic Waveforms)
-* **Interactive Path:** Select `[2] Train it` $\to$ Select `[5] Voice`.
-* **Input:** Audio file path (e.g., `asset_sample/Voice.ogg`).
-* **Tokenization:** Maps acoustic waveform bytes to the voice namespace `[40,000,000, 49,999,999]`.
-* **Application:** Learns spectral and acoustic representations directly on silicon.
+#### 4. Audio Waveform Decompression Training
+* **Interactive Path:** Select `[2] Train it` $\to$ Select Voice/Audio asset.
+* **Input:** Audio file path (e.g., `asset_sample/Voice.ogg`, `Voice.wav`).
+* **Decompression Pipeline:** Routed to `decom_audio` to strip RIFF/OGG container metadata and extract clean PCM audio waveform amplitudes.
+* **Tokenization:** Acoustic amplitudes are quantized into acoustic codebook tokens in `[64,768, 65,023]`.
 
-#### 6. Cross-Modal Early Fusion (Text + Media Pairing)
-* **Interactive Path:** Select `[2] Train it` $\to$ Select `[1] Text` $\to$ Enter caption text $\to$ `Add media? [1] Yes` $\to$ Select Image, Video, or Voice $\to$ Enter media path.
-* **Mechanism:** Text tokens and media byte tokens are concatenated into a single continuous sequence. The 128-token sliding context window traverses the cross-modal seam, training the Perceptron on textual-visual or textual-acoustic associations.
+#### 5. Cross-Modal Early Fusion (Text + Extracted Media)
+* **Interactive Path:** Ingest text alongside media assets.
+* **Mechanism:** Text tokens and decompressed media tokens are concatenated into a single continuous sequence. The 128-token sliding context window traverses the cross-modal seam, training the neural network on cross-modal associations without modality collisions.
 
-#### 7. Scientific Sensor Fusion (Numbers + Media Pairing)
-* **Interactive Path:** Select `[2] Train it` $\to$ Select `[2] Number` $\to$ Enter readings $\to$ `Add media? [1] Yes` $\to$ Select media.
-* **Application:** Joint quantitative-perceptual modeling for robotic and scientific instrumentation.
-
-#### 8. Bulk Directory Training from `asset_sample` (Mass Ingestion & Repeat Cycle)
+#### 6. Bulk Directory Training from `asset_sample` (Mass Four-Stage Ingestion)
 * **Interactive Path:** Select `[5] Bulk Training (asset_sample)` from the main menu, or execute `.\app.exe --bulk` (with optional step limit: `.\app.exe --bulk 50000`).
-* **Ingestion Mechanics:** Axiom scans the entire [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) directory (including subdirectories) and ingests all files simultaneously regardless of format:
-  * **Text & Code (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.cpp`, notes):** Tokenized word-by-word into the language namespace `[1, 9,999,999]`.
-  * **Images (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`):** Tokenized into visual byte tokens `[20,000,000, 29,999,999]`.
-  * **Video (`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`):** Tokenized into temporal video byte tokens `[30,000,000, 39,999,999]`.
-  * **Voice / Audio (`.ogg`, `.wav`, `.mp3`, `.flac`):** Tokenized into acoustic frequency tokens `[40,000,000, 49,999,999]`.
-  * **PDFs, 3D Models & Documents (`.pdf`, `.obj`, `.stl`, `.glb`, `.bin`):** Automatically probed; ASCII meshes and notes map to text words, while binary models, PDFs, and CAD meshes map to the spatial byte namespace.
+* **Four-Stage Ingestion Mechanics:** Axiom scans [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) and routes each asset through the Identifier and specialized Decompressor:
+  * **Text & Code (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.cpp`):** Sanitized and tokenized into `main_dictionary` `[4, 64,511]`.
+  * **Documents (`.pdf`, `.docx`):** Decompressed via `decom_doc` into clean UTF-8 text and equations (eliminating zlib compression entropy).
+  * **Images (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`):** Decompressed via `decom_image` into raw RGB pixel tensors.
+  * **Video (`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`):** Decoded via `decom_video` into raw RGB frame matrices.
+  * **Audio (`.ogg`, `.wav`, `.mp3`, `.flac`):** Stripped via `decom_audio` into raw PCM waveforms.
 * **Large File Progress Percentage Bar:**
-  For files $\ge 5\text{ MB}$, multi-gigabyte video files, or large archives, Axiom displays a live progress percentage bar throttled at 2 MB intervals:
+  For files $\ge 5\text{ MB}$, Axiom displays a live progress percentage bar throttled at 2 MB intervals:
   ```text
   [..] Tokenizing Video Video.mp4 [======>                 ] 25.9% (2.0 MB / 7.7 MB)
   [..] Tokenizing Video Video.mp4 [========================] 100.0% (7.7 MB / 7.7 MB)
@@ -152,8 +142,8 @@ Axiom trains directly across multiple orthogonal modalities. Training can be ini
 * **Continuous Fine-Tuning & Asset Management Workflow:**
   1. Fill [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) with training files.
   2. Launch `.\app.exe` $\to$ Option `[5] Bulk Training (asset_sample)`.
-  3. The model loads existing weights from [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) and trains on the mass dataset.
-  4. Upon training completion or manual exit (`[Q]`), the new weights are saved atomically to [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom).
+  3. The model loads existing weights from `weights.axiom` and momentum from `optimizer.axiom`, continuing training with zero amnesia.
+  4. Upon training completion or manual exit (`[Q]`), new weights and optimizer momentum are saved atomically.
   5. **Interactive Asset Management Prompt:**
      ```text
      Processed Asset Management (N files):
@@ -164,7 +154,7 @@ Axiom trains directly across multiple orthogonal modalities. Training can be ini
      ```
      * **`[1] Keep` (Default):** Retains all files in `asset_sample/`.
      * **`[2] Archive`:** Moves processed files into `core/asset_sample/archive/`. Axiom automatically ignores `archive/` in subsequent directory scans, allowing immediate drop-in of new batches without re-ingesting old files.
-     * **`[3] Purge`:** Prompts for safety confirmation (`Are you sure you want to proceed? (y/N)`). Entering `y` permanently deletes the processed files, while any other input cancels the purge safely.
+     * **`[3] Purge`:** Prompts for safety confirmation (`Are you sure you want to proceed? (y/N)`). Entering `y` permanently deletes the processed files.
 
 ---
 
@@ -173,9 +163,9 @@ During the training loop, the engine continuously monitors non-blocking keyboard
 
 | Key Press | Action | Technical Execution |
 | :---: | :--- | :--- |
-| **`[S]`** or **`[s]`** | **Atomic Weight Save** | Flushes GPU streams, pulls weights, writes to `weights.axiom.tmp`, and atomically renames to `weights.axiom`. Training resumes seamlessly. |
-| **`[R]`** or **`[r]`** | **Hard Weight Reset** | Re-randomizes all 2,048 weights on CPU via Mersenne Twister (`std::mt19937`), pushes new weights to GPU VRAM, and resets step counters in $<1\text{ ms}$. |
-| **`[Q]`** or **`[q]`** | **Safe Exit** | Flushes final weights to disk atomically, neutralizes GPU pointers, releases pinned memory, and cleanly exits the application. |
+| **`[S]`** or **`[s]`** | **Atomic Checkpoint Save** | Flushes GPU streams, pulls weights & AdamW momentum/variance states, writes to `.tmp` files, and atomically renames them to `weights.axiom` and `optimizer.axiom`. Training resumes seamlessly with zero amnesia. |
+| **`[R]`** or **`[r]`** | **Hard Weight Reset** | Re-randomizes all weights on CPU via Mersenne Twister (`std::mt19937`), pushes new weights to GPU VRAM, and resets step counters and momentum states in $<1\text{ ms}$. |
+| **`[Q]`** or **`[q]`** | **Safe Exit** | Flushes final weights and optimizer state to disk atomically, neutralizes GPU pointers, releases pinned memory, and cleanly exits the application. |
 
 ---
 

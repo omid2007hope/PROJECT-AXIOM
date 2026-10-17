@@ -51,9 +51,9 @@ $$0 < \eta < \frac{2}{\sigma_{\max}^2(\mathbf{X})}$$
 Where $\sigma_{\max}(\mathbf{X})$ is the maximum singular value of the input activation distribution. 
 
 In Project Axiom:
-- Inputs are normalized onto a unit 4D hypersphere via trigonometric embedding, bounding $\|\mathbf{x}\|_2 \le 2.0$.
-- Initial weights are bounded within $[-0.05, +0.05]$.
-- The learning rate is set to $\eta = 0.01$, strictly satisfying the stability condition and guaranteeing smooth loss descent without numerical divergence.
+- Inputs are derived from the 32D learnable embedding matrix initialized within $[-1/\sqrt{D}, +1/\sqrt{D}]$ ($D=32$), bounding $\|\mathbf{x}\|_2 \le 1.0$.
+- Initial projection weights are bounded within $[-0.05, +0.05]$.
+- The learning rate $\eta$ and AdamW moments strictly satisfy the stability condition, guaranteeing smooth loss descent without numerical divergence.
 
 ---
 
@@ -91,4 +91,57 @@ uint32_t physical_jitter = rd();
 2. If physical hardware thermal jitter (`std::random_device`) is fed through Axiom's multimodal tokenizer and trained under autoregression, can the network learn subtle physical biases in the silicon's analog circuitry?
 3. If the loss converges, it proves the physical noise source is governed by a deterministic hardware generator rather than pure ontological randomness.
 
-This experimental framework allows Project Axiom to test the boundaries of physics, machine learning, and hardware determinism on consumer silicon.
+---
+
+## 4. Information Theory of Decompression: The Shannon Entropy Trap
+
+Why does reading raw compressed bytes directly into a neural network fail to produce semantic intelligence? The answer lies in **Shannon Entropy**:
+
+$$H(X) = -\sum_{i=1}^{256} p_i \log_2 p_i$$
+
+A well-engineered compression algorithm (such as zlib's DEFLATE in PDFs or h.264 entropy coding in MP4s) is mathematically designed to eliminate redundancy. It forces the byte distribution toward maximum entropy:
+$$H(X) \approx \log_2(256) = 8.0 \text{ bits per byte}$$
+
+To a neural network, a maximal-entropy byte stream is statistically indistinguishable from uniform cryptographic noise. Adjacent compressed bytes possess near-zero mutual information:
+$$I(X_t; X_{t+1}) = H(X_{t+1}) - H(X_{t+1} \mid X_t) \approx 0$$
+
+If fed compressed bytes directly, the neural network's parameters are consumed entirely by attempting to learn the inverse decompression algorithm rather than the underlying physics or language.
+
+### Manifold Recovery Through Decompression
+Specialized decompressors (`decom_doc`, `decom_image`, `decom_audio`, `decom_video`) strip the high-entropy wrapper, exposing the underlying semantic payload:
+* In raw text, natural language syntax and physics formulas exhibit structured redundancy ($H \approx 1.2 \dots 1.5 \text{ bits/char}$).
+* In raw images, spatial pixel gradients exhibit strong local covariance.
+* In raw audio, acoustic waveforms follow harmonic oscillator equations.
+
+Decompression restores the low-dimensional semantic manifold where neural networks can identify true physical invariants ($F = ma$).
+
+---
+
+## 5. Geometry of Unified Text & Numerical Co-Occurrence
+
+When numbers and words are segregated into disjoint token namespaces separated by billions of integer IDs, their joint probability distribution is fractured:
+$$P(\text{word}, \text{number}) = 0$$
+
+In the physical sciences, quantitative constants and linguistic definitions are inseparable:
+$$\text{"Earth's gravity is 9.8 m/s^2"}$$
+
+By mapping both text words and numerical strings into the unified `main_dictionary` within dense codebook $[4, 64511]$, the model projects words and quantities onto a shared geometric Riemannian manifold:
+$$\mathcal{M} \subset \mathbb{R}^{32}$$
+
+Under gradient descent, tokens that frequently co-occur in physical formulas are pulled together via the backward scatter kernel, enabling the model to learn physics rather than just word grammar.
+
+---
+
+## 6. AdamW Optimizer Dynamics & Curvature Memory
+
+In standard SGD, the parameter update vector $\Delta \theta_t = -\eta g_t$ depends solely on the instantaneous gradient at step $t$. When the process restarts, prior trajectory information is erased.
+
+AdamW implements curvature estimation by tracking first and second stochastic moments:
+1. **Directional Momentum (Velocity Vector):**
+   $$\mathbf{m}_t = \beta_1 \mathbf{m}_{t-1} + (1 - \beta_1) \mathbf{g}_t = (1 - \beta_1) \sum_{i=1}^t \beta_1^{t-i} \mathbf{g}_i$$
+   Acts as an exponentially decaying moving average of past gradient vectors, carrying momentum through flat plateaus and saddle points.
+2. **Diagonal Preconditioning (Metric Tensor Approximation):**
+   $$\mathbf{v}_t = \beta_2 \mathbf{v}_{t-1} + (1 - \beta_2) \mathbf{g}_t^2$$
+   Approximates the diagonal of the empirical Fisher Information Matrix (Hessian curvature), dampening oscillations along high-curvature ravines while accelerating progress along gentle slopes.
+
+Persisting $\mathbf{m}_t$ and $\mathbf{v}_t$ in `optimizer.axiom` cures neural amnesia, allowing the optimization trajectory on the loss surface to resume uninterrupted.

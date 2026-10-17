@@ -51,99 +51,134 @@ Axiom operates as a synchronized, 4-tier memory conveyor belt that moves multimo
 ```mermaid
 graph TB
     subgraph Tier0 ["Tier 0: Persistent NVMe Storage"]
-        SSD[("Raw Multimodal Binary Stream<br/>(embedded_data.bin)")]
-        WeightsFile[("Model Checkpoint<br/>(weights.axiom - 8,248 Bytes)")]
+        RawAssets[("Raw Multimodal Assets<br/>(TXT, PDF, DOCX, MP4, PNG, WAV)")]
+        WeightsFile[("Model Checkpoint<br/>(weights.axiom - Weights & Embeddings)")]
+        OptimizerFile[("Optimizer State<br/>(optimizer.axiom - AdamW Moments)")]
+        VocabFile[("Vocabulary Codebook<br/>(vocab.axiom - Dense 65,536)")]
     end
 
-    subgraph Tier1 ["Tier 1: Host System RAM (Decoupling Buffer)"]
-        Stream[("Persistent std::ifstream<br/>(Zero-Syscall Streaming)")]
-        RAMBuf["RAM Buffer (100,000 Tokens / 400,000 BF16)<br/>Continuous Ingestion Engine"]
-        TheSeam["The Seam (Carry-Forward Mechanism)<br/>Surgically Slices Final 128 Tokens to Next Chunk"]
+    subgraph Ingestion ["Multimodal Ingestion Pipeline & Host RAM"]
+        Switchboard["The Identifier (Switchboard)<br/>Magic Bytes & Extension Routing"]
+        Decomp["The Decompressor (Extractor)<br/>PDF Text, Video RGB, Audio PCM"]
+        Tokenizer["Sanitizer & Tokenizer<br/>Dense Codebook V = 65,536"]
+        RAMBuf["RAM Token Buffer (100,000 Tokens)<br/>Continuous Ingestion Engine"]
+        TheSeam["The Seam (Carry-Forward Mechanism)<br/>Surgically Slices Final 128 Tokens"]
     end
 
     subgraph Tier2 ["Tier 2: Pinned Host Memory (PCIe Bridge)"]
-        PinnedA["Buffer 0 (Pinned Write-Combined Host Memory)<br/>cudaHostAllocWriteCombined (DMA Direct)"]
-        PinnedB["Buffer 1 (Pinned Write-Combined Host Memory)<br/>cudaHostAllocWriteCombined (DMA Direct)"]
+        PinnedA["Buffer 0 (Pinned Write-Combined Host Memory)<br/>128 Token IDs (512 Bytes) - Direct DMA"]
+        PinnedB["Buffer 1 (Pinned Write-Combined Host Memory)<br/>128 Token IDs (512 Bytes) - Direct DMA"]
     end
 
     subgraph Tier3 ["Tier 3: GPU VRAM & Hardware Compute (RTX 4080 sm_89)"]
         subgraph Stream0 ["CUDA Stream 0 (Non-Blocking)"]
+            D_IDs0["d_token_ids[0] (128 uint32_t)"]
+            Gather0["CUDA Gather Kernel<br/>(Reads d_embedding_table into 32D)"]
             D_Ctx0["d_context_window[0] (512 BF16)"]
-            D_Tgt0["d_target[0] (4 BF16)"]
-            Forward0["CUTLASS EVT Fused Forward Pass<br/>(Tensor Cores mma.sync + Bias + ReLU)"]
-            Back0["Rank-1 SGD Backprop Kernel<br/>(dL/dW + FP32 Master Weights Update)"]
+            Forward0["CUTLASS EVT Fused Linear Forward Pass<br/>(Tensor Cores mma.sync + Bias, Linear Store)"]
+            Back0["Backprop & Scatter Kernel<br/>(dL/dW + atomicAdd into d_table_master)"]
             Done0{"compute_done[0]<br/>cudaEventRecord"}
         end
 
         subgraph Stream1 ["CUDA Stream 1 (Non-Blocking)"]
+            D_IDs1["d_token_ids[1] (128 uint32_t)"]
+            Gather1["CUDA Gather Kernel<br/>(Reads d_embedding_table into 32D)"]
             D_Ctx1["d_context_window[1] (512 BF16)"]
-            D_Tgt1["d_target[1] (4 BF16)"]
-            Forward1["CUTLASS EVT Fused Forward Pass<br/>(Tensor Cores mma.sync + Bias + ReLU)"]
-            Back1["Rank-1 SGD Backprop Kernel<br/>(dL/dW + FP32 Master Weights Update)"]
+            Forward1["CUTLASS EVT Fused Linear Forward Pass<br/>(Tensor Cores mma.sync + Bias, Linear Store)"]
+            Back1["Backprop & Scatter Kernel<br/>(dL/dW + atomicAdd into d_table_master)"]
             Done1{"compute_done[1]<br/>cudaEventRecord"}
         end
 
-        WeightsMaster["Master Weights: d_weights_master (FP32) & d_bias_master (FP32)"]
+        EmbedTable["VRAM Embedding Matrix: d_embedding_table (BF16) & d_table_master (FP32)"]
+        WeightsMaster["Master Parameters: d_weights_master (FP32) & d_bias_master (FP32)"]
         WeightsDevice["Device Weights: d_weights (BF16) & d_bias (BF16)"]
+        OptimizerVRAM["AdamW Optimizer State: m_t (Momentum) & v_t (Variance)"]
         LossAccum["Device Loss Accumulator: d_loss (FP32 Atomic Sum)"]
-        Telemetry["Hardware Telemetry: cudaEvent_t Barrier Timers"]
     end
 
     %% Flow Connections
-    SSD --> Stream
-    Stream --> RAMBuf
+    RawAssets --> Switchboard
+    Switchboard --> Decomp
+    Decomp --> Tokenizer
+    Tokenizer --> RAMBuf
     RAMBuf --> TheSeam
     TheSeam --> RAMBuf
     RAMBuf -->|Window Extract 0| PinnedA
     RAMBuf -->|Window Extract 1| PinnedB
 
-    PinnedA -. "Async PCIe DMA (Stream 0)" .-> D_Ctx0
-    PinnedA -. "Async PCIe DMA (Stream 0)" .-> D_Tgt0
-    PinnedB -. "Async PCIe DMA (Stream 1)" .-> D_Ctx1
-    PinnedB -. "Async PCIe DMA (Stream 1)" .-> D_Tgt1
+    PinnedA -. "Async PCIe DMA (Stream 0)" .-> D_IDs0
+    PinnedB -. "Async PCIe DMA (Stream 1)" .-> D_IDs1
 
+    D_IDs0 --> Gather0
+    EmbedTable -.-> Gather0
+    Gather0 --> D_Ctx0
     D_Ctx0 --> Forward0
-    D_Tgt0 --> Back0
     Forward0 --> Back0
     Back0 --> Done0
-    Done0 -. "Event Barrier (Serializes Weights)" .-> Forward1
 
+    D_IDs1 --> Gather1
+    EmbedTable -.-> Gather1
+    Gather1 --> D_Ctx1
     D_Ctx1 --> Forward1
-    D_Tgt1 --> Back1
     Forward1 --> Back1
     Back1 --> Done1
-    Done1 -. "Event Barrier (Serializes Weights)" .-> Forward0
+
+    Done0 -. "Event Barrier" .-> Forward1
+    Done1 -. "Event Barrier" .-> Forward0
 
     Back0 <--> WeightsMaster
     Back1 <--> WeightsMaster
+    Back0 <--> EmbedTable
+    Back1 <--> EmbedTable
     WeightsMaster --> WeightsDevice
     WeightsDevice --> Forward0
     WeightsDevice --> Forward1
 
-    Back0 --> LossAccum
-    Back1 --> LossAccum
-    WeightsFile <-->|Atomic Binary Sync| WeightsMaster
+    WeightsMaster <--> OptimizerVRAM
+    WeightsFile <-->|Binary Sync| WeightsMaster
+    OptimizerFile <-->|Binary Sync| OptimizerVRAM
+    VocabFile <-->|Binary Sync| Tokenizer
 ```
 
 ---
 
 ## 🔥 Core Innovations
 
-### 1. 🌌 True Native Multimodality (Discrete VQ-VAE Space)
-Unlike traditional LLMs that treat text as primary and graft foreign modalities through cross-attention shims, Axiom maps **all modalities into a single, unified mathematical space**.
+### 1. 🌌 True Native Multimodality & The Four-Stage Ingestion Pipeline
+Unlike traditional LLMs that treat text as primary and graft foreign modalities through cross-attention shims, Axiom maps **all modalities into a single, unified mathematical space**. 
 
-Using a discrete VQ-VAE inspired integer spacing mechanism, token identifiers are isolated into distinct, non-overlapping numerical domains:
+#### The Raw Byte Compression Trap
+A foundational insight derived from frontier AI architectures is that **reading raw compressed bytes directly into a tokenizer is a fatal trap**. When files like `.pdf`, `.docx`, `.mp4`, or `.png` are ingested as raw byte streams, the neural network spends its finite representational capacity attempting to reverse-engineer entropy-coding algorithms (zlib, DEFLATE, Huffman tables, h.264 bitstreams) rather than learning language semantics, physical principles, or visual geometry.
 
-| Modality | Global Token ID Range | Mathematical Representation | Ingestion Source |
-| :--- | :--- | :--- | :--- |
-| **Text** | `1` $\rightarrow$ `9,999,999` | Discrete Word/Subword IDs | UTF-8 Text Streams |
-| **Numbers** | `10,000,000` $\rightarrow$ `19,999,999` | Discretized Float Hash IDs | Raw Floating-Point Metrics |
-| **Images** | `20,000,000` $\rightarrow$ `29,999,999` | Quantized Visual Byte Tokens | JPEG / PNG / Raw Bitmaps |
-| **Video** | `30,000,000` $\rightarrow$ `39,999,999` | Temporal Frame Token Sequences | MP4 / AVI / Raw Video Streams |
-| **Voice / Audio** | `40,000,000` $\rightarrow$ `49,999,999` | Acoustic Frequency Byte Tokens | OGG / WAV / Audio Samples |
+To eliminate this entropy barrier, Project Axiom implements a strict **Four-Stage Multimodal Ingestion Pipeline**:
+
+```
+[Stage 1: The Identifier]    --> Inspects file magic bytes / extensions (e.g., %PDF, 0xFF 0xD8).
+            │
+[Stage 2: The Decompressor]  --> Strips container wrappers (Extracts UTF-8 text, RGB pixels, PCM audio).
+            │
+[Stage 3: The Tokenizer]     --> Sanitizes and assigns dense IDs from codebook [0 .. 65,535].
+            │
+[Stage 4: The Embedder]      --> PCIe streaming of compact IDs -> CUDA gather kernel into 32D VRAM vectors.
+```
+
+#### Dual Ingestion Workflows
+1. **Workflow 1 (File Path / Bulk Assets):** Executes the full four-stage pipeline (`Identifier` $\to$ `Decompressor` $\to$ `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder`). Documents have formatting and zlib compression stripped; videos have container wrappers stripped to raw frames; audio is stripped to linear PCM.
+2. **Workflow 2 (Raw Manual CLI Text):** Bypasses the Identifier and Decompressor entirely. Because human CLI inputs are already pure uncompressed UTF-8 semantics, they funnel directly into `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder`.
+
+#### Dense Contiguous Early-Fusion Codebook ($V = 65,536$)
+Project Axiom eliminates sparse multi-billion / 10-million offsets, unifying text and numerical quantities into a single `main_dictionary` so physical co-occurrence semantics (e.g., `"gravity"` and `"9.8"`) are directly preserved:
+
+| Codebook Slot Range | Modality / Data Representation | Semantic Ingestion Source |
+| :--- | :--- | :--- |
+| **`[0 .. 3]`** | Special Reserved Tokens (`<PAD>`, `<UNK>`, `<BOS>`, `<EOS>`) | Engine Control Primitives |
+| **`[4 .. 64,511]`** | Unified Text Words, Subwords, Numbers, & Math | Decompressed Documents, Code, Raw Text |
+| **`[64,512 .. 64,767]`** | Discrete Quantized Visual Tokens (`0x00 .. 0xFF`) | Decompressed Raw RGB Pixel Frames |
+| **`[64,768 .. 65,023]`** | Discrete Acoustic Waveform Tokens (`0x00 .. 0xFF`) | Decompressed Linear PCM Audio |
+| **`[65,024 .. 65,535]`** | Reserved Expansion Slots | Future Multimodal Codebooks |
 
 > [!NOTE]
-> Because each modality occupies an orthogonal $10,000,000$-integer slot, modal namespaces never collide during embedding generation. Text, vision, audio, and numbers flow into the same context vector as a unified stream of reality.
+> Bounding the codebook to a dense 16-bit address space guarantees an ultra-compact ~4.19 MB VRAM footprint for the GPU embedding table, fitting completely inside the Ada Lovelace L2 cache!
 
 ---
 
@@ -217,56 +252,81 @@ Axiom integrates **NVIDIA CUTLASS v4.8.0**:
 
 ---
 
-### 6. 🌲 Epilogue Visitor Trees (EVT): Zero VRAM Round-Trips
-In standard frameworks, a layer computes matrix multiplication, writes the intermediate tensor to VRAM, launches a bias-addition kernel, writes back to VRAM, launches an activation kernel, and writes back to VRAM. These round-trips consume massive memory bandwidth.
+### 6. 🌲 Linear Epilogue Visitor Trees & Elimination of Dying ReLU
+In standard frameworks, a layer computes matrix multiplication, writes the intermediate tensor to VRAM, launches a bias-addition kernel, writes back to VRAM, and launches an activation kernel. These round-trips waste massive memory bandwidth.
 
-Axiom solves this with **CUTLASS Epilogue Visitor Trees (Sm80EVT)**:
+Axiom integrates **CUTLASS Epilogue Visitor Trees (Sm80EVT)** directly targeting Tensor Cores. Crucially, during development against continuous signed target coordinates, fusing ReLU into the EVT epilogue triggered the fatal "Dying ReLU" collapse, freezing all activations at zero. To permanently eliminate this failure mode, Axiom implements a **Linear Identity Epilogue**:
 
 ```
                      VisitorAuxStore (Write final BF16 to VRAM)
-                                        |
-                 VisitorCompute<ReLu> (Fused Non-Linearity)
                                         |
                  VisitorCompute<plus> (Fused Vector Addition)
                                  /              \
          VisitorAccFetch (Accumulator)      VisitorRowBroadcast (Bias Vector)
 ```
 
-The GEMM accumulator, bias addition, and ReLU activation are fused into a **single kernel**. Mathematical operations execute entirely inside GPU registers and shared memory before writing the final activations to VRAM once.
+The GEMM accumulator and bias addition are fused into a **single kernel** ($y = Wx + b$). Paired with un-gated linear gradients ($dz = dy$) in the backward pass, mathematical operations execute entirely inside GPU registers and shared memory without deadlocks, allowing activations to navigate the full $[-1.0, +1.0]$ coordinate space.
 
 ---
 
-### 7. ⚖️ High-Precision Master Weights & Rank-1 Backpropagation
-During gradient descent, multiplying gradients by small learning rates yields parameter updates smaller than `bfloat16`'s 7-bit mantissa, causing **gradient underflow and stalled learning**.
+### 7. 🧠 Learnable VRAM Embedding Matrix & PCIe Bandwidth Inversion
+Project Axiom completely abandons synthetic sinusoidal embedding formulas (`sin(id * (d+1))`), replacing them with a persistent, learnable **$65,536 \times 32$ VRAM Embedding Table**:
 
-Axiom implements a dual-precision architecture:
-* **FP32 Master Weights:** The optimizer maintains high-precision FP32 copies (`d_weights_master`, `d_bias_master`).
-* **Kernel Execution:** The custom `backward_pass_kernel` computes exact MSE loss gradients, evaluates the ReLU subgradient, updates the FP32 master weights via SGD, and atomically accumulates the step loss.
-* **Rounding:** Updated FP32 weights are rounded down to `__nv_bfloat16` in-place on the device for consumption by the next step's CUTLASS Tensor Core GEMM.
+* **PCIe Bandwidth Inversion (93.75% Traffic Reduction):** The host data loader no longer streams large floating-point vectors across PCIe. Instead, it uploads only 128 integer token IDs (`uint32_t`, 512 bytes) per context window across the bus—slashing PCIe traffic by **93.75%** (512 bytes vs. 8,192 bytes of uncompressed floats).
+* **Branchless Gather CUDA Kernel:** A high-throughput CUDA kernel gathers 32D geometric vectors directly from `d_embedding_table` into `d_context_window` in VRAM with zero warp divergence.
+* **Backward Scatter Kernel via `atomicAdd`:** Gradients backpropagated from the projection layer ($dL/dx$) are scattered into the FP32 master embedding table (`d_table_master`) using `atomicAdd`. Semantically correlated tokens (e.g., `"bulk"` and `"training"`, or `"gravity"` and `"9.8"`) are physically pulled into identical geometric clusters over training epochs.
 
 ---
 
-### 8. 💾 Single Model Binary Weight Persistence (`weights.axiom`)
-To guarantee permanent neural parameter retention with zero external serialization dependencies (Protocol Buffers, FlatBuffers, or Python pickle), Axiom implements a compiler-safe direct binary weight format:
+### 8. 🧭 Curing AI Amnesia: The AdamW Optimizer State (`optimizer.axiom`)
+Standard neural networks suffer from total amnesia: restarting training resets gradient velocity to zero, forcing the model to re-explore the loss landscape from scratch.
+
+Axiom permanently cures this by persisting the complete **AdamW Optimizer State** in a binary companion file (`optimizer.axiom`):
+* **Momentum ($m_t$, First Moment / Velocity):** Records the historical direction and speed of each parameter update.
+* **Variance ($v_t$, Second Moment / Volatility):** Tracks per-parameter gradient variance, automatically dampening updates for volatile weights.
+* **Fused AdamW CUDA Kernel:** Executes parameter and moment updates in a single kernel pass, allowing Axiom to pause and resume training instantly at full velocity without cold-start divergence.
+
+---
+
+### 9. 📦 Generative Multimodal Output Codecs (The Output Compressor)
+A generative multimodal AI engine does not natively output formatted `.mp4` or `.pdf` files; it predicts continuous vector probabilities and discrete token sequences. To translate mathematical activations back into human-perceptible media, Axiom implements dedicated **Output Codecs**:
+* **Text Detokenizer:** Reverses integer IDs into clean UTF-8 text via the vocabulary map.
+* **Visual Codec:** Unrolls predicted discrete visual tokens into spatial RGB pixel arrays, formatting them into images or video frame sequences.
+* **Acoustic Codec:** Converts discrete acoustic tokens into linear PCM waveforms and formats them into standard audio files.
+
+---
+
+### 10. ⚡ Sparse Mixture of Experts (MoE) Architecture
+Currently, Axiom routes all multimodal inputs through a dense matrix layer. For scalable multimodal parameter capacity without proportional compute costs, Axiom introduces **Sparse Mixture of Experts (MoE)**:
+* **Specialized Expert Blocks:** The weight matrix is partitioned into independent expert stacks (e.g., 8 specialized parameter blocks).
+* **Lightweight Router Network:** Evaluates incoming token representations and dispatches each token exclusively to the Top-1 or Top-2 most relevant experts (e.g., routing visual tokens to visual experts and linguistic logic to language experts).
+* **Zero-Compute Inactive Pruning:** Inactive experts are bypassed entirely on Tensor Cores, keeping inference latency sub-millisecond while dramatically scaling effective parameter capacity.
+
+---
+
+### 11. 💾 Unified Binary Persistence (`weights.axiom` & `optimizer.axiom`)
+To guarantee permanent neural parameter retention with zero external serialization dependencies, Axiom implements a compiler-safe direct binary weight format:
 
 ```text
-[AxiomWeightHeader: 40 Bytes]
+[AxiomWeightHeader: 56 Bytes]
   ├── magic[8]        : "AXIOM_V1"
-  ├── in_dim          : 512  (Context Window Float Count: 128 tokens * 4 dim)
-  ├── out_dim         : 4    (Target Token Float Count: 1 token * 4 dim)
-  ├── weight_count    : 2048 (512 * 4 FP32 Master Weights)
-  └── bias_count      : 4    (4 FP32 Master Biases)
-[Weight Payload: 8,192 Bytes] -> 2048 * sizeof(float)
-[Bias Payload  : 16 Bytes]    -> 4 * sizeof(float)
-Total File Size: Exactly 8,248 Bytes
+  ├── in_dim          : 512    (Context Window Float Count: 128 tokens * 4 dim)
+  ├── out_dim         : 4      (Target Token Float Count: 1 token * 4 dim)
+  ├── weight_count    : 2048   (512 * 4 FP32 Master Weights)
+  ├── bias_count      : 4      (4 FP32 Master Biases)
+  ├── vocab_size      : 65536  (Dense Codebook Slot Count)
+  └── embedding_dim   : 32     (Geometric Embedding Dimension)
+[Weight Payload   : 8,192 Bytes]   -> 2048 * sizeof(float)
+[Bias Payload     : 16 Bytes]      -> 4 * sizeof(float)
+[Embedding Payload: 8,388,608 Bytes] -> 65536 * 32 * sizeof(float)
 ```
 
+* **Companion Optimizer Checkpoint (`optimizer.axiom`):** Persists step count, hyperparameters, and $m_t$ / $v_t$ moment tensors.
 * **Atomic Serialization:** Flushes to a temporary file (`.tmp`) and commits via atomic filesystem rename, guaranteeing corruption immunity against unexpected process termination.
-* **Direct GPU Synchronization:** Synchronizes active CUDA streams, pulls master FP32 weights into CPU host RAM, and uploads loaded parameters directly to GPU VRAM in nanoseconds.
 
 ---
 
-### 9. 🔮 Forward-Only Inference Engine ("Use it" / `--use`)
+### 12. 🔮 Forward-Only Inference Engine ("Use it" / `--use`)
 Axiom features an ultra-low-latency forward inference pipeline that completely bypasses gradient calculation:
 * **Interactive Real-Time Prompting:** Users input natural text prompts (`Prompt > `). Axiom dynamically parses, maps vocabulary subwords, and pads/slices into the 128-token context window ($512$ `bfloat16` floats).
 * **Fused Hardware Evaluation:** The input context traverses the PCIe bus via DMA and executes on the Ada Lovelace Tensor Cores via fused CUTLASS EVT kernels in microseconds.
@@ -338,11 +398,10 @@ Given a sequence of multimodal tokens $T = \{t_1, t_2, \dots, t_N\}$, the object
 $$X = [\mathbf{e}(t_{i-C+1}), \mathbf{e}(t_{i-C+2}), \dots, \mathbf{e}(t_i)] \in \mathbb{R}^{1 \times K}$$
 where $K = C \times D = 128 \times 4 = 512$ elements.
 
-### 2. Forward Pass (Fused Linear + Non-Linear)
-$$Z = X \cdot W^T + \mathbf{b}$$
-$$Y = \text{ReLU}(Z) = \max(0, Z)$$
+### 2. Forward Pass (Linear EVT Epilogue)
+$$Y = X \cdot W^T + \mathbf{b}$$
 where:
-* $X \in \mathbb{R}^{1 \times 512}$ (Context Window)
+* $X \in \mathbb{R}^{1 \times 512}$ (Context Window gathered from `d_embedding_table`)
 * $W \in \mathbb{R}^{4 \times 512}$ (Weight Matrix)
 * $\mathbf{b} \in \mathbb{R}^{1 \times 4}$ (Bias Vector)
 * $Y \in \mathbb{R}^{1 \times 4}$ (Predicted Target Embedding)
@@ -351,18 +410,25 @@ where:
 Mean Squared Error (MSE) computed against target token embedding $\mathbf{t} \in \mathbb{R}^{1 \times 4}$:
 $$L = \frac{1}{2} \sum_{k=1}^{4} (y_k - t_k)^2$$
 
-### 4. Gradient Derivation & Weight Updates
-Using the chain rule:
-$$\frac{\partial L}{\partial y_k} = y_k - t_k$$
-$$\frac{\partial L}{\partial z_k} = \frac{\partial L}{\partial y_k} \cdot \frac{d\,\text{ReLU}(z_k)}{dz_k} = (y_k - t_k) \cdot \mathbf{1}_{y_k > 0}$$
-$$\frac{\partial L}{\partial W_{kj}} = \frac{\partial L}{\partial z_k} \cdot x_j = \delta_k \cdot x_j$$
-$$\frac{\partial L}{\partial b_k} = \frac{\partial L}{\partial z_k} = \delta_k$$
+### 4. Gradient Derivation, Linear Updates, & Embedding Scatter
+Using the chain rule with the Linear Epilogue ($dz_k = dy_k$):
+$$\delta_k = \frac{\partial L}{\partial z_k} = \frac{\partial L}{\partial y_k} = y_k - t_k$$
+$$\frac{\partial L}{\partial W_{kj}} = \delta_k \cdot x_j, \quad \frac{\partial L}{\partial b_k} = \delta_k$$
 
-The SGD parameter update rule:
-$$W_{kj}^{(t+1)} = W_{kj}^{(t)} - \eta \cdot \delta_k \cdot x_j$$
-$$b_k^{(t+1)} = b_k^{(t)} - \eta \cdot \delta_k$$
+**Input Gradient Backpropagation into VRAM Embeddings:**
+$$\frac{\partial L}{\partial x_j} = \sum_{k=1}^{4} \delta_k \cdot W_{kj}$$
+For each token position $m \in [0, C-1]$ mapping to token ID $T_m$, the scatter kernel updates the FP32 master embedding table in VRAM via `atomicAdd`:
+$$\mathbf{e}_d(T_m) \leftarrow \mathbf{e}_d(T_m) - \eta \cdot \frac{\partial L}{\partial x_{m, d}}$$
 
-### 5. Gradient Stability & Learning Rate Bounds
+### 5. Curing Amnesia: Fused AdamW Optimizer Dynamics
+Rather than standard SGD, parameter updates incorporate momentum and curvature moments persisted in `optimizer.axiom`:
+$$m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t$$
+$$v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$$
+$$\hat{m}_t = \frac{m_t}{1 - \beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1 - \beta_2^t}$$
+$$\theta_t = \theta_{t-1} - \eta \left( \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda \theta_{t-1} \right)$$
+where $g_t = \nabla_\theta L$, $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$, and $\lambda = 0.01$ (weight decay).
+
+### 6. Gradient Stability & Learning Rate Bounds
 For a linear step over an unnormalized input vector $X$, the maximum stable learning rate before mathematical divergence is governed by the spectral norm:
 $$\eta_{\max} = \frac{2}{\|X\|_2^2 + 1}$$
 For 512-dimensional inputs with $\|X\|_2^2 \approx 50$, any learning rate $\eta > 0.04$ guarantees oscillatory divergence. Axiom sets $\eta = 0.001$, guaranteeing strict monotonic descent.
@@ -405,8 +471,10 @@ PROJECT-AXIOM/
 │   ├── Makefile                     # Unified build system (NVCC sm_89 + MSVC + GCC UCRT64)
 │   ├── cuda_transfer.dll            # Compiled bare-metal CUDA backend DLL
 │   ├── app.exe                      # Production CLI binary (Inference, Training, Benchmarking)
-│   ├── test.exe                     # Full automated 200-test verification binary
-│   ├── weights.axiom                # Pre-packaged trained model checkpoint (8,248 bytes)
+│   ├── test.exe                     # Full automated verification binary (100% Green)
+│   ├── weights.axiom                # Pre-packaged trained model checkpoint (weights & embeddings)
+│   ├── optimizer.axiom              # AdamW optimizer state checkpoint (momentum & variance)
+│   ├── vocab.axiom                  # Dense vocabulary codebook (65,536 slots)
 │   ├── asset_sample/                # Multimodal raw test assets (Photo.jpeg, Video.mp4, Voice.ogg)
 │   ├── database/
 │   │   └── embedded_data.bin        # Generated multimodal dense embedding cache
@@ -414,7 +482,12 @@ PROJECT-AXIOM/
 │   │   ├── ai.hpp                   # AI Perceptron orchestrator & weight persistence header
 │   │   ├── optimizer.hpp            # 4-tier data logistics & sliding context window
 │   │   ├── parser.hpp               # Multimodal tokenizer & embedding tables
-│   │   └── telemetry.hpp            # Hardware profiler & 4-variable HUD renderer
+│   │   ├── telemetry.hpp            # Hardware profiler & 4-variable HUD renderer
+│   │   └── decompressor/            # Stage 2 Multimodal Decompressor Headers
+│   │       ├── decom_doc.hpp        # PDF/DOCX text & math extraction
+│   │       ├── decom_image.hpp      # Image decompression (JPEG, PNG, WebP)
+│   │       ├── decom_audio.hpp      # Audio PCM extraction (WAV, OGG, MP3)
+│   │       └── decom_video.hpp      # Video frame decoding (MP4, MKV)
 │   ├── src/
 │   │   ├── ai.cpp                   # C++ AI implementation & GPU transfer coordination
 │   │   ├── main.cpp                 # Application entry point, CLI dispatcher & telemetry
@@ -425,13 +498,21 @@ PROJECT-AXIOM/
 │   │       │   ├── upload.cu/.cuh   # Pinned host-to-device transfers & master weights
 │   │       │   └── download.cu/.cuh # Device-to-host downloads (loss, output, weights)
 │   │       ├── kernel/
-│   │       │   ├── forward_pass.cu  # CUTLASS v4.8 Tensor Core GEMM + EVT fused epilogue
-│   │       │   └── backward_pass.cu # Rank-1 outer-product backprop kernel & loss sum
+│   │       │   ├── forward_pass.cu  # CUTLASS v4.8 Tensor Core GEMM + Linear EVT epilogue
+│   │       │   └── backward_pass.cu # Un-gated backprop & embedding scatter kernel
 │   │       └── util/
-│   │           ├── gpu_types.cuh    # GpuPortion, GpuWeights, GpuActivations state structs
+│   │           ├── gpu_types.cuh    # GpuPortion, GpuWeights, GpuEmbeddings state structs
 │   │           ├── cuda_utils.cuh   # CUDA_CHECK error-checking macros & Grid dimensioning
 │   │           ├── memory_allocation.cu # Pinned memory allocators & defensive cleanup
 │   │           └── telemetry.cu/.cuh # Driver-level hardware query & cudaEvent_t timers
+│   ├── util/
+│   │   ├── optimizer.cpp            # Streaming data loader & seam carry-forward
+│   │   ├── parser.cpp               # Multimodal tokenizer & vocabulary management
+│   │   └── decompressor/            # Stage 2 Multimodal Decompressor Implementations
+│   │       ├── decom_doc.cpp        # Document extraction implementation
+│   │       ├── decom_image.cpp      # Image decompression implementation
+│   │       ├── decom_audio.cpp      # Audio extraction implementation
+│   │       └── decom_video.cpp      # Video decoding implementation
 │   ├── test/
 │   │   ├── test_ai.cpp              # AI weight persistence roundtrip & convergence tests
 │   │   ├── test_inference.cpp       # Comprehensive inference & system resilience tests
@@ -456,7 +537,11 @@ PROJECT-AXIOM/
 │   ├── 09_VERIFICATION_AND_TEST_SUITE.md
 │   ├── 10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md
 │   ├── 11_ROADMAP_AND_SCALING_V2.md
-│   └── 12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md
+│   ├── 12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md
+│   └── plan/                        # Engineering Evaluation & Scaling Plans
+│       ├── plan.md                  # 11-Phase Implementation Progress Checklist
+│       ├── Project_Axiom_Plan.md    # Master Engineering Evaluation & Strategic Scaling
+│       └── research.md              # Technical Review & Forensic Scaling Report
 ```
 
 ---
@@ -700,10 +785,10 @@ Use this scenario to train the neural network on language patterns, technical do
    ```
 5. When asked `Add media?`, select `2` for **`[2] No`**.
 6. **Internal Execution:**
-   - Text is split into words via whitespace and assigned unique token IDs in the range `[1, 9,999,999]`.
+   - Text is split into words via whitespace and assigned unique token IDs in the unified `main_dictionary` range `[4, 64,511]`.
+   - Because raw manual CLI text is pure UTF-8 semantics, it bypasses the Identifier and Decompressor (Workflow 2), funnelling straight into sanitization and tokenization.
    - If the input sequence is shorter than 129 tokens, Axiom's auto-tiling engine repeats the token stream continuously to satisfy the 128-token sliding context window.
-   - Deterministic 4D BF16 vectors are generated and written to `database/embedded_data.bin`.
-   - The continuous training loop starts on GPU Tensor Cores, reporting MSE loss drops every 10,000 steps.
+   - The continuous training loop starts on GPU Tensor Cores, updating both weights and the learnable VRAM embedding matrix.
 
 ---
 
@@ -718,30 +803,30 @@ Use this scenario for scientific sensor data, financial tickers, mathematical st
    ```
 4. When asked `Add media?`, select `2` for **`[2] No`**.
 5. **Internal Execution:**
-   - Numerical values are tokenized into the discrete numeric namespace `[10,000,000, 19,999,999]`.
-   - The engine maps each unique number to a deterministic 4-dimensional vector, feeds it through the 4-tier pipeline, and learns sequential numeric dependencies.
+   - Numerical values are tokenized directly into the unified `main_dictionary` (`[4, 64,511]`). Numbers and text share the same early-fusion namespace, preserving physical co-occurrence semantics (e.g., `"gravity"` and `"9.8"`).
+   - The engine feeds the sequence through the 4-tier pipeline, learning sequential numeric dependencies and mathematical relations.
 
 ---
 
 #### Scenario C: Training on Image Assets (Computer Vision)
-Use this scenario to train the neural network directly on image visual bytes (JPEG, PNG, WebP, BMP).
+Use this scenario to train the neural network on visual data (JPEG, PNG, WebP, BMP).
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. At the data type menu, type `3` for **`[3] Image`**.
-3. Enter the relative filename, relative path, or full path to the image file or image directory:
+3. Enter the image path:
    ```text
    Enter Image Path:
    asset_sample/Photo.jpeg
    ```
-   *(Note: Quoted paths with spaces, e.g. `"C:\My Assets\Photo.jpeg"`, and directory paths are fully supported).*
-4. **Internal Execution:**
-   - Axiom resolves the file path against `asset_sample/` and the local filesystem.
-   - The image is ingested as raw binary bytes (`uint8_t` values 0–255), tokenized into the orthogonal visual namespace `[20,000,000, 29,999,999]`.
-   - The model trains on byte-level spatial distributions.
+4. **Internal Execution (Four-Stage Pipeline):**
+   - **Identifier:** Recognizes JPEG magic bytes (`0xFF 0xD8`).
+   - **Decompressor (`decom_image`):** Decodes the compressed container into raw uncompressed RGB pixel bytes.
+   - **Tokenizer:** Assigns discrete visual byte IDs in the dense codebook range `[64,512, 64,767]`.
+   - **Embedder:** Uploads token IDs to VRAM; the model learns spatial visual distributions rather than wasting capacity reverse-engineering JPEG compression.
 
 ---
 
 #### Scenario D: Training on Video Assets (Temporal Vision)
-Use this scenario to train on temporal visual data (MP4, MKV, AVI video byte streams).
+Use this scenario to train on temporal visual sequences (MP4, MKV, AVI).
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. At the data type menu, type `4` for **`[4] Video`**.
 3. Enter the video path:
@@ -749,15 +834,16 @@ Use this scenario to train on temporal visual data (MP4, MKV, AVI video byte str
    Enter Video Path:
    asset_sample/Video.mp4
    ```
-4. **Internal Execution:**
-   - The video stream is read sequentially from disk without syscall overhead.
-   - Codec, header, and frame byte sequences are assigned discrete IDs in the video namespace `[30,000,000, 39,999,999]`.
-   - The network trains autoregressively on temporal frame byte transitions.
+4. **Internal Execution (Four-Stage Pipeline):**
+   - **Identifier:** Recognizes video container headers.
+   - **Decompressor (`decom_video`):** Decodes h.264/AV1 bitstreams into raw sequential RGB pixel frames.
+   - **Tokenizer:** Maps frame bytes into the visual codebook slots `[64,512, 64,767]`.
+   - **Embedder:** The network trains autoregressively on temporal visual dynamics without container entropy.
 
 ---
 
 #### Scenario E: Training on Audio / Voice Assets (Acoustic Waveforms)
-Use this scenario to train on voice recordings, music, or acoustic sensor waveforms (OGG, WAV, MP3).
+Use this scenario to train on voice recordings, speech, or acoustic sensor waveforms (OGG, WAV, MP3).
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. At the data type menu, type `5` for **`[5] Voice`**.
 3. Enter the audio file path:
@@ -765,9 +851,11 @@ Use this scenario to train on voice recordings, music, or acoustic sensor wavefo
    Enter Voice Path:
    asset_sample/Voice.ogg
    ```
-4. **Internal Execution:**
-   - Acoustic waveform bytes are mapped into the dedicated voice namespace `[40,000,000, 49,999,999]`.
-   - The model learns acoustic spectral representations and audio sequence dynamics.
+4. **Internal Execution (Four-Stage Pipeline):**
+   - **Identifier:** Recognizes audio container headers.
+   - **Decompressor (`decom_audio`):** Strips RIFF/Ogg wrappers, outputting raw linear PCM audio waveforms.
+   - **Tokenizer:** Maps acoustic amplitudes into the dedicated acoustic codebook slots `[64,768, 65,023]`.
+   - **Embedder:** The model learns acoustic spectral representations and speech sequence dynamics.
 
 ---
 
@@ -786,21 +874,21 @@ Use this scenario to teach the network associations between language description
    - `[2] Video` $\to$ Enter `asset_sample/Video.mp4`
    - `[3] Voice` $\to$ Enter `asset_sample/Voice.ogg`
 6. **Internal Execution (Early Fusion Pipeline):**
-   - Text tokens (`IDs < 10,000,000`) and media byte tokens are concatenated into a contiguous unified sequence.
+   - Text tokens (`main_dictionary`) and decompressed media byte tokens (`visual/acoustic codebooks`) concatenate into a single continuous stream of IDs.
    - The 128-token context window slides directly across the cross-modal boundary.
    - The network's weights update to predict media representations from textual prefixes (and vice versa).
 
 ---
 
 #### Scenario G: Scientific Sensor Fusion (Numbers + Media Pairing)
-Use this scenario to align numerical telemetry (temperatures, radar distances, time-stamps) with sensor feeds.
+Use this scenario to align numerical telemetry (temperatures, radar distances, timestamps) with sensor feeds.
 1. Launch `.\app.exe` and select `[2] Train it`.
 2. Select data type `[2] Number`.
 3. Enter numeric readings: `101.3 298.15 45.2 0.98 12.4`
 4. Select `Add media? [1] Yes` and choose Image, Video, or Voice.
 5. Provide the media path (e.g., `asset_sample/Photo.jpeg`).
 6. **Internal Execution:**
-   - Telemetry tokens are prepended to the media stream. The model learns joint representations between quantitative metrics and perceptual data.
+   - Telemetry tokens and decompressed media tokens flow together into the unified stream, teaching the model joint representations between quantitative metrics and perceptual data.
 
 ---
 
@@ -808,10 +896,10 @@ Use this scenario to align numerical telemetry (temperatures, radar distances, t
 Use this scenario to feed hundreds or thousands of arbitrary files into the model at once without typing individual paths.
 1. Place any training files into [`core/asset_sample/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample):
    - **Text & Notes:** `.txt`, `.md`, `.csv`, `.json`, `.py`, `.cpp`, `.log`, etc.
-   - **Images:** `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`, `.gif`
-   - **Videos:** `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`
-   - **Audio & Voice:** `.ogg`, `.wav`, `.mp3`, `.flac`, `.aac`
-   - **Documents & 3D Meshes:** `.pdf`, `.obj`, `.stl`, `.glb`, `.bin`, etc.
+   - **Documents:** `.pdf`, `.docx` (routed through `decom_doc` for clean text & equation extraction)
+   - **Images:** `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`, `.gif` (routed through `decom_image`)
+   - **Videos:** `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm` (routed through `decom_video`)
+   - **Audio & Voice:** `.ogg`, `.wav`, `.mp3`, `.flac`, `.aac` (routed through `decom_audio`)
 2. Launch `.\app.exe` $\to$ Select Option **`[5] Bulk Training (asset_sample)`**, or execute:
    ```powershell
    # Continuous bulk training
@@ -823,33 +911,14 @@ Use this scenario to feed hundreds or thousands of arbitrary files into the mode
 3. **Internal Execution & Multi-Gigabyte Progress Reporting:**
    - Axiom recursively walks `core/asset_sample/`, sorting all files alphabetically for deterministic execution.
    - Any `archive/` subfolder is automatically excluded from directory scans to avoid re-ingesting archived data.
-   - For files $\ge 5\text{ MB}$, multi-gigabyte video files, or large archive extractions, Axiom renders a live throttled percentage progress bar:
-     ```text
-     [..] Tokenizing Video Video.mp4 [======>                 ] 25.9% (2.0 MB / 7.7 MB)
-     [..] Tokenizing Video Video.mp4 [========================] 100.0% (7.7 MB / 7.7 MB)
-     ```
-   - Every file's format is automatically detected and mapped into dedicated modality namespaces:
-     - ASCII text files are tokenized into vocabulary words (`[1, 9,999,999]`).
-     - Image files stream byte-by-byte into visual tokens (`[20,000,000, 29,999,999]`).
-     - Video files stream into temporal frame tokens (`[30,000,000, 39,999,999]`).
-     - Audio files stream into acoustic waveform tokens (`[40,000,000, 49,999,999]`).
-     - PDFs and 3D models are parsed into spatial byte structures.
-   - Embeddings are generated and saved to `database/embedded_data.bin`.
-   - The model automatically detects pre-existing weights at [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) and loads them into VRAM so learning continues cumulatively!
+   - **Stage 1 (Identifier) & Stage 2 (Decompressors):**
+     - `.pdf` and `.docx` files are decompressed by `decom_doc`, extracting clean UTF-8 text and equations without ingesting zlib compression entropy.
+     - Media files are decoded to raw uncompressed RGB frames or PCM audio waveforms.
+   - All data funnels into the dense $0 \dots 65,535$ codebook.
+   - The model automatically detects pre-existing checkpoints (`weights.axiom` and `optimizer.axiom`) and loads them into VRAM so learning continues cumulatively with full momentum!
 4. **Interactive Asset Management (Keep / Archive / Purge):**
-   - Press **`[S]`** anytime to checkpoint current weights, or **`[Q]`** to save and exit.
-   - Once bulk training completes and model weights are verified, an interactive asset management prompt appears:
-     ```text
-     Processed Asset Management (N files):
-       [1] Keep files in asset_sample/ (Default)
-       [2] Archive processed files to asset_sample/archive/
-       [3] Purge (Delete) processed files from asset_sample/
-     > 
-     ```
-     - **`[1] Keep files` (Default):** Retains all files in `core/asset_sample/`. Non-interactive executions and piped scripts safely default to keeping files.
-     - **`[2] Archive processed files`:** Moves processed assets into `core/asset_sample/archive/`. Because `archive/` is automatically ignored in all subsequent runs, you can drop fresh data into `asset_sample/` without re-processing old files.
-     - **`[3] Purge (Delete) processed files`:** Emits an explicit safety warning (`[!] WARNING: This will permanently delete N file(s)... Are you sure? (y/N)`). Confirmation with `y` permanently frees disk space; any other input cancels the purge and keeps the files.
-   - The model retains everything learned in prior batches and adapts seamlessly to new data batches!
+   - Press **`[S]`** anytime to checkpoint current weights and optimizer states, or **`[Q]`** to save and exit.
+   - Once bulk training completes, select `[1] Keep files`, `[2] Archive processed files`, or `[3] Purge (Delete) processed files`.
 
 ---
 
@@ -859,9 +928,9 @@ During training, Axiom's continuous engine listens for non-blocking keyboard int
 
 | Hotkey | Action | Mechanism |
 | :---: | :--- | :--- |
-| **`[S]`** | **Atomic Save Checkpoint** | Drains GPU streams, downloads FP32 master weights, writes atomically to `weights.axiom.tmp`, and replaces `weights.axiom`. |
-| **`[R]`** | **Chaos Reset (Wipe Brain)** | Re-initializes all weights on CPU via Mersenne Twister (`std::mt19937`), pushes chaotic weights to VRAM in $<1\text{ ms}$, and restarts loss tracking. |
-| **`[Q]`** | **Save & Clean Exit** | Performs atomic checkpoint write, releases pinned host RAM buffers, neutralizes GPU pointers, and exits cleanly. |
+| **`[S]`** | **Atomic Save Checkpoint** | Drains GPU streams, downloads FP32 master weights, master embeddings, and AdamW moments ($m_t, v_t$), writing atomically to `weights.axiom` and `optimizer.axiom`. |
+| **`[R]`** | **Chaos Reset (Wipe Brain)** | Re-initializes all weights on CPU via Mersenne Twister (`std::mt19937`), resets optimizer moments, pushes chaotic weights to VRAM in $<1\text{ ms}$, and restarts loss tracking. |
+| **`[Q]`** | **Save & Clean Exit** | Performs atomic checkpoint writes (`weights.axiom` & `optimizer.axiom`), releases pinned host RAM buffers, neutralizes GPU pointers, and exits cleanly. |
 
 **Monitoring Convergence:**
 Every 10,000 steps, Axiom reports live loss metrics:
@@ -930,33 +999,44 @@ For automated training or deployment scripts without user interaction:
 
 ---
 
-### 🚀 Version 1.0 (Released & Validated • Pure Terminal Application)
-- [x] **Unified Multimodal Tokenization:** Orthogonal $10,000,000$-element namespace offsets for Text, Numbers, Images, Video, and Voice.
-- [x] **Hardware Precision:** Native `std::bfloat16_t` conversion, cutting memory bandwidth by 50%.
+### 🚀 Version 1.0 (Released & Validated Foundations)
+- [x] **Hardware Precision:** Native `std::bfloat16_t` CPU/GPU conversion, cutting memory bandwidth by 50%.
 - [x] **Asynchronous Data Logistics:** Zero-syscall streaming loader with persistent file descriptors.
 - [x] **The Seam:** Surgical carry-forward mechanism eliminating boundary amnesia across 100,000-token chunks.
 - [x] **PCIe DMA Pipeline:** `cudaHostAllocWriteCombined` pinned memory bypassing CPU L1/L2 caches for direct DMA.
 - [x] **Dual-Stream Ping-Pong Double Buffering:** Non-blocking CUDA streams completely overlapping memory transfers with compute.
 - [x] **CUTLASS v4.8.0 Tensor Core Saturation:** Hardware `mma.sync` instructions on Ada Lovelace (`sm_89`).
-- [x] **Epilogue Visitor Trees (EVT):** Fusing GEMM, bias addition, and ReLU into a single kernel with zero intermediate VRAM spills.
-- [x] **Dual-Precision Master Weights:** FP32 master weight accumulation preventing gradient underflow during SGD.
-- [x] **Single Model Binary Weight Persistence:** Atomic binary serialization format (`weights.axiom`) with 40-byte compiler-safe header.
+- [x] **Linear Epilogue Visitor Trees (EVT):** Fusing GEMM and bias addition with linear identity epilogue ($y = Wx + b$), eliminating the Dying ReLU collapse.
+- [x] **Un-Gated Gradient Backpropagation:** Linear backward pass ($dz = dy$) allowing continuous descent across signed targets.
+- [x] **Unified Text & Numbers (Phase 1.1):** Consolidated `main_dictionary` preserving natural co-occurrence (e.g., `"gravity"` and `"9.8"`).
 - [x] **Forward Inference Engine:** Interactive prompt loop, autoregressive context windowing, and Euclidean $L_2$ token decoding.
 - [x] **Hardware Saturation Telemetry:** Driver-level `cudaEvent_t` timers, peak hardware detection, and 4-variable HUD readout.
-- [x] **Automated Verification Suite:** 200 unit, integration, and resilience tests (100% Green).
+- [x] **Automated Verification Suite:** Complete unit, integration, and resilience test harness (100% Green).
 
-### 🌌 Version 2.0 (Future Scaling & UI/UX Interface)
-- [ ] **Phase 5: Dedicated Desktop & Web UI/UX Interface**
-  - Real-time multimodal visualization, live interactive loss curves, and audio/video preview canvas.
-- [ ] **Phase 6: Production VRAM Management (BFC Caching Allocator)**
-  - Transition from `cudaMalloc` to stream-ordered memory pools (`cudaMemPool_t`, `cudaMallocAsync`).
-  - Custom PyTorch-style Best-Fit with Coalescing (BFC) userspace caching allocator to eliminate VRAM fragmentation and drop allocation latency to nanoseconds.
-- [ ] **Phase 7: GPT-Scale Autoregressive State Management (PagedAttention)**
-  - PagedAttention: Virtual-memory block tables chunking the Key/Value (KV) cache into fixed physical pages, recovering 80% wasted memory.
-  - Copy-On-Write (COW) Prefix Caching: Zero-copy sharing of identical prompt prefixes across concurrent inference sessions.
-- [ ] **Phase 8: Microsecond Overhead Minimization & Modular ATen Dispatcher**
-  - CUDA Graphs: Capturing the entire training/inference iteration into a Directed Acyclic Graph (DAG) via `cudaStreamBeginCapture`, reducing CPU launch overhead to zero.
-  - ATen-Style Declarative Dispatcher: Decoupling tensor handles from underlying storage to dynamically route operations between CPU and CUDA backends.
+### 🌌 Version 2.0 (Frontier Multimodal Scaling Roadmap)
+- [ ] **Phase 1: Ingestion Sanitization & Specialized Decompressors**
+  - Connect `decom_doc`, `decom_image`, `decom_audio`, and `decom_video` to strip container entropy before tokenization.
+  - Enforce the Four-Stage Ingestion Pipeline across all bulk assets.
+- [ ] **Phase 2: Dense Contiguous Early-Fusion Indexing ($V = 65,536$)**
+  - Cap vocabulary to a bounded 16-bit address space, eliminating sparse multi-billion offsets and fixing VRAM footprint at ~4.19 MB.
+- [ ] **Phase 3: Learnable VRAM Embedding Matrix**
+  - Allocate `d_table` (`__nv_bfloat16`) and `d_table_master` (FP32) with non-zero chaos initialization.
+- [ ] **Phase 4: Forward Gather Kernel & PCIe Bandwidth Inversion**
+  - Stream 128 integer token IDs (512 bytes) per window across PCIe (saving 93.75% bus bandwidth) and gather into 32D vectors in VRAM.
+- [ ] **Phase 5: Backward Scatter Kernel & Semantic Emergence**
+  - Calculate input gradients ($dL/dx$) and accumulate into master embeddings via `atomicAdd`, clusterizing related tokens geometrically.
+- [ ] **Phase 6: Curing AI Amnesia (AdamW Optimizer State)**
+  - Persist first moment ($m_t$, Momentum/Velocity) and second moment ($v_t$, Variance/Volatility) in `optimizer.axiom`.
+- [ ] **Phase 7: Unified Model Checkpointing**
+  - Serialize master weights, biases, master embeddings, and optimizer state atomically.
+- [ ] **Phase 8: Generative Multimodal Output Codecs (Detokenizers)**
+  - Implement reverse codecs for text, raw RGB video/image containers, and linear PCM audio waveforms.
+- [ ] **Phase 9: Production VRAM Management (BFC Caching Allocator)**
+  - Userspace Best-Fit with Coalescing (BFC) allocator reducing allocation latency to nanoseconds without VRAM fragmentation.
+- [ ] **Phase 10: Autoregressive State Management (PagedAttention)**
+  - Virtual-memory block tables chunking the KV cache into fixed physical blocks with Copy-On-Write (COW) prompt prefix caching.
+- [ ] **Phase 11: Hardware Saturation, CUDA Graphs, & Sparse Mixture of Experts (MoE)**
+  - CUDA Graph DAG capture (`cudaStreamBeginCapture`), ATen-style C++ dispatcher, and Sparse MoE with Router Networks.
 
 ---
 

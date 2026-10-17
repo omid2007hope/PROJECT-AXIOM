@@ -8,28 +8,26 @@ This document details the mathematical derivation of Project Axiom's **Stochasti
 
 ## 1. Mathematical Formulation of the Forward & Backward Pass
 
-In Project Axiom's foundational layer, the network processes a sliding context window of 128 tokens across 4 embedding channels, producing an input vector $\mathbf{x} \in \mathbb{R}^{512}$. The layer maps $\mathbf{x}$ to an output prediction $\mathbf{\hat{y}} \in \mathbb{R}^4$ representing the 4 embedding channels of the 129th target token.
+In Project Axiom's foundational layer, the network processes a sliding context window of 128 tokens across embedding channels, producing an input vector $\mathbf{x} \in \mathbb{R}^{D_{in}}$. The layer maps $\mathbf{x}$ to an output prediction $\mathbf{\hat{y}}$ representing the target embedding coordinates:
 
-$$\mathbf{z} = \mathbf{W}\mathbf{x} + \mathbf{b}, \quad \mathbf{\hat{y}} = \text{ReLU}(\mathbf{z})$$
+$$\mathbf{z} = \mathbf{W}\mathbf{x} + \mathbf{b}, \quad \mathbf{\hat{y}} = \mathbf{z}$$
 
 Where:
-- $\mathbf{W} \in \mathbb{R}^{4 \times 512}$ is the weight matrix ($2,048$ parameters).
-- $\mathbf{b} \in \mathbb{R}^4$ is the bias vector ($4$ parameters).
-- $\text{ReLU}(u) = \max(0, u)$.
+- $\mathbf{W} \in \mathbb{R}^{D_{out} \times D_{in}}$ is the linear projection weight matrix.
+- $\mathbf{b} \in \mathbb{R}^{D_{out}}$ is the bias vector.
+- The output mapping is linear, allowing the model to freely span continuous signed coordinates throughout $[-1.0, +1.0]$.
 
 ### The Loss Function
 The objective is Mean Squared Error (MSE) loss between prediction $\mathbf{\hat{y}}$ and ground-truth target vector $\mathbf{y}$:
 
-$$\mathcal{L} = \frac{1}{2} \sum_{i=0}^{3} (\hat{y}_i - y_i)^2$$
+$$\mathcal{L} = \frac{1}{2} \sum_{i=0}^{D_{out}-1} (\hat{y}_i - y_i)^2$$
 
-### Error Gradient Propagation (The Delta Vector)
-Applying the chain rule through the non-linear ReLU activation yields the error delta $\boldsymbol{\delta} \in \mathbb{R}^4$:
+### Un-Gated Error Gradient Propagation (The Delta Vector)
+Because the epilogue is linear, the gradient flows directly through without being clamped by a ReLU zero-gate:
 
-$$\delta_i = \frac{\partial \mathcal{L}}{\partial z_i} = \frac{\partial \mathcal{L}}{\partial \hat{y}_i} \cdot \frac{\partial \hat{y}_i}{\partial z_i} = (\hat{y}_i - y_i) \cdot \mathbb{I}(z_i > 0)$$
+$$\delta_i = \frac{\partial \mathcal{L}}{\partial z_i} = \frac{\partial \mathcal{L}}{\partial \hat{y}_i} \cdot \frac{\partial \hat{y}_i}{\partial z_i} = \hat{y}_i - y_i$$
 
-Where $\mathbb{I}(z_i > 0)$ is the indicator function representing the derivative of the ReLU function:
-
-$$\text{ReLU}'(z_i) = \begin{cases} 1 & \text{if } z_i > 0 \\ 0 & \text{if } z_i \le 0 \end{cases}$$
+This un-gated formulation guarantees that $dz = dy$, preventing the permanent "Dying ReLU" parameter deadlocks that occur when target values are negative.
 
 ---
 
@@ -150,7 +148,71 @@ for (float& w : weights) {
 
 ### The Hard Weight Reset Shortcut (`[R]`)
 During live interactive training in [`AI::train_interactive()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp), the developer can press **`[R]`**:
-1. Instantly re-randomizes all 2,048 weights on the host using the Mersenne Twister engine.
+1. Instantly re-randomizes all weights on the host using the Mersenne Twister engine.
 2. Synchronizes the randomized weights to the GPU device buffer via `cudaMemcpyAsync()`.
 3. Resets the training step counter and loss metrics.
 4. Allows testing new data convergence trajectories in under **1 millisecond** without terminating the application.
+
+---
+
+## 6. Embedding Table Backpropagation & Scatter Kernel
+
+In naive synthetic embedding setups, token coordinates are fixed by trigonometric formulas and never learn from data. Project Axiom implements true **semantic emergence** by propagating gradients backward through the linear projection layer into the embedding matrix:
+
+### 1. Input Gradient Computation
+Applying the chain rule through the weight matrix yields the gradient with respect to each input feature $x_j$:
+
+$$\frac{\partial \mathcal{L}}{\partial x_j} = \sum_{i=0}^{D_{out}-1} \delta_i \cdot W_{i, j}$$
+
+### 2. Backward Scatter Kernel with `atomicAdd`
+Because the same token (e.g. `"the"` or `"9.8"`) can appear multiple times within the same 128-token context window, parallel threads updating embedding coordinates simultaneously would induce severe race conditions.
+
+Axiom executes a dedicated backward scatter kernel using hardware-accelerated atomic operations targeting the FP32 master table:
+
+```cpp
+__global__ void scatter_embedding_gradients_kernel(
+    const uint32_t* __restrict__ d_tokens,
+    const float* __restrict__ d_dx,
+    float* __restrict__ d_table_master,
+    float learning_rate,
+    int num_tokens,
+    int embedding_dim)
+{
+    int j = blockIdx.x; // Token position (0 to 127)
+    int d = threadIdx.x; // Embedding dimension (0 to 31)
+    if (j < num_tokens && d < embedding_dim) {
+        uint32_t token_id = d_tokens[j];
+        float grad = d_dx[j * embedding_dim + d];
+        atomicAdd(&d_table_master[token_id * embedding_dim + d], -learning_rate * grad);
+    }
+}
+```
+
+After master FP32 gradient accumulation, the values are rounded into the `__nv_bfloat16` device table `d_table` for subsequent forward passes. Over millions of steps, words and multimodal tokens that co-occur in similar contexts (such as `"gravity"` and `"acceleration"`, or `"bulk"` and `"training"`) are physically pulled into neighboring regions of the 32D hyperspace.
+
+---
+
+## 7. Curing AI Amnesia: The AdamW Optimizer State
+
+A standard neural network engine that saves only weights exhibits total amnesia: when restarted, the model has no recollection of its prior learning trajectory. It must slowly rediscover the gradient slope from scratch.
+
+Axiom cures this amnesia by persisting the full **AdamW Optimizer State** in companion file `optimizer.axiom`.
+
+### The Two Shadow Memories
+For every parameter $\theta$, the optimizer tracks two dynamic moments:
+1. **First Moment ($m_t$, Momentum / Velocity):**
+   $$m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t$$
+   Tracks the historical direction and speed of gradient descent.
+2. **Second Moment ($v_t$, Variance / Volatility / Friction):**
+   $$v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$$
+   Measures gradient volatility. Parameters on rough, erratic error surfaces receive smaller updates to prevent divergence.
+
+### Parameter Update with Bias Correction & Decoupled Weight Decay
+$$\hat{m}_t = \frac{m_t}{1 - \beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1 - \beta_2^t}$$
+
+$$\theta_{t+1} = \theta_t - \eta \left( \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda \theta_t \right)$$
+
+Where $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$, and $\lambda$ is the decoupled weight decay coefficient.
+
+### Binary Persistence (`optimizer.axiom`)
+When the user saves the model (via CLI `--archive` or keyboard shortcut `[S]`), Axiom writes the $m_t$ and $v_t$ tensors for both projection weights and the master embedding table into `optimizer.axiom`. Upon resuming, the engine reloads its complete momentum state directly into GPU VRAM, instantly continuing training at full velocity.

@@ -12,11 +12,11 @@ This document details the **200 automated verification tests across 9 test suite
 ================================================================================
           PROJECT AXIOM AUTOMATED VERIFICATION SUITE: 200 / 200 PASSING         
 ================================================================================
- [SUITE 1] Weight Persistence & Header Structure        :  25 /  25 PASSED [OK]
+ [SUITE 1] Weight & Optimizer Persistence Structure    :  25 /  25 PASSED [OK]
  [SUITE 2] Header Corruption Rejection & Defenses       :  25 /  25 PASSED [OK]
  [SUITE 3] Truncated File & Partial Data Immunity       :  20 /  20 PASSED [OK]
  [SUITE 4] Direct Model Inference Engine                :  25 /  25 PASSED [OK]
- [SUITE 5] Multimodal Tokenizer & Namespace Offsets     :  25 /  25 PASSED [OK]
+ [SUITE 5] Dense Early-Fusion Codebook & Decompressors  :  25 /  25 PASSED [OK]
  [SUITE 6] Precision Scaling & Mathematical Identity    :  20 /  20 PASSED [OK]
  [SUITE 7] Pinned Write-Combined DMA & Multi-Stream     :  20 /  20 PASSED [OK]
  [SUITE 8] Defensive Pointer Null-Guard & Neutralization:  20 /  20 PASSED [OK]
@@ -30,22 +30,21 @@ This document details the **200 automated verification tests across 9 test suite
 
 ## 2. Detailed Breakdown of the 9 Test Suites
 
-### Suite 1: Single Model Weight Persistence (25 Tests)
-- **Objective:** Verify byte-level serialization of parameters to disk.
+### Suite 1: Single Model Weight & Optimizer Persistence (25 Tests)
+- **Objective:** Verify byte-level serialization of parameters, master embeddings, and optimizer states to disk.
 - **Validations:**
-  - Strict 40-byte header layout matching `sizeof(AxiomWeightHeader) == 40`.
-  - Magic byte sequence exactly equals `"AXIOM_W1"`.
-  - Topology dimensions match $512$ inputs and $4$ outputs.
-  - Data payload size matches $(2048 + 4) \times 4 = 8,208$ bytes.
-  - Total file size on disk equals exactly $8,248$ bytes.
-  - Saved parameters reloaded into memory match original values within floating-point epsilon ($|w_{\text{orig}} - w_{\text{loaded}}| < 10^{-7}$).
+  - Header layout validation for `weights.axiom` and `optimizer.axiom`.
+  - Magic byte sequence exactly equals `"AXIOM_W1"` and `"AXIOM_O1"`.
+  - Topology dimensions match active model parameters, vocab capacity ($65,536$), and embedding dimensions ($32$).
+  - Data payload size matches tensor byte lengths.
+  - Saved parameters and AdamW momentum reloaded into memory match original values within floating-point epsilon ($|w_{\text{orig}} - w_{\text{loaded}}| < 10^{-7}$).
 
 ### Suite 2: Header Corruption Rejection (25 Tests)
-- **Objective:** Prove the engine rejects corrupt or malicious weight files without crashing.
+- **Objective:** Prove the engine rejects corrupt or malicious weight/optimizer files without crashing.
 - **Validations:**
   - Files with corrupted magic identifiers (e.g., `"BAD_MAG1"`, `"\0\0\0\0\0\0\0\0"`) are immediately rejected.
   - Incompatible version fields ($v \ne 1$) are rejected.
-  - Dimension mismatches (e.g., $1024 \times 8$) are rejected before allocating memory.
+  - Dimension mismatches are rejected before allocating memory.
   - Invalid payload size flags are detected and aborted.
   - Corrupt files trigger fallback to safe Mersenne Twister initialization with zero memory leaks.
 
@@ -53,8 +52,8 @@ This document details the **200 automated verification tests across 9 test suite
 - **Objective:** Test edge cases where disk writes are interrupted or storage is corrupted.
 - **Validations:**
   - Empty (0-byte) files abort cleanly.
-  - Partial headers (1 byte, 10 bytes, 39 bytes) abort cleanly.
-  - Truncated tensor payloads (e.g., 4,000 bytes instead of 8,208 bytes) are caught via stream read counters (`gcount()`).
+  - Partial headers abort cleanly.
+  - Truncated tensor payloads are caught via stream read counters (`gcount()`).
   - No undefined memory reads or buffer overruns occur during truncated file parsing.
 
 ### Suite 4: Direct Model Inference Engine (25 Tests)
@@ -63,19 +62,19 @@ This document details the **200 automated verification tests across 9 test suite
   - Input prompt string correctly tokenizes into `std::vector<uint32_t>`.
   - Context windows shorter than 128 tokens are zero-padded deterministically.
   - Context windows longer than 128 tokens are sliced to the trailing 128 tokens.
-  - Forward pass executes via Tensor Cores producing continuous 4D vectors.
-  - Euclidean $L_2$ decoding matches continuous predictions to valid printable ASCII characters.
+  - Forward pass executes via Tensor Cores producing continuous vectors.
+  - Decoding matches predictions to valid candidate tokens.
   - Output generation terminates cleanly without infinite loops.
 
-### Suite 5: Multimodal Tokenizer & Namespace Isolation (25 Tests)
-- **Objective:** Prove complete orthogonality across multimodal token spaces.
+### Suite 5: Dense Early-Fusion Codebook & Decompressors (25 Tests)
+- **Objective:** Prove dense codebook integrity, text/number unification, and decompressor pipeline safety.
 - **Validations:**
-  - Text tokens lie strictly within range $[1, 9,999,999]$.
-  - Number tokens lie strictly within range $[10,000,000, 19,999,999]$.
-  - Image codebook tokens lie strictly within range $[20,000,000, 29,999,999]$.
-  - Video codebook tokens lie strictly within range $[30,000,000, 39,999,999]$.
-  - Voice acoustic tokens lie strictly within range $[40,000,000, 49,999,999]$.
-  - Zero token ID collisions occur across all five modalities.
+  - Special tokens `<PAD>`, `<UNK>`, `<BOS>`, `<EOS>` occupy slots $[0 \dots 3]$.
+  - Unified words and numbers reside in `main_dictionary` range $[4 \dots 64,511]$.
+  - Numbers and words share context without namespace collision.
+  - Discrete visual tokens map strictly within $[64,512 \dots 64,767]$.
+  - Discrete acoustic tokens map strictly within $[64,768 \dots 65,023]$.
+  - Decompressor modules (`decom_doc`, `decom_image`, `decom_audio`, `decom_video`) reject corrupt container headers cleanly without memory leaks.
   - Symmetrical roundtrip text encoding and decoding: `tokens_to_text(text_to_tokens(str)) == str`.
 
 ### Suite 6: Precision Scaling & Mathematical Identity (20 Tests)

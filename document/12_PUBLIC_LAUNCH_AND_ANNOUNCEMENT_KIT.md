@@ -22,14 +22,17 @@ Over the past decade, enterprise AI development has normalized colossal framewor
 4. **The "Cancerous Data" Crisis:** Scraping uncurated web sludge that triggers synthetic feedback loops, bias amplification, and model collapse.
 
 ### What Makes Axiom Different?
+### What Makes Axiom Different?
 Axiom reclaims total control of the hardware and data pipeline:
 
 ⚡ **100% Tensor Core Saturation:** Powered by NVIDIA CUTLASS v4.8.0 templates (`mma.sync.aligned.m16n8k16`) targeting Ada Lovelace (`sm_89`, RTX 40-series).  
-🌲 **Epilogue Visitor Trees (EVT):** Fuses GEMM matrix multiplication, bias addition, and non-linear ReLU activation directly within shared memory registers—zero intermediate VRAM round-trips.  
-🚀 **Zero-Latency PCIe DMA:** Direct Memory Access via `cudaHostAllocWriteCombined` pinned memory, bypassing CPU L1/L2 caches to accelerate PCIe bandwidth by up to 40%.  
+🌲 **Linear Epilogue Visitor Trees (EVT):** Fuses GEMM matrix multiplication and bias addition directly within shared memory registers with zero intermediate VRAM round-trips—eliminating dead ReLU gates on continuous regression spaces.  
+🚀 **PCIe Token Streaming & DMA:** Sends compact 128 integer token IDs (512 bytes) across PCIe via `cudaHostAllocWriteCombined` pinned memory, slashes bus traffic by 93.75%, and expands them via a branchless VRAM gather kernel.  
 🏓 **Ping-Pong Multi-Stream Buffering:** Two non-blocking CUDA streams completely overlap host-to-device transfers with mathematical computation. The GPU never idles.  
 ♾️ **"The Seam" Continuous Context:** Slices the final 128 tokens across 100,000-token RAM chunks and carries them forward to eliminate boundary amnesia.  
-🌌 **True Native Multimodality:** A discrete VQ-VAE coordinate space mapping Text, Numbers, Images, Video, and Voice across orthogonal 10,000,000-slot namespaces so modalities never collide.  
+🌌 **Four-Stage Multimodal Ingestion:** Strips container compression (PDF/DOCX $\to$ text, MP4 $\to$ RGB frames, WAV $\to$ PCM waveforms) so the AI learns physics and semantics rather than reverse-engineering zlib compression entropy.  
+🎯 **Dense Early-Fusion Codebook ($V = 65,536$):** Words and numbers unified into `main_dictionary` alongside discrete vision and audio tokens in a compact 16-bit address space.  
+🧠 **Zero-Amnesia Optimizer State:** Persists AdamW momentum ($m_t$) and variance ($v_t$) into `optimizer.axiom`, allowing the AI to instantly resume its learning velocity across restarts.  
 
 ### The Single-Model Architecture & Open-Source Philosophy
 Axiom is built on the philosophy that AI achieves peak intelligence when trained on **handpicked, validated data** tailored to your exact goal. 
@@ -61,11 +64,14 @@ No Python. No garbage collector. Pure hardware mastery.
 
 🔥 **The Highlights:**  
 • 100% Tensor Core saturation via CUTLASS v4.8.0 (`sm_89` / Ada Lovelace)  
-• Epilogue Visitor Trees (EVT): Fused GEMM + Bias + ReLU in shared memory registers (0 VRAM round-trips)  
-• Direct PCIe DMA streaming with `cudaHostAllocWriteCombined` (bypassing CPU caches)  
+• Linear Epilogue Visitor Trees (EVT): Fused GEMM + Bias in shared memory with zero VRAM round-trips  
+• Four-Stage Ingestion: Extracts uncompressed UTF-8, RGB frames, and PCM audio to defeat zlib entropy traps  
+• Direct PCIe token ID streaming via `cudaHostAllocWriteCombined` (slashes bus bandwidth by 93.75%)  
+• Branchless VRAM gather kernel pulling from learnable 32D embedding matrix  
 • Ping-pong multi-stream buffering: zero GPU idle time  
 • "The Seam": 128-token carry-forward sliding window eliminating historical amnesia  
-• Discrete VQ-VAE space: text, vision, audio & numbers unified with 0 collisions  
+• Dense Early-Fusion Codebook ($V = 65,536$): text, vision, audio & numbers unified with 0 collisions  
+• Zero-Amnesia Optimizer State: Persisting AdamW momentum ($m_t, v_t$) to `optimizer.axiom`  
 • 100% local, private, and offline on consumer GPUs (RTX 4080)  
 
 Train on handpicked data. Run offline inference locally, or hit 'R' to hard-reset weights in seconds.
@@ -85,19 +91,21 @@ Today, I’m introducing **Project Axiom** 🌌: a bare-metal multimodal deep le
 **2/5**  
 Axiom strips away framework bloat to achieve 100% Tensor Core saturation on Ada Lovelace (`sm_89`):  
 • CUTLASS v4.8.0 templates (`mma.sync`)  
-• Epilogue Visitor Trees (EVT): Fusing GEMM + Bias + ReLU in shared memory with zero VRAM round-trips  
-• FP32 master weights for numerically stable SGD  
+• Linear Epilogue Visitor Trees (EVT): Fusing GEMM + Bias in shared memory with zero intermediate VRAM round-trips  
+• Learnable 32D VRAM embedding table with branchless gather kernel  
+• FP32 master weights for numerically stable gradient descent  
 
 **3/5**  
-Memory logistics matter as much as compute:  
-• Direct PCIe DMA streaming via `cudaHostAllocWriteCombined` pinned memory (bypasses CPU L1/L2 cache)  
+Memory logistics & ingestion matter as much as compute:  
+• Four-Stage Ingestion Pipeline: strips compression containers (PDF, MP4, WAV) to learn physics rather than zlib entropy  
+• Direct PCIe token ID streaming via `cudaHostAllocWriteCombined` pinned memory (slashing PCIe traffic by 93.75%)  
 • Ping-pong double buffering across non-blocking CUDA streams (compute & transfer 100% overlapped)  
 • "The Seam": continuous 128-token carry-forward sliding window  
 
 **4/5**  
 The Core Philosophy:  
 Throwing uncurated internet sludge at models creates cancerous data feedback loops and model collapse.  
-Axiom delivers a dedicated, unified model architecture: end-users run instant local inference ("Use it"), while developers fork the repo to train on their own curated data via `--train` or hit 'R' to hard-reset weights in seconds.  
+Axiom delivers a dedicated, unified model architecture: end-users run instant local inference ("Use it"), while developers fork the repo to train on their own curated data via `--train` with zero-amnesia optimizer state persistence (`optimizer.axiom`).  
 
 **5/5**  
 Axiom also tests the boundaries of physics: using our custom hardware entropy pipeline, we’re running **The Rewind Test** to see if neural networks can crack physical computational determinism.  
@@ -118,12 +126,14 @@ I built **Project Axiom**, an open-source deep learning engine written entirely 
 Standard Python stacks (PyTorch/TensorFlow) introduce significant abstraction penalties: runtime interpreter overhead, garbage collection micro-stalls, and VRAM fragmentation. Furthermore, training on massive uncurated internet datasets creates severe data poisoning and model collapse risks.
 
 ### Architecture Highlights
-- **Direct PCIe DMA:** Uses `cudaHostAllocWriteCombined` pinned host memory, bypassing CPU L1/L2 caches to write directly across the PCIe bus.
+- **Four-Stage Multimodal Ingestion Pipeline:** Implements Identifier $\to$ Decompressor $\to$ Sanitizer $\to$ Tokenizer. Strips zlib compression from PDFs, h.264 wrappers from MP4s, and RIFF headers from WAVs, feeding pure semantic payloads to the codebook rather than high-entropy container noise.
+- **Direct PCIe DMA Token Streaming:** Uploads compact 128 `uint32_t` token IDs across PCIe via `cudaHostAllocWriteCombined` pinned host memory, reducing bus traffic by 93.75%.
+- **VRAM Gather & Scatter Kernels:** Expands token IDs into 32D embeddings directly in GDDR6X VRAM and dynamically updates coordinates via atomic gradient scatter.
 - **Asynchronous Ping-Pong Pipeline:** Two non-blocking CUDA streams overlap host-to-device memory copies with compute so the GPU never idles.
-- **CUTLASS v4.8.0 + EVT:** Executes hardware `mma.sync` instructions on Tensor Cores, fusing GEMM, bias addition, and ReLU into a single kernel with zero intermediate VRAM round-trips.
+- **CUTLASS v4.8.0 + Linear EVT:** Executes hardware `mma.sync` instructions on Tensor Cores, fusing GEMM and bias addition into a single kernel with zero intermediate VRAM round-trips.
 - **The Seam:** Slices the final 128 tokens from 100k-token RAM chunks and staples them to the front of the next chunk, preserving continuous sequence consciousness without backward disk seeks.
-- **Discrete VQ-VAE Unified Space:** Maps text, numerical hashes, images, video, and audio across orthogonal 10M-integer offsets to eliminate modal namespace collisions.
-- **Single Dedicated Model Architecture:** End users run direct zero-overhead inference with shipped weights. Open-source developers run the continuous `--train` loop on custom datasets or hit 'R' to hard-reset weights in seconds.
+- **Dense Early-Fusion Codebook ($V = 65,536$):** Unifies text and numerical quantities into `main_dictionary` alongside discrete visual and audio tokens, eliminating billion-scale VRAM table allocations.
+- **Curing AI Amnesia:** Persists AdamW momentum ($m_t$) and variance ($v_t$) into `optimizer.axiom`, allowing training velocity to survive restarts.
 - **The Rewind Test:** Ingests hardware thermal jitter (`std::random_device`) to empirically test computational determinism.
 
 The entire CUDA backend compiles into a clean `cuda_transfer.dll` behind an `extern "C"` boundary, tested with 200 automated unit/integration tests with zero VRAM leaks.

@@ -75,26 +75,16 @@ This document provides the definitive architectural blueprint to eliminate these
   3. **Rank-1 Outer Product SGD (`backward_pass.cu:55-80`):**
      The backward pass runs on standard CUDA cores ($1 \text{ thread per weight}$), calculating $dL/dW = dz \times x$. Because $M=1$ (single batch), this is a memory-bound vector outer product that cannot utilize Tensor Cores.
 
-### 2.4. Multimodal Tokenizer & Parser (`core/util/parser.cpp`, `core/include/parser.hpp`)
+### 2.4. Multimodal Tokenizer & Ingestion Pipeline (`core/util/parser.cpp`, `core/include/parser.hpp`)
 * **What Works Flawlessly:**
-  * **Modality Namespace Isolation:** 10,000,000-slot offsets guarantee that Text (1+), Numbers (10M+), Images (20M+), Video (30M+), and Audio (40M+) never collide.
+  * **Unified Text & Number Integration [Phase 1.1 DONE]:** Merged numbers and text into `main_dictionary`, allowing physics terms and numerical quantities (e.g. `"gravity"` and `"9.8"`) to share semantic context.
   * **Persistence Serialization:** `save_vocabulary` and `load_vocabulary` write a clean binary stream (`AXVK_V1`) storing string lengths and character bytes sequentially.
-* **The Fatal Architectural Flaws:**
-  1. **Synthetic Non-Semantic Embedding Space:**
-     ```cpp
-     vec[d] = sin(static_cast<double>(id) * (d + 1.0));
-     ```
-     Token IDs are assigned in chronological order of ingestion. Applying a sine function produces arbitrary pseudo-random coordinates with zero semantic topology: "USA" and "America" have no spatial correlation.
-  2. **Severe Dimensionality Bottleneck:**
-     Compressing 3,249,513 discrete concepts into $d = 4$ dimensions violates fundamental metric space geometry. In 4D space, 3.25 million points are crammed together with an average pairwise distance approaching zero.
-  3. **Unsanitized Vocabulary Explosion:**
-     Splitting purely on whitespace (`iss >> word`) without removing XML tags, HTML markup, punctuation, or applying Byte-Pair Encoding (BPE) caused the vocabulary to explode to 3.25 million tokens across 3,024 files.
-  4. **The 530 ms CPU Search Jam:**
-     `decode_embedding_to_token` scans the entire `input.embedding_table` (`std::unordered_map`) sequentially on the CPU:
-     ```cpp
-     for (const auto& [id, vec] : input.embedding_table) { ... }
-     ```
-     Traversing 3.25 million heap-allocated hash table nodes on a single CPU thread takes 530 ms per token, capping decoding throughput at 1.9 tokens/sec.
+  * **Dual Ingestion Workflow Routing:** Raw manual CLI text inputs bypass file decompression and enter directly into the sanitizer and tokenizer.
+* **The Fatal Architectural Flaws & Historical Traps:**
+  1. **The Raw Byte Ingestion Trap:** Ingesting raw compressed files (`.pdf`, `.mp4`) without extraction forced the tokenizer to ingest zlib compression entropy and container tags rather than learning true physics, semantics, or visual geometry.
+  2. **Synthetic Non-Semantic Embedding Space:** `vec[d] = sin(id * (d + 1))` scattered semantically linked concepts (e.g. `"bulk"` and `"training"`) randomly across vector space with zero semantic topology.
+  3. **The Billion-ID Memory Wall:** Sparse offsets (1B..4B) caused multi-gigabyte VRAM allocation crashes when attempting to instantiate device embedding tables.
+  4. **The 530 ms CPU Search Jam:** Sequential traversal of 3.25 million hash map entries on the CPU capped decoding throughput at 1.9 tokens/sec.
 
 ---
 
@@ -102,14 +92,17 @@ This document provides the definitive architectural blueprint to eliminate these
 
 | Roadmap Milestone | Plan Requirement | Actual Code Implementation Status | Evaluation & Reality Check |
 | :--- | :--- | :--- | :--- |
-| **Phase 1: Precision Scaling** | `uint32_t` IDs, 10M offsets, `bfloat16` layout | **100% COMPLETE** | Fully achieved. BF16 aligns natively with Ada hardware. |
-| **Phase 2: Data Logistics** | Stream loader, seam carry-forward, non-blocking | **90% COMPLETE** | Chunk seam works. Minor CPU polling overhead remains. |
-| **Phase 3: PCIe Zero-Copy** | Pinned write-combined host memory, ping-pong streams | **95% COMPLETE** | Implemented in `optimizer.cpp` & `upload.cu`. 0.6 ms TTFT achieved. |
-| **Phase 4: Compute & EVT** | CUTLASS GEMM on Tensor Cores, EVT fusion | **100% RESOLVED & VERIFIED** | **[DONE]** Linear EVT epilogue + un-gated SGD ($dz = dy$). Dead ReLU eliminated. |
-| **Phase 5: VRAM Management** | `cudaMallocAsync`, Stream memory pools, BFC Allocator | **10% COMPLETE** | Static allocation used; dynamic allocator deferred. |
-| **Phase 6: Autoregressive State** | PagedAttention, KV Caching, COW prefix caching | **0% COMPLETE** | Code is still a 1-layer Perceptron, not a Transformer. |
-| **Phase 7: Microsecond Scaling** | CUDA Graphs (DAGs), ATen-style C++ Dispatcher | **0% COMPLETE** | Monolithic functions; no graph capture or dispatcher yet. |
-| **Decoding Layer (Unlisted)** | Efficient next-token extraction | **IN PROGRESS (CPU Flat Cache Done)** | **[DONE: Flat array cache]** GPU GEMM batched top-1 pending (Milestone 2). |
+| **Phase 1: Ingestion & Namespaces** | 4-Stage Ingestion, decompressors, unified text/num | **PHASE 1.1 DONE / 1.2 IN PROGRESS** | `main_dictionary` unified; decompressor skeletons in `core/include/decompressor/`. |
+| **Phase 2: Dense Codebook** | Fixed bounded codebook ($V = 65,536$), 16-bit blocks | **IN PROGRESS** | Eradicating billion-scale offsets; bounds $V \le 65,536$ ($4.19\text{ MB}$ bf16 table). |
+| **Phase 3: VRAM Embedding Matrix** | Device BF16 + Master FP32 tables in VRAM | **IN PROGRESS** | Replaces sine waves with learnable $65,536 \times 32$ matrix in VRAM. |
+| **Phase 4: Forward Gather Kernel** | Token ID PCIe streaming (512 B) + CUDA gather | **IN PROGRESS** | Slashes PCIe bus traffic by 93.75%; branchless gather into `d_context_window`. |
+| **Phase 5: Backward Scatter Kernel** | Input gradients $dL/dx_j$ + `atomicAdd` scatter | **IN PROGRESS** | Enables semantic clustering of related concepts over training steps. |
+| **Phase 6: Curing AI Amnesia** | Fused AdamW kernel + `optimizer.axiom` persistence | **IN PROGRESS** | Preserves momentum ($m_t$) and variance ($v_t$) across training restarts. |
+| **Phase 7: Compute & Linear EVT** | CUTLASS GEMM on Tensor Cores, Linear EVT epilogue | **100% COMPLETE & VERIFIED** | **[DONE]** Linear EVT epilogue + un-gated SGD ($dz = dy$). Dead ReLU eliminated. |
+| **Phase 8: Production VRAM** | `cudaMallocAsync`, Stream memory pools, BFC Allocator | **10% COMPLETE** | Static allocation used; dynamic allocator deferred. |
+| **Phase 9: Autoregressive State** | PagedAttention, KV Caching, COW prefix caching | **0% COMPLETE** | Scheduled for Transformer expansion. |
+| **Phase 10: Microsecond Scaling** | CUDA Graphs (DAGs), ATen-style C++ Dispatcher | **0% COMPLETE** | Monolithic functions; graph capture deferred to V2. |
+| **Phase 11: Mixture of Experts (MoE)**| Sparse Expert Blocks + Gating Router | **CONCEPTUAL / ROADMAP** | Multi-expert routing for extreme parameter scaling. |
 
 ---
 
