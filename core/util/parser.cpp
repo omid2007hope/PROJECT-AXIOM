@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -33,7 +34,10 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
 	if (developer_mode == true) {
 		// 1. Text Tokenization (IDs 1 - 9999)
-		for (const std::string& word : test.data_txt) {
+		for (std::string word : test.data_txt) {
+			for (char& c : word)
+				c = (c >= 'A' && c <= 'Z') ? (c | 0x20) : c;
+
 			add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
 		}
 
@@ -68,7 +72,10 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
 	} else {
 		// Production Mode: Dynamically Tokenize User's UI Data
-		for (const std::string& word : input.user_text) {
+		for (std::string word : input.user_text) {
+			for (char& c : word)
+				c = (c >= 'A' && c <= 'Z') ? (c | 0x20) : c;
+
 			add_assign_increase(word, input.text_dictionary, input.next_text_id, input);
 		}
 		for (double val : input.user_numbers) {
@@ -500,14 +507,14 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 
 		if (developer_mode) {
 			std::cout << "  [OK] " << fpath.filename().string() << " ("
-				  << format_file_size(fsize) << ") -> " << modality_tag
-				  << ": " << added_tokens << " tokens mapped\n";
+				  << format_file_size(fsize) << ") -> " << modality_tag << ": "
+				  << added_tokens << " tokens mapped\n";
 		} else {
-			const double pct = (total_files > 0)
-				? std::min(100.0,
-					   (static_cast<double>(files_processed) * 100.0 /
-					    total_files))
-				: 100.0;
+			const double pct =
+				(total_files > 0) ? std::min(100.0,
+							     (static_cast<double>(files_processed) *
+							      100.0 / total_files))
+						  : 100.0;
 			constexpr int bar_w = 24;
 			int filled = static_cast<int>((pct / 100.0) * bar_w);
 			if (filled > bar_w)
@@ -528,10 +535,9 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				fname = fname.substr(0, 17) + "...";
 
 			std::cout << "\r  [..] Ingesting assets " << bar << " " << std::fixed
-				  << std::setprecision(1) << pct << "% (" << files_processed
-				  << "/" << total_files << " files | "
-				  << input.tokenized_data.size() << " tokens | " << fname
-				  << ")   " << std::flush;
+				  << std::setprecision(1) << pct << "% (" << files_processed << "/"
+				  << total_files << " files | " << input.tokenized_data.size()
+				  << " tokens | " << fname << ")   " << std::flush;
 		}
 	};
 
