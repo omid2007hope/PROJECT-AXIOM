@@ -49,6 +49,8 @@ bool test_cuda_transfer();
 bool test_transfer();
 bool test_ai();
 bool test_inference();
+bool test_identifier();
+bool test_decom();
 
 // *****************************************************************************
 // Configuration: the single source of truth for everything the backend uses
@@ -999,6 +1001,12 @@ bool run_tests(const std::filesystem::path& embedded_path) {
 
 	std::cout << "--- test_inference AI ---\n";
 	all_ok &= test_inference();
+
+	std::cout << "--- test_identifier AI ---\n";
+	all_ok &= test_identifier();
+
+	std::cout << "--- test_decom AI ---\n";
+	all_ok &= test_decom();
 
 	// The tests are done with the generated embedding stream
 	std::error_code cleanup_ec;
