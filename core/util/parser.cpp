@@ -30,6 +30,28 @@ Now isolated from the neural network entirely.
 // Tokenization phase
 // *************
 
+// Cleans raw token strings: lowercases ASCII and strips leading/trailing punctuation
+static std::string sanitize_word(const std::string& raw) {
+	if (raw.empty()) return "";
+	if (raw.size() >= 3 && raw.front() == '<' && raw.back() == '>') {
+		return raw;
+	}
+	size_t start = 0;
+	while (start < raw.size() && (std::ispunct(static_cast<unsigned char>(raw[start])))) {
+		++start;
+	}
+	size_t end = raw.size();
+	while (end > start && (std::ispunct(static_cast<unsigned char>(raw[end - 1])))) {
+		--end;
+	}
+	if (start >= end) return "";
+	std::string clean = raw.substr(start, end - start);
+	for (char& c : clean) {
+		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	}
+	return clean;
+}
+
 // MOCK DISCRETE TOKENIZER (Gemini / Chameleon Early Fusion style)
 std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
@@ -40,11 +62,11 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
 	if (developer_mode == true) {
 		// 1. Text Tokenization (IDs 1 - 9999)
-		for (std::string word : test.test_input) {
-			for (char& c : word)
-				c = (c >= 'A' && c <= 'Z') ? (c | 0x20) : c;
-
-			add_assign_increase(word, input.main_dictionary, input.next_text_id, input);
+		for (const std::string& word : test.test_input) {
+			std::string clean = sanitize_word(word);
+			if (!clean.empty()) {
+				add_assign_increase(clean, input.main_dictionary, input.next_text_id, input);
+			}
 		}
 
 		// 3. Image Tokenization (IDs 20000 - 29999)
@@ -72,11 +94,11 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 
 	} else {
 		// Production Mode: Dynamically Tokenize User's UI Data
-		for (std::string word : input.user_input) {
-			for (char& c : word)
-				c = (c >= 'A' && c <= 'Z') ? (c | 0x20) : c;
-
-			add_assign_increase(word, input.main_dictionary, input.next_text_id, input);
+		for (const std::string& word : input.user_input) {
+			std::string clean = sanitize_word(word);
+			if (!clean.empty()) {
+				add_assign_increase(clean, input.main_dictionary, input.next_text_id, input);
+			}
 		}
 
 		for (const std::string& path : input.user_image_paths) {
@@ -152,12 +174,18 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 		// Insure it creates a new unique ID each time
 		if (id != input.last_token) {
 			input.last_token = id;
-			for (size_t d = 0; d < input.embedding_dim; ++d) {
-
-				current_vec[d] = static_cast<std::bfloat16_t>(
-
-					// tokenized data multiply by ((1, 2, 3, 4) + 1.0)
-					std::sin(static_cast<double>(id) * (d + 1.0)));
+			auto it = input.embedding_table.find(id);
+			if (it != input.embedding_table.end()) {
+				current_vec = it->second;
+			} else {
+				float bound = 1.0f / std::sqrt(static_cast<float>(input.embedding_dim > 0 ? input.embedding_dim : 4));
+				for (size_t d = 0; d < input.embedding_dim; ++d) {
+					uint32_t h = id * 0x45d9f3b + static_cast<uint32_t>(d + 1) * 0x119de1f3;
+					h = ((h >> 16) ^ h) * 0x45d9f3b;
+					h = ((h >> 16) ^ h);
+					float norm = static_cast<float>(h) / static_cast<float>(0xFFFFFFFFU);
+					current_vec[d] = static_cast<std::bfloat16_t>(-bound + 2.0f * bound * norm);
+				}
 			}
 		}
 
@@ -235,12 +263,16 @@ void Parser::build_embedding_table(Input& input) {
 		input.embedding_table.reserve(total_unique);
 	}
 
+	float bound = 1.0f / std::sqrt(static_cast<float>(input.embedding_dim > 0 ? input.embedding_dim : 4));
 	auto ensure_embedding = [&](uint32_t id) {
 		if (input.embedding_table.find(id) == input.embedding_table.end()) {
 			std::vector<std::bfloat16_t> vec(input.embedding_dim);
 			for (uint32_t d = 0; d < input.embedding_dim; ++d) {
-				vec[d] = static_cast<std::bfloat16_t>(
-					std::sin(static_cast<double>(id) * (d + 1.0)));
+				uint32_t h = id * 0x45d9f3b + static_cast<uint32_t>(d + 1) * 0x119de1f3;
+				h = ((h >> 16) ^ h) * 0x45d9f3b;
+				h = ((h >> 16) ^ h);
+				float norm = static_cast<float>(h) / static_cast<float>(0xFFFFFFFFU);
+				vec[d] = static_cast<std::bfloat16_t>(-bound + 2.0f * bound * norm);
 			}
 			input.embedding_table[id] = std::move(vec);
 		}
@@ -374,16 +406,27 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	std::istringstream iss(prompt);
 	std::string word;
 	while (iss >> word) {
-		if (input.main_dictionary.find(word) == input.main_dictionary.end()) {
+		std::string clean = sanitize_word(word);
+		if (clean.empty()) continue;
+
+		auto it = input.main_dictionary.find(clean);
+		if (it == input.main_dictionary.end()) {
+			it = input.main_dictionary.find(word);
+		}
+
+		if (it == input.main_dictionary.end()) {
 			if (input.next_text_id <= vocab::TEXT_MAX_ID) {
 				uint32_t new_id = input.next_text_id++;
-				input.main_dictionary[word] = new_id;
-				input.reverse_main_dictionary[new_id] = word;
+				input.main_dictionary[clean] = new_id;
+				input.reverse_main_dictionary[new_id] = clean;
+				tokens.push_back(new_id);
 			} else {
-				input.main_dictionary[word] = vocab::UNK;
+				input.main_dictionary[clean] = vocab::UNK;
+				tokens.push_back(vocab::UNK);
 			}
+		} else {
+			tokens.push_back(it->second);
 		}
-		tokens.push_back(input.main_dictionary[word]);
 	}
 	build_embedding_table(input);
 	return tokens;
@@ -578,7 +621,10 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			std::istringstream iss(extracted_text);
 			std::string word;
 			while (iss >> word) {
-				add_assign_increase(word, input.main_dictionary, input.next_text_id, input);
+				std::string clean = sanitize_word(word);
+				if (!clean.empty()) {
+					add_assign_increase(clean, input.main_dictionary, input.next_text_id, input);
+				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			std::string tag = (ext == ".pdf") ? "PDF Document" : ((ext == ".docx") ? "DOCX Document" : "Text");

@@ -759,10 +759,10 @@ void run_training_loop(AI& ai,
 		       const std::filesystem::path& weights_path,
 		       const std::filesystem::path& vocab_path,
 		       size_t max_steps = 0) {
+	size_t total_dataset_tokens = portion.ram_buffer_token_ids.size();
 	std::error_code ec;
 	uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
-	size_t total_dataset_tokens = 0;
-	if (!ec && file_bytes > 0) {
+	if (total_dataset_tokens == 0 && !ec && file_bytes > 0) {
 		total_dataset_tokens = file_bytes / (portion.token_dim * sizeof(std::bfloat16_t));
 	}
 	size_t total_dataset_steps = (total_dataset_tokens > portion.context_window_size)
@@ -944,6 +944,10 @@ void run_training_loop(AI& ai,
 		// When the RAM buffer is exhausted, the offset resets to 0.
 		// Pull the next massive chunk from disk into RAM.
 		if (portion.offset == 0) {
+			if (!portion.ram_buffer_token_ids.empty()) {
+				// Completed pass over in-memory token IDs
+				break;
+			}
 			optimizer.disk_to_ram(portion);
 			if (portion.ram_buffer_tokens.size() <
 			    portion.all_elements + portion.target_elements) {
@@ -1039,6 +1043,7 @@ struct EmbeddedDataCleanup {
 		// must start reading from the top of a fresh file.
 		optimizer.close_stream();
 		portion.ram_buffer_tokens.clear();
+		portion.ram_buffer_token_ids.clear();
 		portion.offset = 0;
 
 		std::error_code ec;
@@ -1157,19 +1162,21 @@ bool execute_training_session(AI& ai,
 				  << " -> Tokenized into -> " << token_id
 				  << " -> tokenized embedded into -> [";
 
-			auto it = input.embedding_table.find(token_id);
-			if (it != input.embedding_table.end()) {
-				for (size_t d = 0; d < it->second.size(); ++d) {
+			// Query actual master embedding table from AI VRAM/host state
+			if (token_id < ai.vocab_size && !ai.h_embeddings.empty()) {
+				for (size_t d = 0; d < ai.embedding_dim; ++d) {
 					std::cout << std::fixed << std::setprecision(4)
-						  << static_cast<float>(it->second[d])
-						  << (d + 1 < it->second.size() ? ", " : "");
+						  << ai.h_embeddings[token_id * ai.embedding_dim + d]
+						  << (d + 1 < ai.embedding_dim ? ", " : "");
 				}
 			} else {
-				for (size_t d = 0; d < input.embedding_dim; ++d) {
-					const float val = static_cast<float>(std::sin(
-						static_cast<double>(token_id) * (d + 1.0)));
-					std::cout << std::fixed << std::setprecision(4) << val
-						  << (d + 1 < input.embedding_dim ? ", " : "");
+				auto it = input.embedding_table.find(token_id);
+				if (it != input.embedding_table.end()) {
+					for (size_t d = 0; d < it->second.size(); ++d) {
+						std::cout << std::fixed << std::setprecision(4)
+							  << static_cast<float>(it->second[d])
+							  << (d + 1 < it->second.size() ? ", " : "");
+					}
 				}
 			}
 			std::cout << "]\n";
@@ -1178,35 +1185,31 @@ bool execute_training_session(AI& ai,
 			  << std::defaultfloat << std::flush;
 	}
 
-	std::cout << "[..] Synthesizing continuous embeddings & saving to disk...\n" << std::flush;
-	parser.embedding(input, test);
-	parser.build_embedding_table(input);
-	std::cout << "[OK] Vocabulary prepared: " << input.embedding_table.size()
+	parser.save_vocabulary(vocab_path, input);
+	std::cout << "[OK] Vocabulary prepared: "
+		  << (input.main_dictionary.size() + input.image_dictionary.size() +
+		      input.video_dictionary.size() + input.voice_dictionary.size())
 		  << " tokens mapped.\n"
 		  << std::flush;
 
-	parser.save_vocabulary(vocab_path, input);
-
-	// Release the raw tokenized tokens buffer from host RAM now that it is safely streamed to disk
-	input.tokenized_data.clear();
-	input.tokenized_data.shrink_to_fit();
+	// Phase 4.1: Invert Host-to-Device Dataflow
+	// Stream token IDs directly via portion.ram_buffer_token_ids for 512-byte PCIe transfers and CUDA gather
+	portion.ram_buffer_token_ids = std::move(input.tokenized_data);
+	portion.offset = 0;
 
 	// Training Mode
 	if (developer_mode) {
 		std::cout << "--- Training AI ---\n" << std::flush;
 	}
 
-	std::cout << "[..] Optimizing data and loading to RAM...\n" << std::flush;
+	std::cout << "[..] Allocating pinned memory and preparing PCIe token stream...\n" << std::flush;
 	if (!portion.allocate_pinned()) {
 		std::cerr << "[!] Failed to allocate pinned host memory.\n";
 		return false;
 	}
 
-	optimizer.disk_to_ram(portion);
-
-	if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
-		std::cerr << "[!] Not enough data in " << embedded_path
-			  << " to fill one context window.\n";
+	if (portion.ram_buffer_token_ids.size() < config::context_window_size + 1) {
+		std::cerr << "[!] Not enough token data to fill one context window.\n";
 		portion.free_pinned();
 		return false;
 	}
