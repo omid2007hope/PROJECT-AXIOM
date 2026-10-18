@@ -328,6 +328,9 @@ uint32_t Parser::decode_embedding_to_token(const Input& input,
 		for (size_t d = 0; d < compared_dims; ++d) {
 			const float diff = embedding_vector[d] - row[d];
 			dist_sq += diff * diff;
+			if (dist_sq >= min_dist_sq) {
+				break;
+			}
 		}
 		if (dist_sq < min_dist_sq) {
 			min_dist_sq = dist_sq;

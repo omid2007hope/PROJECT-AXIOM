@@ -67,7 +67,7 @@ namespace axiom {
     # Step 3: Run Bulk Training for 10000 steps
     print("\n[..] Launching Bulk Training on C++ Source Code (10,000 steps)...")
     train_proc = subprocess.run(
-        ["app.exe", "--bulk", "10000"],
+        [os.path.join(core_dir, "app.exe"), "--bulk", "10000"],
         cwd=core_dir,
         capture_output=True,
         text=True,
@@ -97,7 +97,7 @@ namespace axiom {
     # Step 4: Test Inference Engine using the trained vocabulary
     print("\n[..] Launching Inference Engine and validating vocabulary restoration...")
     infer_proc = subprocess.run(
-        ["app.exe", "--use"],
+        [os.path.join(core_dir, "app.exe"), "--use"],
         cwd=core_dir,
         input="int main\nvoid run_inference_engine\nexit\n",
         capture_output=True,

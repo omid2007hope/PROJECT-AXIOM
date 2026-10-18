@@ -12,6 +12,12 @@ bool test_ifstream() {
 
 	for (const auto& file_name : assets) {
 		std::filesystem::path p = asset_dir / file_name;
+		if (!std::filesystem::exists(p)) {
+			std::filesystem::path fb1 = test_core_dir() / "test_sandbox_assets" / file_name;
+			std::filesystem::path fb2 = test_core_dir() / "training_data" / "Data" / file_name;
+			if (std::filesystem::exists(fb1)) p = fb1;
+			else if (std::filesystem::exists(fb2)) p = fb2;
+		}
 		std::ifstream f(p, std::ios::binary | std::ios::ate);
 		bool opened = f.is_open();
 		test_check(opened, (file_name + " opened successfully").c_str(), s_pass, s_fail);

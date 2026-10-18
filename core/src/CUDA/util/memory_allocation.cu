@@ -216,7 +216,24 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 		cudaFree(gpu->d_loss);
 		gpu->d_loss = nullptr;
 	}
+	if (gpu->d_inv_rms) {
+		cudaFree(gpu->d_inv_rms);
+		gpu->d_inv_rms = nullptr;
+	}
+	if (gpu->d_probs) {
+		cudaFree(gpu->d_probs);
+		gpu->d_probs = nullptr;
+	}
+	if (gpu->d_pred_id) {
+		cudaFree(gpu->d_pred_id);
+		gpu->d_pred_id = nullptr;
+	}
+	if (gpu->d_dz) {
+		cudaFree(gpu->d_dz);
+		gpu->d_dz = nullptr;
+	}
 	gpu->output_elements = 0;
+	gpu->vocab_elements = 0;
 }
 
 extern "C" CUDA_API void* pinned_alloc(size_t bytes) {

@@ -40,6 +40,7 @@ struct GpuEmbeddings {
 	void* d_table_master = nullptr; // device ptr to float (vocab_size * embedding_dim)
 	size_t vocab_size = 65536;
 	size_t embedding_dim = 32;
+	size_t active_vocab_size = 0; // Milestone 3: Dynamic bound for active vocabulary in tied logits/softmax
 
 	// AdamW first moment (m_t) and second moment (v_t) tensors
 	void* d_m = nullptr; // device ptr to float (vocab_size * embedding_dim)
@@ -73,10 +74,17 @@ struct GpuActivations {
 	void* d_output = nullptr; // device ptr to __nv_bfloat16
 	size_t output_elements = 0;
 
-	// device ptr to float: running sum of 0.5 * (y - t)^2 over the steps since the
+	// device ptr to float: running sum of loss over the steps since the
 	// last download_loss(). Measured before each update, so it is the loss on a
 	// sample the network has not trained on yet.
 	void* d_loss = nullptr;
+
+	// Milestone 3: Discrete Autoregressive Token Classification
+	void* d_inv_rms = nullptr; // device ptr to float (RMS normalization factor)
+	void* d_probs = nullptr;   // device ptr to float (Softmax probability distribution)
+	size_t vocab_elements = 0; // capacity of d_probs
+	void* d_pred_id = nullptr; // device ptr to uint32_t (GPU Argmax winning token ID)
+	void* d_dz = nullptr;      // device ptr to float (loss gradient dz across output neurons)
 };
 
 #ifdef BUILDING_CUDA_DLL

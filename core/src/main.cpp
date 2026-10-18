@@ -560,6 +560,9 @@ void run_inference_engine(AI& ai,
 	}
 
 	parser.build_embedding_table(input);
+	if (input.next_text_id > 4) {
+		ai.active_vocab_size = input.next_text_id;
+	}
 
 	std::cout << "Model Architecture: Single Dedicated Multimodal Perceptron\n"
 		  << "Context Window    : " << config::context_window_size << " tokens ("
@@ -619,17 +622,19 @@ void run_inference_engine(AI& ai,
 		}
 		telemetry.record_first_token();
 
-		// Decode prediction via nearest-neighbor L2 search
-		uint32_t pred_token_id = parser.decode_embedding_to_token(input, prediction);
+		// Milestone 3: GPU Argmax decoding (bypasses CPU distance bottleneck)
+		uint32_t pred_token_id = ai.last_predicted_token_id;
+		if (pred_token_id == 0 && !input.embedding_table.empty()) {
+			pred_token_id = parser.decode_embedding_to_token(input, prediction);
+		}
 		std::string pred_token_str = parser.token_to_string(input, pred_token_id);
+		telemetry.end_inference(ai.h_weights.size());
 
 		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] ["
 			  << prediction[0] << ", " << prediction[1] << ", " << prediction[2] << ", "
 			  << prediction[3] << "]\n"
 			  << "[Next Token ID] #" << pred_token_id << "\n"
 			  << "[Prediction]    \"" << pred_token_str << "\"\n";
-
-		telemetry.end_inference(ai.h_weights.size());
 	}
 }
 
@@ -1196,6 +1201,10 @@ bool execute_training_session(AI& ai,
 		      input.video_dictionary.size() + input.voice_dictionary.size())
 		  << " tokens mapped.\n"
 		  << std::flush;
+
+	if (input.next_text_id > 4) {
+		ai.active_vocab_size = input.next_text_id;
+	}
 
 	// Phase 4.1: Invert Host-to-Device Dataflow
 	// Stream token IDs directly via portion.ram_buffer_token_ids for 512-byte PCIe transfers and CUDA gather

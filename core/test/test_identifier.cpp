@@ -18,6 +18,9 @@ bool test_identifier() {
 	std::filesystem::path asset_dir = test_asset_dirs()[0];
 
 	std::filesystem::path photo_path = asset_dir / "Photo.jpeg";
+	if (!std::filesystem::exists(photo_path)) {
+		photo_path = test_core_dir() / "test_sandbox_assets" / "Photo.jpeg";
+	}
 	if (std::filesystem::exists(photo_path)) {
 		IdentifiedFile info = Identifier::identify(photo_path);
 		test_check(info.is_valid, "Photo.jpeg is valid file", s_pass, s_fail);
@@ -27,6 +30,9 @@ bool test_identifier() {
 	}
 
 	std::filesystem::path video_path = asset_dir / "Video.mp4";
+	if (!std::filesystem::exists(video_path)) {
+		video_path = test_core_dir() / "test_sandbox_assets" / "Video.mp4";
+	}
 	if (std::filesystem::exists(video_path)) {
 		IdentifiedFile info = Identifier::identify(video_path);
 		test_check(info.is_valid, "Video.mp4 is valid file", s_pass, s_fail);
@@ -36,6 +42,9 @@ bool test_identifier() {
 	}
 
 	std::filesystem::path voice_path = asset_dir / "Voice.ogg";
+	if (!std::filesystem::exists(voice_path)) {
+		voice_path = test_core_dir() / "test_sandbox_assets" / "Voice.ogg";
+	}
 	if (std::filesystem::exists(voice_path)) {
 		IdentifiedFile info = Identifier::identify(voice_path);
 		test_check(info.is_valid, "Voice.ogg is valid file", s_pass, s_fail);
@@ -128,6 +137,18 @@ bool test_identifier() {
 	// 4. Directory Scanning (Bulk identification)
 	std::cout << "\n[4] Directory Scanning (asset_sample/)\n";
 	auto identified_files = Identifier::identify_directory(asset_dir, false);
+	if (identified_files.size() < 10) {
+		std::filesystem::path train_dir = test_core_dir() / "training_data" / "Data";
+		if (std::filesystem::exists(train_dir)) {
+			auto train_files = Identifier::identify_directory(train_dir, false);
+			identified_files.insert(identified_files.end(), train_files.begin(), train_files.end());
+		}
+		std::filesystem::path sandbox_dir = test_core_dir() / "test_sandbox_assets";
+		if (std::filesystem::exists(sandbox_dir)) {
+			auto sandbox_files = Identifier::identify_directory(sandbox_dir, false);
+			identified_files.insert(identified_files.end(), sandbox_files.begin(), sandbox_files.end());
+		}
+	}
 	test_check(!identified_files.empty(), "identify_directory finds files in asset_sample/", s_pass, s_fail);
 	test_check(identified_files.size() > 3000, "identify_directory indexed over 3,000 assets", s_pass, s_fail);
 

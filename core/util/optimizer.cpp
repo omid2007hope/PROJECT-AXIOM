@@ -131,8 +131,10 @@ bool Optimizer::ram_to_contextWindow(Portion& portion) {
 						    portion.ram_buffer_token_ids.data() + portion.offset,
 						    portion.context_window_size * sizeof(uint32_t));
 				}
+				uint32_t target_id = portion.ram_buffer_token_ids[portion.offset + portion.context_window_size];
 				std::memset(portion.target_tokens[b_idx], 0,
 					    portion.target_elements * sizeof(std::bfloat16_t));
+				*reinterpret_cast<uint32_t*>(portion.target_tokens[b_idx]) = target_id;
 
 				portion.has_token_ids = true;
 				portion.offset += 1;

@@ -80,6 +80,20 @@ extern "C" CUDA_API bool download_output(const GpuActivations* gpu_activations,
 				     cudaMemcpyDeviceToHost));
 }
 
+extern "C" CUDA_API bool download_pred_token(const GpuActivations* gpu_activations,
+					      uint32_t* h_pred_id) {
+	if (!gpu_activations || !h_pred_id || !gpu_activations->d_pred_id)
+		return false;
+
+	if (!CUDA_CHECK(cudaDeviceSynchronize()))
+		return false;
+
+	return CUDA_CHECK(cudaMemcpy(h_pred_id,
+				     gpu_activations->d_pred_id,
+				     sizeof(uint32_t),
+				     cudaMemcpyDeviceToHost));
+}
+
 extern "C" CUDA_API bool download_ai_weights(const GpuWeights* gpu,
 					     float* h_weights,
 					     size_t weight_elements,

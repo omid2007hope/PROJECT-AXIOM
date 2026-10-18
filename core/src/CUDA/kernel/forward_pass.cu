@@ -129,6 +129,177 @@ __global__ static void gather_embeddings_kernel(const uint32_t* __restrict__ tok
 	}
 }
 
+// Milestone 3: RMSNorm Forward Kernel (in-place normalization before Tensor Cores)
+__global__ static void rms_norm_forward_kernel(__nv_bfloat16* __restrict__ x,
+					       float* __restrict__ inv_rms_out,
+					       size_t n,
+					       float eps) {
+	__shared__ float s_sum[32];
+	float sum_sq = 0.0f;
+
+	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
+		float val = __bfloat162float(x[i]);
+		if (isfinite(val)) {
+			sum_sq += val * val;
+		}
+	}
+
+	for (int offset = 16; offset > 0; offset /= 2) {
+		sum_sq += __shfl_down_sync(0xffffffff, sum_sq, offset);
+	}
+
+	int lane = threadIdx.x % 32;
+	int wid = threadIdx.x / 32;
+	if (lane == 0) {
+		s_sum[wid] = sum_sq;
+	}
+	__syncthreads();
+
+	if (wid == 0) {
+		float warp_sum = (lane < (blockDim.x / 32)) ? s_sum[lane] : 0.0f;
+		for (int offset = 16; offset > 0; offset /= 2) {
+			warp_sum += __shfl_down_sync(0xffffffff, warp_sum, offset);
+		}
+		if (lane == 0) {
+			float mean_sq = warp_sum / static_cast<float>(n > 0 ? n : 1);
+			float inv_rms = rsqrtf(mean_sq + eps);
+			if (!isfinite(inv_rms) || isinf(inv_rms)) {
+				inv_rms = 1.0f;
+			}
+			s_sum[0] = inv_rms;
+			if (inv_rms_out) {
+				*inv_rms_out = inv_rms;
+			}
+		}
+	}
+	__syncthreads();
+
+	float inv_rms = s_sum[0];
+	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
+		float val = __bfloat162float(x[i]);
+		float norm_val = val * inv_rms;
+		norm_val = fmaxf(-10.0f, fminf(10.0f, norm_val));
+		x[i] = __float2bfloat16(norm_val);
+	}
+}
+
+// Milestone 3: Tied Logit Projection Kernel (Y * E^T)
+__global__ static void compute_tied_logits_kernel(const __nv_bfloat16* __restrict__ y,
+						  const __nv_bfloat16* __restrict__ table,
+						  float* __restrict__ logits,
+						  size_t vocab_size,
+						  size_t emb_dim) {
+	size_t v = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+	if (v < vocab_size) {
+		float dot = 0.0f;
+		const __nv_bfloat16* emb_row = table + v * emb_dim;
+		for (size_t d = 0; d < emb_dim; ++d) {
+			dot += __bfloat162float(y[d]) * __bfloat162float(emb_row[d]);
+		}
+		logits[v] = dot;
+	}
+}
+
+__global__ static void copy_bf16_to_float_kernel(const __nv_bfloat16* __restrict__ src,
+						 float* __restrict__ dst,
+						 size_t n) {
+	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i < n) {
+		dst[i] = __bfloat162float(src[i]);
+	}
+}
+
+// Milestone 3: Fused Softmax & Argmax Kernel on GPU
+__global__ static void softmax_argmax_kernel(float* __restrict__ logits_and_probs,
+					     uint32_t* __restrict__ pred_id,
+					     size_t n) {
+	__shared__ float s_max[32];
+	__shared__ uint32_t s_arg[32];
+	__shared__ float s_sum[32];
+
+	float local_max = -1e30f;
+	uint32_t local_arg = 0;
+
+	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
+		float val = logits_and_probs[i];
+		if (isfinite(val) && val > local_max) {
+			local_max = val;
+			local_arg = static_cast<uint32_t>(i);
+		}
+	}
+
+	for (int offset = 16; offset > 0; offset /= 2) {
+		float other_max = __shfl_down_sync(0xffffffff, local_max, offset);
+		uint32_t other_arg = __shfl_down_sync(0xffffffff, local_arg, offset);
+		if (other_max > local_max) {
+			local_max = other_max;
+			local_arg = other_arg;
+		}
+	}
+
+	int lane = threadIdx.x % 32;
+	int wid = threadIdx.x / 32;
+	if (lane == 0) {
+		s_max[wid] = local_max;
+		s_arg[wid] = local_arg;
+	}
+	__syncthreads();
+
+	if (wid == 0) {
+		float warp_max = (lane < (blockDim.x / 32)) ? s_max[lane] : -1e30f;
+		uint32_t warp_arg = (lane < (blockDim.x / 32)) ? s_arg[lane] : 0;
+		for (int offset = 16; offset > 0; offset /= 2) {
+			float other_max = __shfl_down_sync(0xffffffff, warp_max, offset);
+			uint32_t other_arg = __shfl_down_sync(0xffffffff, warp_arg, offset);
+			if (other_max > warp_max) {
+				warp_max = other_max;
+				warp_arg = other_arg;
+			}
+		}
+		if (lane == 0) {
+			s_max[0] = warp_max;
+			s_arg[0] = warp_arg;
+			if (pred_id) {
+				*pred_id = warp_arg;
+			}
+		}
+	}
+	__syncthreads();
+
+	float global_max = s_max[0];
+
+	float sum_exp = 0.0f;
+	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
+		float exp_val = expf(fmaxf(-50.0f, fminf(50.0f, logits_and_probs[i] - global_max)));
+		logits_and_probs[i] = exp_val;
+		sum_exp += exp_val;
+	}
+
+	for (int offset = 16; offset > 0; offset /= 2) {
+		sum_exp += __shfl_down_sync(0xffffffff, sum_exp, offset);
+	}
+	if (lane == 0) {
+		s_sum[wid] = sum_exp;
+	}
+	__syncthreads();
+
+	if (wid == 0) {
+		float warp_sum = (lane < (blockDim.x / 32)) ? s_sum[lane] : 0.0f;
+		for (int offset = 16; offset > 0; offset /= 2) {
+			warp_sum += __shfl_down_sync(0xffffffff, warp_sum, offset);
+		}
+		if (lane == 0) {
+			s_sum[0] = warp_sum > 1e-12f ? warp_sum : 1.0f;
+		}
+	}
+	__syncthreads();
+
+	float inv_sum = 1.0f / s_sum[0];
+	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
+		logits_and_probs[i] *= inv_sum;
+	}
+}
+
 extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_portion,
 						      const GpuEmbeddings* gpu_embeddings,
 						      const GpuWeights* gpu_weights,
@@ -190,6 +361,26 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 
 	if (!gpu_portion->d_context_window[buffer_index]) {
 		return false;
+	}
+
+	// Milestone 3: RMSNorm Forward Pass (Normalizes variance of flattened input to 1.0)
+	// Applied only when embeddings are active to protect large context windows from variance explosion
+	if (gpu_embeddings && gpu_embeddings->d_table) {
+		if (!gpu_activations->d_inv_rms) {
+			if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_inv_rms, sizeof(float))))
+				return false;
+		}
+		int norm_threads = 1024;
+		rms_norm_forward_kernel<<<1, norm_threads, 0, stream>>>(
+			static_cast<__nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+			static_cast<float*>(gpu_activations->d_inv_rms),
+			input_dim,
+			1e-5f);
+		if (!CUDA_CHECK(cudaGetLastError()))
+			return false;
+	} else if (gpu_activations->d_inv_rms) {
+		float unity = 1.0f;
+		cudaMemcpyAsync(gpu_activations->d_inv_rms, &unity, sizeof(float), cudaMemcpyHostToDevice, stream);
 	}
 
 	if (gpu_activations->output_elements != output_dim) {
@@ -276,6 +467,50 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			cutlass::cutlassGetStatusString(status));
 		return false;
 	}
+
+	// Milestone 3: Discrete Autoregressive Token Classification
+	// Compute Softmax probabilities and Argmax winning token on the GPU
+	size_t vocab_sz = (gpu_embeddings && gpu_embeddings->d_table)
+				  ? (gpu_embeddings->active_vocab_size > 0 ? gpu_embeddings->active_vocab_size
+									   : gpu_embeddings->vocab_size)
+				  : output_dim;
+	if (gpu_activations->vocab_elements != vocab_sz || !gpu_activations->d_probs) {
+		if (gpu_activations->d_probs) {
+			CUDA_CHECK(cudaFree(gpu_activations->d_probs));
+			gpu_activations->d_probs = nullptr;
+		}
+		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_probs, vocab_sz * sizeof(float))))
+			return false;
+		gpu_activations->vocab_elements = vocab_sz;
+	}
+	if (!gpu_activations->d_pred_id) {
+		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_pred_id, sizeof(uint32_t))))
+			return false;
+	}
+
+	if (gpu_embeddings && gpu_embeddings->d_table) {
+		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : output_dim;
+		int l_threads = 256;
+		int l_blocks = static_cast<int>((vocab_sz + l_threads - 1) / l_threads);
+		compute_tied_logits_kernel<<<l_blocks, l_threads, 0, stream>>>(
+			static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
+			static_cast<const __nv_bfloat16*>(gpu_embeddings->d_table),
+			static_cast<float*>(gpu_activations->d_probs),
+			vocab_sz,
+			emb_dim);
+	} else {
+		int d_threads = 256;
+		int d_blocks = static_cast<int>((output_dim + d_threads - 1) / d_threads);
+		copy_bf16_to_float_kernel<<<d_blocks, d_threads, 0, stream>>>(
+			static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
+			static_cast<float*>(gpu_activations->d_probs),
+			output_dim);
+	}
+
+	softmax_argmax_kernel<<<1, 1024, 0, stream>>>(
+		static_cast<float*>(gpu_activations->d_probs),
+		static_cast<uint32_t*>(gpu_activations->d_pred_id),
+		vocab_sz);
 
 	return CUDA_CHECK(cudaGetLastError());
 }

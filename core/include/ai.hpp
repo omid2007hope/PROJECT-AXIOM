@@ -54,6 +54,7 @@ public:
 
 	size_t vocab_size = 65536;
 	size_t embedding_dim = 32;
+	size_t active_vocab_size = 0;
 
 	// CPU Memory (High precision float for initialization and updates)
 	std::vector<float> h_weights;
@@ -96,6 +97,9 @@ public:
 	// Forward Inference Engine (no gradient updates)
 	bool predict(const Portion& portion, std::vector<float>& output_prediction);
 	bool predict(const std::vector<std::bfloat16_t>& context_window, std::vector<float>& output_prediction);
+
+	// Milestone 3: Discrete Autoregressive Token Classification
+	uint32_t last_predicted_token_id = 0;
 };
 
 #endif

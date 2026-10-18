@@ -54,7 +54,16 @@ inline std::filesystem::path test_embedded_path() {
 }
 
 inline std::vector<std::filesystem::path> test_asset_dirs() {
-	return {test_core_dir() / "asset_sample"};
+	std::vector<std::filesystem::path> dirs = {test_core_dir() / "asset_sample"};
+	std::filesystem::path sb = test_core_dir() / "test_sandbox_assets";
+	if (std::filesystem::exists(sb)) {
+		dirs.push_back(sb);
+	}
+	std::filesystem::path td = test_core_dir() / "training_data" / "Data";
+	if (std::filesystem::exists(td)) {
+		dirs.push_back(td);
+	}
+	return dirs;
 }
 
 // Raw data samples

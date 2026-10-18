@@ -24,7 +24,7 @@ AI::AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max, Elemen
 	h_bias.resize(e.bias_elements);
 
 	vocab_size = 65536;
-	embedding_dim = in_dim / 128;
+	embedding_dim = out_dim;
 	if (embedding_dim == 0) embedding_dim = 4;
 
 	h_embeddings.resize(vocab_size * embedding_dim);
@@ -145,6 +145,7 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 		}
 
 		// Launch CUDA gather kernel + CUTLASS EVT GEMM forward pass
+		gpu_embeddings.active_vocab_size = active_vocab_size;
 		if (!forward_pass_with_embeddings(&gpu_portion,
 						  &gpu_embeddings,
 						  &gpu_weights,
@@ -353,6 +354,13 @@ bool AI::load_weights(const std::string& path) {
 		return false;
 	}
 
+	if (header.embedding_dim != 0 && header.embedding_dim != output_dim) {
+		std::cerr << "[AI Brain] Embedding dimension mismatch in " << path
+			  << ": file has " << header.embedding_dim
+			  << ", model expects " << output_dim << "\n";
+		return false;
+	}
+
 	std::vector<float> loaded_weights(header.weight_count);
 	std::vector<float> loaded_bias(header.bias_count);
 	std::vector<float> loaded_embeddings;
@@ -442,12 +450,15 @@ bool AI::predict(const Portion& portion, std::vector<float>& output_prediction) 
 		return false;
 	}
 
-	if (!forward_pass(&gpu_portion,
-			  &gpu_weights,
-			  &gpu_activations,
-			  input_dim,
-			  output_dim,
-			  portion.buffer_index)) {
+	gpu_embeddings.active_vocab_size = active_vocab_size;
+	const GpuEmbeddings* emb_ptr = (gpu_embeddings.d_table != nullptr) ? &gpu_embeddings : nullptr;
+	if (!forward_pass_with_embeddings(&gpu_portion,
+					  emb_ptr,
+					  &gpu_weights,
+					  &gpu_activations,
+					  input_dim,
+					  output_dim,
+					  portion.buffer_index)) {
 		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
 		return false;
 	}
@@ -456,6 +467,13 @@ bool AI::predict(const Portion& portion, std::vector<float>& output_prediction) 
 	if (!download_output(&gpu_activations, out_bf16.data(), output_dim)) {
 		std::cerr << "[AI Brain] Failed to download prediction activations from GPU.\n";
 		return false;
+	}
+
+	uint32_t gpu_tok = 0;
+	if (download_pred_token(&gpu_activations, &gpu_tok)) {
+		last_predicted_token_id = gpu_tok;
+	} else {
+		last_predicted_token_id = 0;
 	}
 
 	output_prediction.resize(output_dim);
@@ -488,12 +506,15 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 		return false;
 	}
 
-	if (!forward_pass(&gpu_portion,
-			  &gpu_weights,
-			  &gpu_activations,
-			  input_dim,
-			  output_dim,
-			  0)) {
+	gpu_embeddings.active_vocab_size = active_vocab_size;
+	const GpuEmbeddings* emb_ptr = (gpu_embeddings.d_table != nullptr) ? &gpu_embeddings : nullptr;
+	if (!forward_pass_with_embeddings(&gpu_portion,
+					  emb_ptr,
+					  &gpu_weights,
+					  &gpu_activations,
+					  input_dim,
+					  output_dim,
+					  0)) {
 		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
 		return false;
 	}
@@ -502,6 +523,13 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 	if (!download_output(&gpu_activations, out_bf16.data(), output_dim)) {
 		std::cerr << "[AI Brain] Failed to download prediction activations from GPU.\n";
 		return false;
+	}
+
+	uint32_t gpu_tok = 0;
+	if (download_pred_token(&gpu_activations, &gpu_tok)) {
+		last_predicted_token_id = gpu_tok;
+	} else {
+		last_predicted_token_id = 0;
 	}
 
 	output_prediction.resize(output_dim);
