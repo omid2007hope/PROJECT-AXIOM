@@ -1,151 +1,186 @@
-# Strategic Technical Review and Scaling Roadmap: Native C++/CUDA AI Engine
+# Project Axiom: Master Engineering Roadmap (As of 19 October 2026)
 
-**The "Zero to Hero" Comprehensive Development Plan (v2.0)**
-
-## Executive Summary
-
-The transition from sequential CPU logic to a native C++23 and NVIDIA CUDA ecosystem for multimodal deep learning is a monumental leap in computational complexity and systems architecture. This engine is graduating from basic prototyping to an advanced, massively parallel hardware-accelerated pipeline.
-
-This roadmap outlines the complete zero-to-hero blueprint. It details the exact progression required to evolve this bespoke C++ pipeline into a production-grade, asynchronous, stream-ordered deep learning framework capable of saturating NVIDIA Ada Lovelace (`sm_89`) Tensor Cores and rivaling industry monoliths like PyTorch and vLLM.
+**Document Path:** `document/plan/plan.md`  
+**Target Hardware:** NVIDIA Ada Lovelace (`sm_89` / RTX 4080) & Native C++23 / CUDA  
+**Status:** Active Engineering Directive — Future Work Exclusively  
+**Historical Archive:** `document/plan/archive_plan_pre_19_oct.md` & `document/plan/Project_Axiom_Plan.md`
 
 ---
 
-## Phase 1: Ingestion & Modality Unification (The Four-Stage Pipeline)
+## 1. Executive Baseline & Scope Directive
 
-### 1. The Four-Stage Multimodal Ingestion Pipeline
-Reading raw compressed bytes (zlib streams in PDFs, h.264 containers in MP4s) directly into a neural tokenizer is a critical trap: the model wastes parameter capacity reverse-engineering compression algorithms rather than learning physics, language, or visual geometry. Axiom enforces a strict four-stage pipeline:
-1. **The Identifier (The Switchboard):** Inspects file extensions and magic bytes (`%PDF`, `0xFF 0xD8`, `RIFF`) before the parser touches the byte stream.
-2. **The Decompressor (The Extractor):** Strips container wrappers to expose the raw semantic payload:
-   - [`decom_doc`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_doc.hpp): Extracts clean UTF-8 text and equations from `.pdf` and `.docx`.
-   - [`decom_image`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_image.hpp): Decodes container encodings into raw uncompressed RGB pixel arrays.
-   - [`decom_video`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_video.hpp): Strips container headers into raw RGB frame matrices.
-   - [`decom_audio`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_audio.hpp): Strips container headers into raw PCM audio waveforms.
-3. **The Sanitizer & Tokenizer (The Quantizer):**
-   - **Workflow 1 (File Path):** Decompressed text is lowercased, punctuation stripped, and mapped to dense token IDs.
-   - **Workflow 2 (Raw Manual CLI Input):** User inputs bypass the Identifier and Decompressor (since raw strings are already uncompressed UTF-8) and flow directly into the sanitizer and tokenizer.
-4. **The Embedder (The VRAM Matrix):** Sends token IDs across PCIe to the GPU where a branchless gather kernel pulls 32D geometric vectors from `d_embedding_table`.
+All foundational Phase 1–7 systems plumbing—including zero-copy pinned DMA transfers, multi-stream double buffering, dense early-fusion codebook ($V = 65,536$), CUTLASS v4.8.0 Tensor Core execution, linear EVT epilogues, branchless VRAM embedding gather/scatter kernels, and atomic AdamW state persistence—is **100% completed, tested, and verified**.
 
-### 2. Unification of Text & Number Namespaces [COMPLETED]
-- Eradicated separation between text words and numerical quantities.
-- Numbers like `"9.8"` and words like `"gravity"` are ingested together into `main_dictionary`, allowing the neural network to learn semantic co-occurrence between scientific concepts and physical constants.
+This document defines the **active development roadmap moving forward**. All completed tasks have been removed. The engineering focus is strictly on transforming the single-layer neural nucleus into a production-grade, multi-token autoregressive multimodal generative engine.
 
 ---
 
-## Phase 2: Dense Contiguous Early-Fusion Indexing ($V = 65,536$)
+## 2. Strategic Execution Horizons
 
-### 1. Eradication of Billion-Scale Offsets
-- Deleted legacy sparse offsets (1B, 2B, 3B, 4B) that caused multi-gigabyte VRAM allocation crashes.
-- Bounded the entire multimodal vocabulary to a dense 16-bit addressable range $[0, 65535]$.
-
-### 2. Contiguous Modality ID Blocks
-- **Slots `[0 .. 3]`:** Special reserved tokens (`<PAD>=0`, `<UNK>=1`, `<BOS>=2`, `<EOS>=3`).
-- **Slots `[4 .. 64,511]`:** Unified text, numbers, math symbols, and subwords (`main_dictionary`).
-- **Slots `[64,512 .. 64,767]`:** Discrete visual byte tokens (`0x00 .. 0xFF`).
-- **Slots `[64,768 .. 65,023]`:** Discrete acoustic byte tokens (`0x00 .. 0xFF`).
-- **Slots `[65,024 .. 65,535]`:** Reserved expansion slots for future modality codebooks.
-
-This caps the VRAM embedding table footprint to a fixed **$4.19\text{ MB}$** in `__nv_bfloat16`.
-
----
-
-## Phase 3: PCIe Zero-Copy Pipeline & Token ID Inversion
-
-### 1. Inverted Token ID Dataflow
-- Instead of generating floating-point vectors on the CPU and streaming 8,192 bytes across the PCIe bus per window, the host uploads **128 raw categorical `uint32_t` token IDs** ($128 \times 4\text{ bytes} = 512\text{ bytes}$).
-- Slashes PCIe bus traffic by **93.75%**.
-
-### 2. Pinned Memory & Direct Memory Access (DMA)
-- Allocates context window buffers with `cudaHostAllocWriteCombined`.
-- Bypasses host CPU L1/L2 caches to eliminate cache pollution and enable true asynchronous DMA transfers via `cudaMemcpyAsync`.
-
-### 3. Multi-Stream Double Buffering (Ping-Pong)
-- Instantiates two non-blocking CUDA streams (`cudaStreamNonBlocking`).
-- Stream 1 executes compute on Batch A while Stream 2 simultaneously transfers Batch B across PCIe, completely hiding bus latency.
-
----
-
-## Phase 4: Learnable VRAM Embedding Matrix & Hardware Compute
-
-### 1. Branchless Forward Gather Kernel
-- CUDA kernel `gather_embeddings_kernel<<<grid, block, 0, stream>>>` expands the 128 integer token IDs into a $128 \times 32$ matrix in VRAM directly from `d_embedding_table` at memory bus speeds (432+ GB/s).
-- Zero warp divergence; 100% coalesced global memory reads.
-
-### 2. CUTLASS EVT Tensor Core Saturation
-- Uses NVIDIA CUTLASS v4.8.0 templates (`sm_89` Ada Lovelace) for GEMM operations on `__nv_bfloat16`.
-- **Linear Epilogue Fusion:** Replaced ReLU with an un-gated linear store epilogue (`Store(AddBias(Accum, Bias))`) and un-gated backpropagation ($dz = dy$), completely eradicating the "Dying ReLU" deadlock on signed target spaces.
-
-### 3. Atomic Backward Scatter Kernel
-- Computes input gradients $dL/dx_j = \sum \delta_i W_{i, j}$.
-- Accumulates gradients into FP32 master embedding table `d_table_master` via `atomicAdd()`, dynamically learning geometric representations and clustering semantically related concepts together.
-
----
-
-## Phase 5: Curing AI Amnesia (The AdamW Optimizer State)
-
-### 1. The Limitation of Weights-Only Checkpointing
-- Standard neural network checkpointing saves only parameters, completely losing training velocity and curvature memory. Resuming training forces the model to rediscover gradient slopes from scratch.
-
-### 2. Persistent Optimizer States (`optimizer.axiom`)
-- Implements AdamW tracking First Moment ($m_t$, Momentum / Velocity) and Second Moment ($v_t$, Variance / Volatility).
-- Fused CUDA update kernel applies bias-corrected momentum and decoupled weight decay.
-- Serializes $m_t$ and $v_t$ tensors into `optimizer.axiom` using the atomic two-stage write protocol. Reloading restores full optimization momentum instantaneously.
+```
+                            PROJECT AXIOM — FUTURE EXECUTION PHASES
+  ┌────────────────────────────────────────────────────────────────────────────────────────┐
+  │ HORIZON 1: Multi-Token Autoregressive Generation & Sampling Loop [IMMEDIATE NEXT STEP]  │
+  │ • Host generation loop: continuous autoregressive token feedback                       │
+  │ • Sampling engine: Greedy ArgMax, Temperature scaling, and Top-K / Top-P sampling      │
+  │ • Token streaming interface with <EOS> / length termination                            │
+  └───────────────────────────────────────────────────┬────────────────────────────────────┘
+                                                      │
+  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
+  │ HORIZON 2: Multi-Head Self-Attention (MHA) & Transformer Blocks                        │
+  │ • Linear Q, K, V projections on Tensor Cores via CUTLASS GEMM                          │
+  │ • Fused Scaled Dot-Product Attention (SDPA) with causal sequence masking               │
+  │ • Residual skip connections & SwiGLU / MLP feed-forward blocks                         │
+  └───────────────────────────────────────────────────┬────────────────────────────────────┘
+                                                      │
+  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
+  │ HORIZON 3: Production VRAM & PagedAttention KV-Cache State Management                  │
+  │ • Zero-allocation runtime: Stream memory pools (`cudaMallocAsync`) & BFC Allocator     │
+  │ • PagedAttention: CPU-managed Block Table mapping non-contiguous VRAM blocks           │
+  │ • Copy-On-Write (COW) prompt prefix caching for multi-turn conversations               │
+  └───────────────────────────────────────────────────┬────────────────────────────────────┘
+                                                      │
+  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
+  │ HORIZON 4: Zero-Overhead Hardware Saturation via CUDA Graphs                           │
+  │ • Static Directed Acyclic Graph (DAG) capture with `cudaStreamBeginCapture`            │
+  │ • Single-driver launch via `cudaGraphLaunch` (eliminating CPU scheduling latency)      │
+  │ • Thermodynamic compute and memory bus saturation on sm_89                             │
+  └───────────────────────────────────────────────────┬────────────────────────────────────┘
+                                                      │
+  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
+  │ HORIZON 5: Modular C++ ATen Dispatcher & Autograd Tape Recording                       │
+  │ • Decouple `Tensor` handles from underlying `TensorImpl` memory storage                │
+  │ • Central C++ Dispatcher based on `DispatchKeySet` (CPU, CUDA, Autograd)               │
+  │ • Automated reverse-mode computational graph construction                              │
+  └───────────────────────────────────────────────────┬────────────────────────────────────┘
+                                                      │
+  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
+  │ HORIZON 6: Sparse Mixture of Experts (MoE) Architecture                                │
+  │ • Partition dense feed-forward blocks into 8 specialized expert weight stacks          │
+  │ • Lightweight Router Network dispatching incoming tokens to Top-1 / Top-2 experts      │
+  │ • Zero-FLOP inactive expert pruning for sub-millisecond multi-billion scaling          │
+  └────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Phase 6: Output Codecs / Detokenizers (The Compressor)
+## 3. Horizon Specifications & Engineering Tasks
 
-### 1. Inverting Generation to Human Media
-- Neural networks output abstract 1D token probability distributions. The engine renders these through specialized **Output Codecs**:
-  - **Text Detokenizer:** Maps predicted token IDs $[4, 64511]$ back to strings via `reverse_main_dictionary`.
-  - **Visual Codec:** Reconstructs spatial pixel matrices from visual tokens $[64512, 64767]$ and wraps them in image/video containers.
-  - **Acoustic Codec:** Converts acoustic tokens $[64768, 65023]$ into PCM waveforms and wraps them in RIFF/WAV headers.
+### Horizon 1: Multi-Token Autoregressive Generation & Sampling Loop (Immediate Priority)
 
----
+#### 1.1. Host Generation Loop (`core/src/ai.cpp`, `core/src/main.cpp`)
+* **Objective:** Expand the current single-token `predict()` function into an iterative streaming generator:
+  ```cpp
+  bool AI::generate(const std::string& prompt,
+                    size_t max_new_tokens,
+                    float temperature,
+                    int top_k,
+                    float top_p,
+                    std::function<void(const std::string&)> token_callback);
+  ```
+* **Execution Flow:**
+  1. Tokenize prompt into initial token ID sequence.
+  2. Format into sliding 128-token context window (`tokens_to_context_window` or token ID buffer).
+  3. Execute forward pass with tied logits ($Y \cdot E^T$).
+  4. Fetch winning or sampled token ID from GPU.
+  5. Decode token ID to string via `token_to_string()` and stream to caller via callback.
+  6. Append token to history, slide context window by 1 position, and iterate until `vocab::EOS` or `max_new_tokens`.
 
-## Phase 7: Userspace Best-Fit with Coalescing (BFC) Caching Allocator
-
-### 1. Eliminating OS Memory Traps
-- Halts runtime `cudaMalloc()` calls that serialize active streams and lock GPU page tables.
-- Emulates PyTorch's caching allocator: pre-allocates contiguous multi-gigabyte VRAM pools at startup.
-- Services tensor allocations via a Best-Fit with Coalescing (BFC) algorithm in userspace, dropping allocation latency from microseconds to nanoseconds.
-
----
-
-## Phase 8: Autoregressive State Management via PagedAttention
-
-### 1. Virtual Memory KV-Cache Management
-- Partitions the Key/Value (KV) cache into fixed-size physical VRAM blocks (e.g., 16 tokens per block).
-- CPU-side Block Table maps logical token positions to physical blocks, eliminating external memory fragmentation.
-- Unlocks Copy-On-Write (COW) prefix caching for shared prompt templates, slashing Time-to-First-Token (TTFT).
-
----
-
-## Phase 9: Microsecond Overhead Eradication with CUDA Graphs
-
-### 1. Directed Acyclic Graph (DAG) Execution
-- Captures memory transfers, gather kernels, GEMM executions, and updates into static CUDA Graphs via `cudaStreamBeginCapture()`.
-- Submits entire iterations via a single `cudaGraphLaunch()` driver dispatch, offloading scheduling to GPU hardware and reducing host CPU launch overhead to zero.
+#### 1.2. Stochastic Sampling Engine
+* **Temperature Scaling:** Scale logits prior to softmax:
+  $$\hat{z}_i = \frac{z_i}{T} \quad (T \in (0.0, 2.0])$$
+* **Top-K Truncation:** Retain only the $K$ highest logit values; set all others to $-\infty$.
+* **Top-P (Nucleus) Truncation:** Sort probabilities descending, find cutoff index where cumulative sum exceeds $P$, and re-normalize.
+* **Deterministic Fallback:** $T \to 0$ collapses into greedy ArgMax via the existing GPU `softmax_argmax_kernel`.
 
 ---
 
-## Phase 10: ATen-Style Declarative Dispatcher
+### Horizon 2: Multi-Head Self-Attention (MHA) & Transformer Blocks
 
-### 1. Modular Framework Decoupling
-- Separates lightweight `Tensor` handles from underlying `TensorImpl` data buffers.
-- Routes all mathematical operators through a centralized C++ Dispatcher based on `DispatchKeySet` (e.g., CPU, CUDA, Autograd).
-- Decouples hardware-specific CUTLASS kernels from high-level model logic, enabling automatic differentiation tape recording.
+#### 2.1. Linear Projections on Tensor Cores
+* Transform hidden states into Query, Key, and Value representations:
+  $$Q = X W_Q, \quad K = X W_K, \quad V = X W_V$$
+  where $W_Q, W_K, W_V \in \mathbb{R}^{d_{\text{model}} \times d_{\text{model}}}$.
+* Execute on Ada Lovelace Tensor Cores via batched CUTLASS GEMMs in `__nv_bfloat16`.
+
+#### 2.2. Scaled Dot-Product Attention & Causal Masking
+* Implement fused attention kernel:
+  $$\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{Q K^T}{\sqrt{d_{\text{head}}}} + M\right) V$$
+  where $M_{i, j} = 0$ for $j \le i$, and $-\infty$ for $j > i$ (preventing attention to future tokens).
+
+#### 2.3. Transformer Layer Composition
+* **Residual Connections:** $X_{\text{mid}} = X + \text{Attention}(\text{RMSNorm}(X))$.
+* **Feed-Forward SwiGLU Block:**
+  $$\text{FFN}(x) = (\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$$
+* **Layer Output:** $X_{\text{out}} = X_{\text{mid}} + \text{FFN}(\text{RMSNorm}(X_{\text{mid}}))$.
 
 ---
 
-## Phase 11: Sparse Mixture of Experts (MoE) Architecture
+### Horizon 3: Production VRAM & PagedAttention State Management
 
-### 1. Specialized Expert Blocks
-- Divides monolithic weight matrices into discrete Expert Blocks (e.g. 8 experts).
-- Lightweight Router Network evaluates incoming tokens and routes them exclusively to the top expert(s).
-- Compute cores bypass inactive experts, providing multi-billion parameter capacity while keeping execution blazing fast.
+#### 3.1. Elimination of Runtime Allocations
+* Eliminate all dynamic `cudaMalloc` and `cudaFree` invocations during forward/backward execution loops.
+* **Stream-Ordered Allocation:** Utilize `cudaMallocAsync` and `cudaFreeAsync` bound to `gpu_portion->stream[i]` to recycle memory within CUDA-managed pools without host synchronization stalls.
+* **Userspace BFC Allocator:** Pre-allocate fixed multi-gigabyte VRAM blocks at engine startup; service tensor allocations via Best-Fit with Coalescing in userspace.
+
+#### 3.2. PagedAttention KV-Cache Architecture
+* Partition Key and Value cache memory into fixed-size physical blocks (e.g., 16 tokens per block).
+* Implement CPU-side **Block Table** mapping logical token indices $(0 \dots T-1)$ to physical VRAM blocks.
+* Enable **Copy-On-Write (COW)** prefix caching: common system prompts and multi-turn conversational histories share identical physical blocks in VRAM, eliminating redundant memory consumption.
 
 ---
 
-## Conclusion
+### Horizon 4: Zero-Overhead Hardware Saturation via CUDA Graphs
 
-By progressing strictly through this roadmap, Project Axiom evolves from a bare-metal prototype into an industrial-grade, early-fusion omni-modal AI engine operating at the absolute limits of silicon and mathematics.
+#### 4.1. DAG Graph Capture
+* Once memory allocations are static and pointer topologies are fixed:
+  ```cpp
+  cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+  // Launch forward gather, CUTLASS GEMM, Softmax, Loss, and Backward pass
+  cudaStreamEndCapture(stream, &graph);
+  cudaGraphInstantiate(&graph_exec, graph, nullptr, nullptr, 0);
+  ```
+
+#### 4.2. Host Driver Overhead Eradication
+* Dispatch entire training/inference iterations via single `cudaGraphLaunch(graph_exec, stream)` calls.
+* Offload intra-kernel scheduling directly to hardware work-distributors on Ada Lovelace (`sm_89`), achieving sub-microsecond launch latencies.
+
+---
+
+### Horizon 5: Modular C++ ATen Dispatcher & Autograd Tape
+
+#### 5.1. Tensor Abstraction
+* Refactor monolithic data arrays into clean `Tensor` handles wrapping reference-counted `TensorImpl` buffers.
+* Store stride metadata, shapes, and device tags (`Device::CPU`, `Device::CUDA`) to enable zero-copy slicing, views, and transpositions.
+
+#### 5.2. Dispatch Architecture & Tape Recording
+* Route mathematical operations through a central C++ dispatcher keyed by `DispatchKeySet`.
+* Autograd interceptor records operation nodes and saved tensors on a reverse computational graph tape during forward execution, enabling automated multi-layer backpropagation.
+
+---
+
+### Horizon 6: Sparse Mixture of Experts (MoE) Architecture
+
+#### 6.1. Expert Partitioning
+* Decompose dense FFN layers into $N$ discrete Expert weight stacks (e.g., $N = 8$).
+* Maintain independent weight parameters for each expert in contiguous VRAM regions.
+
+#### 6.2. Gating & Router Network
+* Implement a lightweight routing layer:
+  $$G(x) = \text{TopK}(\text{Softmax}(x W_g), k=2)$$
+* Incoming token representations route exclusively to the top 2 ranked experts.
+* Inactive experts consume zero Tensor Core arithmetic FLOPs, providing multi-billion parameter capacity while maintaining sub-millisecond per-token latency.
+
+---
+
+## 4. Verification Gates & Acceptance Criteria
+
+Every milestone implementation must pass the following non-negotiable verification gates:
+
+| Verification Gate | Target Metric | Verification Method |
+| :--- | :--- | :--- |
+| **Gate 1: Multi-Token Generation** | $>50\text{ tokens/sec}$ continuous streaming | Interactive prompt CLI test in `main.cpp` |
+| **Gate 2: Sampling Entropy** | $T > 0$ yields diverse, grammatically valid continuations | Deterministic seed tests across varied temperatures |
+| **Gate 3: Zero Runtime Allocations** | Exactly $0$ calls to `cudaMalloc` during active loops | NVIDIA Nsight Systems trace & CUDA memory profiler |
+| **Gate 4: Attention Layer Convergence** | Monotonic loss reduction on causal language modeling | Multi-step loss validation in `test.exe` |
+| **Gate 5: CUDA Graph Latency** | $<0.05\text{ ms}$ host scheduling overhead per step | GPU event timing (`cudaEventElapsedTime`) |

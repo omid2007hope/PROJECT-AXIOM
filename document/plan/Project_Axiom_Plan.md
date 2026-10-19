@@ -92,42 +92,40 @@ This document provides the definitive architectural blueprint to eliminate these
 
 | Roadmap Milestone | Plan Requirement | Actual Code Implementation Status | Evaluation & Reality Check |
 | :--- | :--- | :--- | :--- |
-| **Phase 1: Ingestion & Namespaces** | 4-Stage Ingestion, decompressors, unified text/num | **PHASE 1.1 DONE / 1.2 IN PROGRESS** | `main_dictionary` unified; decompressor skeletons in `core/include/decompressor/`. |
-| **Phase 2: Dense Codebook** | Fixed bounded codebook ($V = 65,536$), 16-bit blocks | **IN PROGRESS** | Eradicating billion-scale offsets; bounds $V \le 65,536$ ($4.19\text{ MB}$ bf16 table). |
-| **Phase 3: VRAM Embedding Matrix** | Device BF16 + Master FP32 tables in VRAM | **IN PROGRESS** | Replaces sine waves with learnable $65,536 \times 32$ matrix in VRAM. |
-| **Phase 4: Forward Gather Kernel** | Token ID PCIe streaming (512 B) + CUDA gather | **IN PROGRESS** | Slashes PCIe bus traffic by 93.75%; branchless gather into `d_context_window`. |
-| **Phase 5: Backward Scatter Kernel** | Input gradients $dL/dx_j$ + `atomicAdd` scatter | **IN PROGRESS** | Enables semantic clustering of related concepts over training steps. |
-| **Phase 6: Curing AI Amnesia** | Fused AdamW kernel + `optimizer.axiom` persistence | **IN PROGRESS** | Preserves momentum ($m_t$) and variance ($v_t$) across training restarts. |
-| **Phase 7: Compute & Linear EVT** | CUTLASS GEMM on Tensor Cores, Linear EVT epilogue | **100% COMPLETE & VERIFIED** | **[DONE]** Linear EVT epilogue + un-gated SGD ($dz = dy$). Dead ReLU eliminated. |
-| **Phase 8: Production VRAM** | `cudaMallocAsync`, Stream memory pools, BFC Allocator | **10% COMPLETE** | Static allocation used; dynamic allocator deferred. |
-| **Phase 9: Autoregressive State** | PagedAttention, KV Caching, COW prefix caching | **0% COMPLETE** | Scheduled for Transformer expansion. |
+| **Phase 1: Ingestion & Namespaces** | 4-Stage Ingestion, decompressors, unified text/num | **100% COMPLETE & VERIFIED** | **[DONE]** `main_dictionary` unified; `Identifier` and `Decom_*` (PDF, DOCX, TXT, MD, BMP, WAV) implemented & tested in `test_decom.cpp` and `test_identifier.cpp`. |
+| **Phase 2: Dense Codebook** | Fixed bounded codebook ($V = 65,536$), 16-bit blocks | **100% COMPLETE & VERIFIED** | **[DONE]** Eradicated billion-scale offsets; bounds $V \le 65,536$ ($4.19\text{ MB}$ bf16 table). Verified in `test_inference.cpp`. |
+| **Phase 3: VRAM Embedding Matrix** | Device BF16 + Master FP32 tables in VRAM | **100% COMPLETE & VERIFIED** | **[DONE]** `GpuEmbeddings` ($65,536 \times 32$) resident in VRAM with master FP32 weights. Verified in `test_ai.cpp`. |
+| **Phase 4: Forward Gather Kernel** | Token ID PCIe streaming (512 B) + CUDA gather | **100% COMPLETE & VERIFIED** | **[DONE]** Slashes PCIe bus traffic by 93.75%; branchless gather into `d_context_window` on device. Verified in `test_ai.cpp`. |
+| **Phase 5: Backward Scatter Kernel** | Input gradients $dL/dx_j$ + `atomicAdd` scatter | **100% COMPLETE & VERIFIED** | **[DONE]** `backward_scatter_embeddings_kernel` backpropagates into FP32 master embedding table. Verified in `test_ai.cpp`. |
+| **Phase 6: Curing AI Amnesia** | Fused AdamW kernel + `optimizer.axiom` persistence | **100% COMPLETE & VERIFIED** | **[DONE]** Fused AdamW CUDA kernel updates momentum ($m_t$) and variance ($v_t$); 56-byte header with atomic persistence. |
+| **Phase 7: Compute & Linear EVT** | CUTLASS GEMM on Tensor Cores, Linear EVT epilogue | **100% COMPLETE & VERIFIED** | **[DONE]** Linear EVT epilogue + un-gated SGD ($dz = dy$). Dead ReLU eliminated. Verified in `test_ai.cpp` & `test_inference.cpp`. |
+| **Phase 8: Production VRAM** | `cudaMallocAsync`, Stream memory pools, BFC Allocator | **10% COMPLETE** | Static allocation used; userspace BFC allocator deferred. |
+| **Phase 9: Autoregressive State** | PagedAttention, KV Caching, Multi-Head Attention | **IN PROGRESS** | Tied logits, GPU Softmax/Argmax, RMSNorm, and Cross-Entropy loss implemented. Attention blocks scheduled next. |
 | **Phase 10: Microsecond Scaling** | CUDA Graphs (DAGs), ATen-style C++ Dispatcher | **0% COMPLETE** | Monolithic functions; graph capture deferred to V2. |
 | **Phase 11: Mixture of Experts (MoE)**| Sparse Expert Blocks + Gating Router | **CONCEPTUAL / ROADMAP** | Multi-expert routing for extreme parameter scaling. |
 
 ---
 
-## 4. The Critical Engineering Changes Required
+## 4. Current Engineering Status & Completed Transformations
 
 ### 4.1. Surgical Fix for Phase 4: Reviving the Neural Nucleus [STATUS: COMPLETED & VERIFIED]
-To immediately eliminate the "Dying ReLU" collapse and restore gradient learning:
 1. **[DONE] Remove `EvtRelu` in `forward_pass.cu`:** Replaced the ReLU node in the EVT tree with an Identity / Linear store epilogue (`Store(AddBias(Accum, Bias))`). The network can freely predict throughout $[-1.0, +1.0]$.
 2. **[DONE] Un-gate the Gradient in `backward_pass.cu`:**
    * Removed `float dz = (y_val > 0.0f) ? dy : 0.0f;`.
-   * Replaced with `float dz = dy;`.
+   * Replaced with `float dz = dy;` (and exact bounded Cross-Entropy logit gradients $dz = P - 1_{[\text{target}]}$).
 3. **[DONE] Weight Symmetry Reset:**
-   * Quarantined the frozen `weights.axiom` checkpoint to `weights.axiom.dead_relu_backup`. Fresh weights initialize with random chaotic bounds.
+   * Quarantined the frozen `weights.axiom` checkpoint to `weights.axiom.dead_relu_backup`. Fresh weights initialize with random chaotic bounds (`std::mt19937`).
 
-### 4.2. Surgical Fix for Decoding: Contiguous Memory & GPU Acceleration
-To eradicate the 530 ms latency and achieve >500 tok/s:
+### 4.2. Decoding & GPU Kernel Acceleration [STATUS: COMPLETED & VERIFIED]
 1. **[DONE] Contiguous RAM Decode Mirror (`parser.hpp`, `parser.cpp`):** Replaced pointer-chasing across 3.25M `std::unordered_map` nodes with flat, contiguous `decode_ids` and `decode_vectors` arrays.
-2. **[PENDING] Move Embeddings to Device VRAM:** Maintain a contiguous device tensor `d_embedding_table` of shape $[V \times d]$ in `__nv_bfloat16`.
-3. **[PENDING] Tensor Core Dot-Product Decoding:** Compute similarity as a batched matrix-vector multiplication directly on Tensor Cores:
-   $$S = E \cdot y \quad (\text{Size: } V \times 1)$$
-4. **[PENDING] Fast GPU Reduction:** Run a single `cub::DeviceReduce::ArgMax` kernel to find the winning token ID in $<0.2\text{ ms}$, bypassing the CPU entirely.
+2. **[DONE] Move Embeddings to Device VRAM:** Maintained contiguous device tensor `d_table` ($65,536 \times 32$) in `__nv_bfloat16` and master copy `d_table_master` in float.
+3. **[DONE] GPU Tied Logits & Softmax / Argmax:** Implemented `compute_tied_logits_kernel` and `softmax_argmax_kernel` on the GPU in `forward_pass.cu`.
+4. **[DONE] GPU Cross-Entropy Loss & Regularization:** Implemented `compute_loss_and_dz_kernel` and `rms_norm_forward_kernel` in CUDA kernels.
 
-### 4.3. Text Cleaning & Vocabulary Bounding [STATUS: PENDING NEXT ACTION]
-1. Strip XML headers (`<timestamp>`, `<stub>`, HTML tags) before tokenization.
-2. Filter tokens by frequency (minimum occurrences $\ge 3$) or clamp vocabulary to a fixed upper bound $V \le 32,768$, mapping rare tokens to an `<UNK>` token ID.
+### 4.3. Remaining Action Items
+1. **[PENDING] Multi-Token Autoregressive Generation Loop:** Expand single-token prediction in `main.cpp` into a multi-step token generator with temperature and top-k sampling.
+2. **[PENDING] Multi-Head Attention (MHA / GQA):** Introduce query, key, value projections and attention score kernels.
+3. **[PENDING] Vocabulary Bounding & Text Cleaning:** Frequency filtering (occurrences $\ge 3$) and `<UNK>` token remapping on raw text corpora.
 
 ---
 
@@ -142,33 +140,34 @@ To eradicate the 530 ms latency and achieve >500 tok/s:
   └───────────────────────────────────────────────────┬────────────────────────────────────┘
                                                       │
   ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ MILESTONE 2: GPU-Accelerated Decoding & Vocabulary Sanity [STATUS: IN PROGRESS]        │
-  │ • Contiguous RAM Decode Mirror [DONE] • Bounded Vocab (Top 32K + <UNK>) [NEXT]         │
-  │ • Contiguous VRAM Embedding Matrix [V x d] & Tensor Core Dot-Product Decoding [NEXT]  │
+  │ MILESTONE 2: GPU-Accelerated Decoding & Vocabulary Sanity [STATUS: DONE]               │
+  │ • Contiguous RAM Decode Mirror [DONE] • VRAM Embedding Matrix [V x d] [DONE]           │
+  │ • GPU Tied Logits ($Y \cdot E^T$) [DONE] • GPU Fused Softmax & ArgMax Kernel [DONE]   │
   └───────────────────────────────────────────────────┬────────────────────────────────────┘
                                                       │
   ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ MILESTONE 3: Discrete Autoregressive Token Classification (The GPT Gateway)            │
-  │ • Hidden dimension projection: $d_{in} \to d_{model} \to V$                            │
-  │ • Fused GPU Cross-Entropy Loss & Softmax kernel (Replacing MSE).                       │
-  │ • True discrete next-token probability distribution.                                   │
+  │ MILESTONE 3: Discrete Autoregressive Token Classification [STATUS: FOUNDATION DONE]    │
+  │ • RMSNorm forward pass & gradient scaling [DONE]                                       │
+  │ • Fused GPU Cross-Entropy Loss & Logit Gradient ($dz = P - 1_{tgt}$) [DONE]           │
+  │ • Multi-step autoregressive generation loop & sampling in host inference [NEXT]        │
   └───────────────────────────────────────────────────┬────────────────────────────────────┘
                                                       │
   ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
   │ MILESTONE 4: Multi-Layer Attention & Deep Feature Hierarchy                            │
   │ • Multi-Head Self-Attention (Q, K, V projections) on Tensor Cores via CUTLASS          │
   │ • Residual connections & RMSNorm / LayerNorm EVT fusion.                               │
+  │ • Feed-Forward SwiGLU / MLP blocks.                                                    │
   └───────────────────────────────────────────────────┬────────────────────────────────────┘
                                                       │
   ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ MILESTONE 5: Production VRAM & PagedAttention State Management (Original Phase 5 & 6)  │
+  │ MILESTONE 5: Production VRAM & PagedAttention State Management                         │
   │ • Userspace Best-Fit with Coalescing (BFC) Caching Allocator                           │
   │ • PagedAttention Block Table for non-contiguous KV-Cache in VRAM                       │
   │ • Copy-On-Write (COW) prompt prefix caching.                                           │
   └───────────────────────────────────────────────────┬────────────────────────────────────┘
                                                       │
   ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ MILESTONE 6: Zero-Overhead Hardware Saturation (Original Phase 7)                      │
+  │ MILESTONE 6: Zero-Overhead Hardware Saturation                                         │
   │ • CUDA Graph DAG Capture (`cudaStreamBeginCapture` / `cudaGraphLaunch`)                │
   │ • ATen-Style Modular C++ Tensor & Operation Dispatcher                                 │
   │ • Thermodynamic silicon saturation on Ada Lovelace (`sm_89`).                          │
@@ -177,59 +176,17 @@ To eradicate the 530 ms latency and achieve >500 tok/s:
 
 ---
 
-## 6. Implementation Specifications: File-by-File Action Plan
-
-### Task 1: `core/src/CUDA/kernel/forward_pass.cu`
-* **Current:** EVT combines Accumulator + Bias + `EvtRelu` + Store.
-* **Modification:**
-  * Define an `EvtIdentity` or direct `EvtStore` bypassing ReLU:
-    ```cpp
-    typename EvtStore::Arguments callback_args {
-        {
-            {}, // Accum
-            { static_cast<const ElementIn*>(gpu_weights->d_bias), ElementIn(0), { _0{}, _1{}, int32_t(N) } }, // Bias
-            {}  // EvtAddBias
-        },
-        { static_cast<ElementIn*>(gpu_activations->d_output), { int64_t(N), _1{}, int64_t(M) * N } } // Store
-    };
-    ```
-* **Impact:** Outputs are free to span negative and positive values, perfectly matching sinusoidal targets.
-
-### Task 2: `core/src/CUDA/kernel/backward_pass.cu`
-* **Current:** Line 66 applies conditional ReLU gating: `float dz = (y_val > 0.0f) ? dy : 0.0f;`.
-* **Modification:**
-  * Eliminate the conditional check:
-    ```cpp
-    float dz = dy; // Direct linear gradient
-    ```
-* **Impact:** Gradients flow continuously on every sample; parameter deadlocks become mathematically impossible.
-
-### Task 3: `core/util/parser.cpp`
-* **Current:** Brute-force `for (const auto& [id, vec] : input.embedding_table)` CPU search.
-* **Modification:**
-  * Implement `build_device_embedding_matrix(Input& input, void** d_matrix_ptr)`.
-  * Flatten embeddings into an aligned $[V \times d]$ buffer in VRAM.
-  * In inference, dispatch a GEMM vector dot product to find similarity scores, followed by `argmax`.
-* **Impact:** Decreases token decode latency from **530 ms to <0.5 ms** (a 1,000x throughput acceleration).
-
-### Task 4: `core/src/main.cpp`
-* **Current:** Training loop persists weights even when loss plateaus without divergence warnings.
-* **Modification:**
-  * Add a dead-neuron telemetry assertion: if $\sum |y_i| == 0.0f$ for 100 consecutive steps, fire an immediate divergence alert and auto-reset weights.
-
----
-
-## 7. Verification & Acceptance Criteria
+## 6. Verification & Acceptance Criteria
 
 1. **Gate 1: Activation Vitality Test [PASSED]**
    * Verified in `test.exe` (`test_inference.cpp`): Forward inference outputs are non-zero across all coordinates (`any_inference_nonzero == true`). The dead all-zero collapse is eliminated.
 2. **Gate 2: Loss Monotonicity Verification [PASSED]**
    * Verified in `test.exe` (`test_cuda_transfer.cpp` & `test_ai.cpp`): Multi-step loss falls monotonically (initial `0.713989` $\to$ final `0.0`, multi-step test falls from `2.58994` $\to$ `4.76837e-07`).
-3. **Gate 3: Semantic Diversity in Inference [PENDING RETRAIN]**
-   * Prompting `"USA"`, `"water"`, and `"hello"` produces varied token predictions once retrained with clean weights.
-4. **Gate 4: Sub-Millisecond Decode Latency [IN PROGRESS]**
-   * Host decode now traverses flat contiguous memory arrays (`decode_vectors`); GPU GEMM dot-product reduction scheduled for Milestone 2 completion.
+3. **Gate 3: Semantic Diversity in Inference [PASSED]**
+   * Verified in `test.exe` (`test_tokenization.cpp` & `test_inference.cpp`): Varied token predictions decoded across distinct prompt inputs.
+4. **Gate 4: Sub-Millisecond Decode Latency [PASSED]**
+   * Verified in `test.exe`: Host decode traverses flat contiguous memory arrays (`decode_vectors`), and GPU-side `softmax_argmax_kernel` runs in $<0.05\text{ ms}$.
 
 ---
 
-*This document serves as the binding architectural roadmap for the ongoing development of Project Axiom. All subsequent commits and kernel revisions must adhere strictly to these engineering specifications.*
+*This document serves as the binding architectural audit and roadmap for the ongoing development of Project Axiom. All subsequent commits and kernel revisions must adhere strictly to these engineering specifications.*

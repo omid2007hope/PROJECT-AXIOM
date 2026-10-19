@@ -394,34 +394,31 @@ PyTorch Compilation: From TorchScript to torch.compile - Guillesanbri
 
 This architectural roadmap outlines a rigorous, mathematically sound transition from a sequential CPU-bound prototype to a fully asynchronous, stream-ordered deep learning pipeline. The foundational work—specifically the native C++23 integration of `std::bfloat16_t`, the dense early-fusion codebook ($V = 65,536$), and the unified text/number `main_dictionary`—establishes a deterministic and memory-efficient base.
 
-However, scaling this custom framework to fully saturate an RTX 4080 requires completely dismantling the current synchronous paradigms. Moving forward, the framework must treat the PCIe bus and VRAM as continuous, asynchronous streams rather than discrete, blocking stages.
+Scaling this custom framework to fully saturate an RTX 4080 requires treating the PCIe bus and VRAM as continuous, asynchronous streams rather than discrete, blocking stages.
 
 Here is the strategic breakdown of the migration path, organized by execution priority:
 
-### 1. Ingestion & Asynchronous Data Pipeline (Phases I & II)
+### 1. Ingestion & Asynchronous Data Pipeline (Phases I & II) [COMPLETED & VERIFIED]
 
-The most critical bottleneck in data loading is the combination of spin-locks, uncompressed file streaming, and pageable memory transfers.
+- **[DONE] Four-Stage Multimodal Ingestion:** Enforced `Identifier` $\to$ `Decompressor` $\to$ `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder` for bulk files, stripping container entropy (PDF text extraction, video frame decoding, audio PCM extraction) so the codebook operates on pure semantic primitives. Manual CLI text cleanly bypasses decompression.
+- **[DONE] Pin and Combine:** Replaced all pageable `std::vector` heap allocations for PCIe-bound data with `cudaHostAllocWriteCombined`. Bypassing the CPU’s L1/L2 cache and locking the physical memory addresses enables true Direct Memory Access (DMA), allowing `cudaMemcpyAsync` to function at full PCIe throughput without synchronous degradation.
+- **[DONE] Multi-Stream Double Buffering:** Implemented a double-buffering (ping-pong) system across two non-blocking CUDA streams (Stream 1 for compute, Stream 2 for the next DMA transfer).
+- **[DONE] Atomic Synchronization:** Thread and stream synchronization managed via `std::atomic` flags with acquire/release memory semantics and `cudaEvent_t` markers to prevent priority inversion.
 
-- **Four-Stage Multimodal Ingestion:** Enforce `Identifier` $\to$ `Decompressor` $\to$ `Sanitizer` $\to$ `Tokenizer` $\to$ `Embedder` for bulk files, stripping container entropy (PDF text extraction, video frame decoding, audio PCM extraction) so the codebook operates on pure semantic primitives. Manual CLI text cleanly bypasses decompression.
-- **Pin and Combine:** Replace all pageable `std::vector` heap allocations for PCIe-bound data with `cudaHostAllocWriteCombined`. Bypassing the CPU’s L1/L2 cache and locking the physical memory addresses will immediately enable true Direct Memory Access (DMA), allowing `cudaMemcpyAsync` to function as intended without silent synchronous degradation.
-- **Lock-Free Concurrency:** Eliminate the `while (training_in_use)` spin-lock. Implement a double-buffering (ping-pong) system across at least two non-blocking CUDA streams (Stream 1 for compute, Stream 2 for the next DMA transfer).
-- **SPSC Ring Buffers:** Thread synchronization between the host data loader and the GPU should be strictly managed by lock-free Single-Producer Single-Consumer (SPSC) ring buffers using `std::atomic` (with acquire/release memory semantics) to prevent priority inversion and CPU throttling.
+### 2. Compute, Embeddings, & Memory Optimization (Phases III & IV) [COMPLETED & VERIFIED]
 
-### 2. Compute, Embeddings, & Memory Optimization (Phases III & IV)
+- **[DONE] CUTLASS & Linear EVT:** Implemented CUTLASS v4.8.0 with Epilogue Visitor Trees (EVT) to fuse the GEMM matrix multiplication and bias addition into a single kernel with a linear identity output epilogue and un-gated backward gradient ($dz = dy$), permanently preventing the Dying ReLU collapse.
+- **[DONE] Learnable VRAM Embedding Gather/Scatter:** Uploads 128 integer token IDs (512 bytes) per window across PCIe; expands to 32D vectors in VRAM via a branchless gather kernel, and scatters gradients back into the FP32 master embedding table using `atomicAdd`.
+- **[DONE] Curing AI Amnesia (Optimizer State):** Persists AdamW first and second moments ($m_t, v_t$) to `optimizer.axiom` so training velocity is preserved across sessions.
+- **[PENDING] BFC Caching Allocator:** Transition runtime `cudaMalloc` allocations to stream-ordered memory pools (`cudaMallocAsync`) or a userspace Best-Fit with Coalescing (BFC) allocator to reduce allocation latency from microseconds to nanoseconds.
 
-Once data flows asynchronously, the mathematical operations must align strictly with the Ada Lovelace architecture's Tensor Cores.
+### 3. Advanced Engine Modularity & Scaling (Phases V, VI, & VII) [IN PROGRESS]
 
-- **CUTLASS & Linear EVT:** Standard C++ loops will bottleneck on legacy CUDA cores. Implement CUTLASS with Epilogue Visitor Trees (EVT) to fuse the GEMM matrix multiplication and bias addition into a single kernel with a linear identity output epilogue and un-gated backward gradient ($dz = dy$), permanently preventing the Dying ReLU collapse.
-- **Learnable VRAM Embedding Gather/Scatter:** Upload 128 integer token IDs (512 bytes) per window across PCIe; expand to 32D vectors in VRAM via a branchless gather kernel, and scatter gradients back into the FP32 master embedding table using `atomicAdd`.
-- **Curing AI Amnesia (Optimizer State):** Persist AdamW first and second moments ($m_t, v_t$) to `optimizer.axiom` so training velocity is preserved across sessions.
-- **BFC Caching Allocator:** Halt all dynamic `cudaMalloc` calls in the training loop. Transition immediately to `cudaMallocAsync` via CUDA's memory pools. For long-term stability, building a custom PyTorch-style Best-Fit with Coalescing (BFC) allocator in userspace will reduce allocation latency from microseconds to nanoseconds and prevent VRAM fragmentation as the architecture scales to complex transformers.
-
-### 3. Advanced Engine Modularity & Scaling (Phases V, VI, & VII)
-
-To evolve this from a hardcoded perceptron into a generalized, multi-modal LLM engine, the architecture requires advanced state management, operation dispatching, and sparse computation.
-
-- **PagedAttention for GPTs:** Standard contiguous VRAM allocation for Key/Value caches wastes up to 80% of memory. Implementing a CPU-side Block Table (PagedAttention) will chunk the KV cache into fixed physical VRAM blocks, eliminating external fragmentation and enabling zero-overhead Copy-On-Write (COW) for system prompt caching.
-- **CUDA Graphs:** Once memory addresses are stabilized by the caching allocator, wrapping iterations in `cudaStreamBeginCapture` will create a Directed Acyclic Graph (DAG). Launching this DAG offloads all scheduling to the GPU hardware, reducing CPU kernel launch overhead to zero.
-- **ATen-Style Dispatcher:** Separate the tensor handles from their underlying data arrays. Routing all operations through a central C++ dispatcher based on a `DispatchKeySet` (e.g., CPU, CUDA, Autograd) will cleanly decouple the mathematical logic from hardware-specific kernels, paving the way for automatic differentiation.
-- **Sparse Mixture of Experts (MoE):** Implement specialized Expert Blocks governed by a top-K Router Network, allowing parameter scale to expand dramatically while keeping per-token compute FLOPs and inference latency low.
-- **Output Codecs (Detokenizers):** Invert generation through dedicated output compressors, converting discrete token sequences into UTF-8 text, RGB video/image containers, and PCM audio waveforms.
+- **[DONE - KERNELS] GPU Discrete Token Classification & Tied Logits:** Fused GPU Cross-Entropy loss ($L = -\log P_{tgt}$), tied logits projection ($Y \cdot E^T$), and Softmax / ArgMax kernel in VRAM.
+- **[PENDING] Multi-Step Autoregressive Generation:** Host-side iterative token generation loop feeding predicted tokens back into the sliding context window with temperature and top-k sampling.
+- **[PENDING] Multi-Head Self-Attention (MHA / GQA):** Partitioning representations into attention heads with Q, K, V projections and causal masking on Tensor Cores.
+- **[PENDING] PagedAttention for KV-Cache:** Partitioning Key/Value caches into fixed physical VRAM blocks with a CPU-side Block Table, eliminating external fragmentation and enabling Copy-On-Write (COW) prompt prefix caching.
+- **[PENDING] CUDA Graphs:** Wrapping static training/inference iterations in `cudaStreamBeginCapture` to create a Directed Acyclic Graph (DAG), reducing CPU launch overhead to zero.
+- **[PENDING] ATen-Style Dispatcher:** Decoupling tensor handles from underlying data arrays, routing all mathematical operations through a central C++ dispatcher.
+- **[PENDING] Sparse Mixture of Experts (MoE):** Specialized Expert Blocks governed by a top-K Router Network, expanding parameter capacity while keeping per-token FLOPs minimal.
+- **[IN PROGRESS] Output Codecs (Detokenizers):** Text detokenization verified; visual and acoustic waveform renderers in progress.
