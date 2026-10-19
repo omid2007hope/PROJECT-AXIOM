@@ -1,0 +1,158 @@
+# Project Axiom: Engineering Task Checklist (.todo)
+# Single Source of Truth: document/plan/UnifiedMasterEngineeringPlan.md
+# Target Architecture: NVIDIA Ada Lovelace (sm_89 / RTX 4080 Laptop GPU)
+# Toolchains: Native C++23 (GCC/MinGW 14.2), CUDA 13.3 (nvcc, MSVC cl.exe), CUTLASS v4.8.0
+
+---
+
+## [x] Phase 0: Verified Baseline Foundations (LOCKED — 146/146 Tests Green)
+- [x] **0.1 Multimodal Ingestion Pipeline** (`core/include/Identifier.hpp`, `core/util/identifier.cpp`, `core/util/decompressor/*`, `core/util/parser.cpp`)
+  - [x] Four-stage pipeline: Identifier -> Decompressor -> Sanitizer -> Tokenizer -> Embedder
+  - [x] Unified text and numbers in `main_dictionary`
+  - [x] Raw manual CLI prompt bypasses file decompression directly into tokenization
+- [x] **0.2 Dense Bounded Codebook** (`core/include/parser.hpp`, `core/util/parser.cpp`)
+  - [x] Fixed 16-bit address space ($V = 65,536$)
+  - [x] Partitioning: Special tokens `[0..3]`, Text/Numbers `[4..64,511]`, Visual bytes `[64,512..64,767]`, Audio bytes `[64,768..65,023]`
+  - [x] Sparse billion-scale offset mapping eradicated
+- [x] **0.3 Zero-Copy PCIe DMA Logistics** (`core/include/optimizer.hpp`, `core/util/optimizer.cpp`, `core/src/CUDA/gpu/upload.cu`)
+  - [x] Pinned `cudaHostAllocWriteCombined` host buffers
+  - [x] Dual non-blocking streams (`stream[0]`, `stream[1]`) with ping-pong buffering
+  - [x] Seam carry-forward across 100,000-token chunks
+  - [x] 512-byte token ID PCIe streaming (93.75% bus reduction over raw vectors)
+- [x] **0.4 VRAM Embedding Table & Kernels** (`core/src/CUDA/util/gpu_types.cuh`, `core/src/CUDA/kernel/forward_pass.cu`, `core/src/CUDA/kernel/backward_pass.cu`)
+  - [x] VRAM-resident `__nv_bfloat16` embedding table (`d_table`) and FP32 master weights (`d_table_master`)
+  - [x] Branchless `gather_embeddings_kernel` (128 token IDs -> [128 x 32] hidden states)
+  - [x] Gradient scatter via `backward_scatter_embeddings_kernel` with `atomicAdd`
+- [x] **0.5 Tensor Core GEMM & Dying ReLU Solution** (`core/src/CUDA/kernel/forward_pass.cu`, `core/src/CUDA/kernel/backward_pass.cu`)
+  - [x] CUTLASS v4.8.0 GEMM (`sm_89`) integration for $Y = X W^T + b$
+  - [x] Linear Identity EVT epilogue (`Store(AddBias(Accum, Bias))`)
+  - [x] Un-gated backward pass ($dz = dy$), permanently curing Dying ReLU collapse
+- [x] **0.6 Autoregressive Kernels & Normalization** (`core/src/CUDA/kernel/forward_pass.cu`, `core/src/CUDA/kernel/backward_pass.cu`, `core/util/parser.cpp`)
+  - [x] Contiguous RAM decode mirror (`decode_ids`, `decode_vectors`)
+  - [x] GPU `rms_norm_forward_kernel` with variance clamp $[-10.0, 10.0]$
+  - [x] GPU `compute_tied_logits_kernel` ($Y \cdot E^T$) across active vocabulary
+  - [x] GPU `softmax_argmax_kernel` for on-device winner determination
+  - [x] Fused Cross-Entropy loss & gradient kernel (`compute_loss_and_dz_kernel`)
+- [x] **0.7 Fused Optimizer & State Persistence** (`core/src/ai.cpp`, `core/src/CUDA/kernel/backward_pass.cu`)
+  - [x] Fused `backward_pass_adamw_kernel` maintaining momentum ($m_t$) and variance ($v_t$)
+  - [x] Deterministic 56-byte `AxiomWeightHeader` atomic file swapping
+  - [x] Serialization & deserialization for `weights.axiom`, `vocab.axiom`, and `optimizer.axiom`
+- [x] **Gate 0 Verification:** All 146 unit & stress tests passing in `mingw32-make test` (`test.exe --test`).
+
+---
+
+## [ ] Phase 1: Multi-Token Autoregressive Generation, Sampling & Corpus Hygiene [NEXT]
+- [ ] **1.1 Host Autoregressive Generation Loop** (`core/src/ai.cpp`, `core/src/main.cpp`)
+  - [ ] Implement `AI::generate(prompt, max_new_tokens, temperature, top_k, top_p, token_callback)`
+  - [ ] Tokenize input prompt and initialize 128-token sliding context window
+  - [ ] Execute forward pass with RMSNorm and tied logits projection ($Y \cdot E^T$)
+  - [ ] Decode sampled token ID via `token_to_string()` and stream to terminal via `token_callback`
+  - [ ] Append token ID, slide context window (FIFO roll), loop until `vocab::EOS` or `max_new_tokens`
+- [ ] **1.2 Stochastic Sampling Engine** (`core/src/CUDA/kernel/forward_pass.cu`, `core/src/ai.cpp`)
+  - [ ] Implement temperature scaling: $\hat{z}_i = z_i / T$ with $T \in (0.0, 2.0]$
+  - [ ] Implement Top-K filtering: Isolate $K$ highest logits, mask remainder to $-\infty$
+  - [ ] Implement Top-P (nucleus) sampling: Sort descending, compute cumulative sum, cut off at threshold $P$, re-normalize
+  - [ ] Implement greedy fallback: When $T \to 0$, bypass stochastic path and trigger `softmax_argmax_kernel` directly
+- [ ] **1.3 Vocabulary Bounding & Corpus Hygiene** (`core/util/parser.cpp`)
+  - [ ] Implement frequency filtering ($\text{count} \ge 3$) during bulk corpus ingestion
+  - [ ] Prevent rare typos and noise strings from polluting the 64,508-word `main_dictionary` partition
+  - [ ] Map out-of-bounds indices and low-frequency outliers safely to `vocab::UNK` (ID `1`)
+- [ ] **Gate 1 Verification:**
+  - [ ] Throughput $> 50\text{ tokens/sec}$ on RTX 4080 Laptop GPU
+  - [ ] $T > 0$ produces diverse, coherent multi-token text without `<UNK>` saturation
+  - [ ] Interactive CLI streaming verified in `main.cpp`
+  - [ ] Deterministic seed validation suite passing in `test_inference.cpp`
+
+---
+
+## [ ] Phase 2: Surgical Sync Eradication & Production VRAM Management [PENDING]
+- [ ] **2.1 Eradicate Dynamic `cudaMalloc` in Transfer Loops** (`core/src/CUDA/gpu/upload.cu`)
+  - [ ] Audit and remove lines 20–28 dynamic allocation guards in `upload_to_gpu`
+  - [ ] Switch temporary transfer buffers to stream-ordered memory pools (`cudaMallocAsync` / `cudaFreeAsync`)
+  - [ ] Implement userspace Best-Fit with Coalescing (BFC) Caching Allocator over pre-allocated VRAM arena
+- [ ] **2.2 Non-Blocking Loss Telemetry** (`core/src/CUDA/gpu/download.cu`)
+  - [ ] Remove `cudaDeviceSynchronize()` from `download_loss`
+  - [ ] Asynchronously copy loss via `cudaMemcpyAsync` into a dedicated 4-byte pinned host slot
+  - [ ] Implement non-blocking polling via stream event query (`cudaEventQuery`), preserving double-buffered compute
+- [ ] **2.3 Lock-Free SPSC Ring Buffer & Async Disk Prefetch** (`core/util/optimizer.cpp`)
+  - [ ] Eliminate busy-wait spin-locks on `Portion::buffer_in_use` and `Portion::context_in_use`
+  - [ ] Implement lock-free Single-Producer Single-Consumer (SPSC) ring buffer
+  - [ ] Launch background producer thread to prefetch next 100,000-token chunk from disk to RAM ahead of GPU consumption
+- [ ] **Gate 2 Verification:**
+  - [ ] Exactly 0 calls to `cudaMalloc` or `cudaDeviceSynchronize` during active training/inference loops
+  - [ ] Zero GPU starvation bubbles verified via Nsight Systems timeline trace
+
+---
+
+## [ ] Phase 3: Multi-Head Self-Attention (MHA / GQA) & Transformer Blocks [PENDING]
+- [ ] **3.1 Batched Tensor Core Projections & Backward Pass Upgrade** (`core/src/CUDA/kernel/backward_pass.cu`)
+  - [ ] Project hidden states into Query, Key, Value tensors via batched CUTLASS v4.8.0 GEMMs in `__nv_bfloat16` ($Q = X W_Q, K = X W_K, V = X W_V$)
+  - [ ] Replace memory-bound Rank-1 outer product kernel ($M = 1$) with batched CUTLASS GEMM backward passes
+  - [ ] Enable full sequence/batch dimension saturation across Ada Lovelace Tensor Cores
+- [ ] **3.2 Fused Scaled Dot-Product Attention (SDPA) & Causal Masking** (`core/src/CUDA/kernel/forward_pass.cu`)
+  - [ ] Implement fused FlashAttention-style CUDA kernel: $\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{Q K^T}{\sqrt{d_{\text{head}}}} + M\right) V$
+  - [ ] Implement causal masking ($M_{i, j} = 0$ for $j \le i$, $-\infty$ for $j > i$) to prevent future token leakage
+- [ ] **3.3 Transformer Block Composition & SwiGLU FFN**
+  - [ ] Pre-Norm Residual Stream: $X_{\text{mid}} = X + \text{Attention}(\text{RMSNorm}(X))$
+  - [ ] SwiGLU Feed-Forward Network: $\text{FFN}(x) = (\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$
+  - [ ] Block Output: $X_{\text{out}} = X_{\text{mid}} + \text{FFN}(\text{RMSNorm}(X_{\text{mid}}))$
+- [ ] **Gate 3 Verification:**
+  - [ ] Monotonic cross-entropy loss reduction on causal sequence modeling benchmarks
+  - [ ] Tensor Core backward GEMMs active and verified in `test_ai.cpp`
+
+---
+
+## [ ] Phase 4: PagedAttention KV-Cache & Prefix State Management [PENDING]
+- [ ] **4.1 Fixed-Size Physical KV Blocks**
+  - [ ] Partition VRAM Key and Value caches into uniform physical pages (16 tokens per block)
+  - [ ] Eradicate internal and external VRAM fragmentation during variable-length autoregressive decoding
+- [ ] **4.2 CPU Block Table & Copy-On-Write (COW) Prefix Caching**
+  - [ ] Maintain CPU-side Block Table mapping logical sequence positions $(0 \dots T-1)$ to physical VRAM block pointers
+  - [ ] Implement Copy-On-Write (COW) semantics for shared system prompts and multi-turn conversations
+  - [ ] Allocate physical pages only upon sequence trajectory divergence
+- [ ] **Gate 4 Verification:**
+  - [ ] 100% block reuse verified across multi-turn prompts via COW prefix sharing
+  - [ ] Zero allocation failures and zero fragmentation under stress tests in `test_inference.cpp`
+
+---
+
+## [ ] Phase 5: Zero-Overhead Hardware Saturation & ATen Dispatcher [PENDING]
+- [ ] **5.1 Static DAG Execution via CUDA Graphs**
+  - [ ] Capture complete forward and backward execution pipeline into single hardware Directed Acyclic Graph (`cudaStreamBeginCapture` / `cudaStreamEndCapture`)
+  - [ ] Instantiate `cudaGraphExec_t` and execute iterations via `cudaGraphLaunch`
+  - [ ] Drive host driver launch overhead below $<0.05\text{ ms}$ per full step
+- [ ] **5.2 Modular C++ ATen Dispatcher & Autograd Tape**
+  - [ ] Decouple lightweight `Tensor` handle from reference-counted `TensorImpl` (shape, stride, device metadata)
+  - [ ] Construct `DispatchKeySet` table routing operations across CPU and CUDA backends
+  - [ ] Implement autograd reverse-mode tape recording for dynamic computational graphs
+- [ ] **Gate 5 Verification:**
+  - [ ] Host launch latency $<0.05\text{ ms}$ measured via `cudaEventElapsedTime`
+  - [ ] Autograd tape gradients achieve 100% numerical parity with manual analytical gradients
+
+---
+
+## [ ] Phase 6: Sparse Mixture of Experts (MoE) & Multimodal Output Codecs [PENDING]
+- [ ] **6.1 Sparse Mixture of Experts (MoE) Layers**
+  - [ ] Partition dense SwiGLU FFN layers into $N = 8$ discrete expert weight stacks in contiguous VRAM
+  - [ ] Implement Top-2 gating router: $G(x) = \text{TopK}(\text{Softmax}(x W_g), k=2)$
+  - [ ] Dispatch tokens exclusively to top 2 active experts; idle experts consume zero FLOPs
+- [ ] **6.2 Multimodal Output Codecs** (`core/util/decompressor/` and Compressor Mirrors)
+  - [ ] Visual Codec: Decode discrete visual tokens (`[64,512..64,767]`) to RGB pixel buffers and serialize to valid BMP/MP4 containers
+  - [ ] Acoustic Codec: Decode discrete acoustic tokens (`[64,768..65,023]`) to linear PCM waveforms with valid RIFF `.wav` headers
+- [ ] **Gate 6 Verification:**
+  - [ ] Top-2 expert routing load balancing verified under diverse batches
+  - [ ] Round-trip bit-accurate image (`.bmp`) and audio (`.wav`) reconstructions verified in `test_decom.cpp`
+
+---
+
+## Verification Gates & Acceptance Protocol Summary
+
+| Phase | Milestone Name | Target Success Metric | Verification Method | Status |
+| :---: | :--- | :--- | :--- | :---: |
+| **0** | **Foundations Locked** | 146/146 unit & stress tests passing | `mingw32-make test` (`test.exe --test`) | **PASSED** |
+| **1** | **Multi-Token Streaming & Sampling** | $>50\text{ tokens/sec}$; $T > 0$ diverse text without `<UNK>` | Interactive CLI & `test_inference.cpp` | **NEXT** |
+| **2** | **Zero Runtime Syncs & Allocations** | Exactly 0 `cudaMalloc` or `cudaDeviceSynchronize` in loops | Audit & Nsight Systems trace | **PENDING** |
+| **3** | **Transformer Block Convergence** | Monotonic loss reduction; Tensor Core backward GEMM | Convergence suite in `test_ai.cpp` | **PENDING** |
+| **4** | **Zero KV Fragmentation** | 100% block reuse via COW prefix sharing | PagedAttention unit tests | **PENDING** |
+| **5** | **Sub-Microsecond Graph Dispatch** | $<0.05\text{ ms}$ launch latency; tape backprop parity | `cudaEventElapsedTime` profiling | **PENDING** |
+| **6** | **MoE Routing & Multimodal Output** | Top-2 expert routing; valid `.bmp` and `.wav` synthesis | Router tests & `test_decom.cpp` | **PENDING** |
