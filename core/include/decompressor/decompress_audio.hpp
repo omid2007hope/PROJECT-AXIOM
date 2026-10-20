@@ -1,5 +1,5 @@
-#ifndef include_decom_audio
-#define include_decom_audio
+#ifndef include_decompress_audio
+#define include_decompress_audio
 
 #include <cstdint>
 #include <filesystem>
@@ -13,15 +13,15 @@ struct DecodedAudio {
 	bool is_valid = false;
 };
 
-class Decom_audio {
+class DecompressAudio {
 public:
 	// Master audio decoder
-	static DecodedAudio decode_audio(const std::filesystem::path& filepath);
+	static DecodedAudio decode_audio(const std::filesystem::path& file_path);
 
 	// Individual format decoders
-	static DecodedAudio decom_WAV(const std::filesystem::path& filepath);
-	static DecodedAudio decom_OGG(const std::filesystem::path& filepath);
-	static DecodedAudio decom_MP3(const std::filesystem::path& filepath);
+	static DecodedAudio decompress_wav(const std::filesystem::path& file_path);
+	static DecodedAudio decompress_ogg(const std::filesystem::path& file_path);
+	static DecodedAudio decompress_mp3(const std::filesystem::path& file_path);
 };
 
-#endif // include_decom_audio
+#endif // include_decompress_audio

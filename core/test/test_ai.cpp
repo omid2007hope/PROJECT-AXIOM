@@ -28,14 +28,14 @@ bool test_ai() {
 
 	test_check_eq(e.weight_elements, in_dim * out_dim, "Elements weight_elements == 2048", s_pass, s_fail);
 	test_check_eq(e.bias_elements, out_dim, "Elements bias_elements == 4", s_pass, s_fail);
-	test_check_eq(ai.h_weights.size(), in_dim * out_dim, "h_weights size == 2048", s_pass, s_fail);
-	test_check_eq(ai.h_bias.size(), out_dim, "h_bias size == 4", s_pass, s_fail);
+	test_check_eq(ai.host_weights.size(), in_dim * out_dim, "h_weights size == 2048", s_pass, s_fail);
+	test_check_eq(ai.host_bias.size(), out_dim, "h_bias size == 4", s_pass, s_fail);
 
 	// ── [2] Chaos / Symmetry Breaking ─────────────────────────────────────────
 	std::cout << "\n[2] Weight Distribution & Chaos Verification\n";
 	bool weights_in_bounds = true;
 	float weight_sum = 0.0f;
-	for (float w : ai.h_weights) {
+	for (float w : ai.host_weights) {
 		if (w < w_min || w > w_max) {
 			weights_in_bounds = false;
 			break;
@@ -46,7 +46,7 @@ bool test_ai() {
 	test_check(std::abs(weight_sum) > 0.001f, "Weights are non-zero chaotic distribution", s_pass, s_fail);
 
 	bool biases_zero = true;
-	for (float b : ai.h_bias) {
+	for (float b : ai.host_bias) {
 		if (b != 0.0f) {
 			biases_zero = false;
 			break;
@@ -56,13 +56,13 @@ bool test_ai() {
 
 	// ── [3] GPU Transfer Roundtrip ────────────────────────────────────────────
 	std::cout << "\n[3] AI GPU Transfer Roundtrip\n";
-	test_check(ai.upload_weights_to_gpu(), "upload_weights_to_gpu() returns true", s_pass, s_fail);
+	test_check(ai.upload_weights(), "upload_weights() returns true", s_pass, s_fail);
 
-	float original_w0 = ai.h_weights[0];
-	ai.h_weights[0] = 999.0f; // Tamper with CPU cache
+	float original_w0 = ai.host_weights[0];
+	ai.host_weights[0] = 999.0f; // Tamper with CPU cache
 
-	test_check(ai.download_weights_from_gpu(), "download_weights_from_gpu() returns true", s_pass, s_fail);
-	test_check(std::abs(ai.h_weights[0] - original_w0) < 1e-6f, "Downloaded weights restored original VRAM value", s_pass, s_fail);
+	test_check(ai.download_weights(), "download_weights() returns true", s_pass, s_fail);
+	test_check(std::abs(ai.host_weights[0] - original_w0) < 1e-6f, "Downloaded weights restored original VRAM value", s_pass, s_fail);
 
 	// ── [4] Loss Reading with Zero Steps ──────────────────────────────────────
 	std::cout << "\n[4] Zero Pending Steps Handling\n";
@@ -74,15 +74,15 @@ bool test_ai() {
 
 	// ── [5] Training Loop Step & Loss Reading ─────────────────────────────────
 	std::cout << "\n[5] Training Step Execution\n";
-	const size_t RAM_BUF = 1000;
+	const size_t RAM_BUFFER = 1000;
 	const size_t TOKEN_DIM = 4;
-	const size_t CTX_WIN = 128; // 512 floats window, 4 floats target (matches in_dim)
-	Portion portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
+	const size_t CONTEXT_WINDOW = 128; // 512 floats window, 4 floats target (matches in_dim)
+	Portion portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	portion.allocate_pinned();
 
 	// Populate ram buffer with synthetic tokens
-	portion.ram_buffer_tokens.resize(RAM_BUF);
-	for (size_t i = 0; i < RAM_BUF; ++i) {
+	portion.ram_buffer_tokens.resize(RAM_BUFFER);
+	for (size_t i = 0; i < RAM_BUFFER; ++i) {
 		portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 10) + 1));
 	}
 
@@ -101,7 +101,7 @@ bool test_ai() {
 
 	// ── [6] Buffer Exhaustion (TrainStatus::NoData) ───────────────────────────
 	std::cout << "\n[6] Buffer Exhaustion Handling\n";
-	Portion empty_portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
+	Portion empty_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	empty_portion.allocate_pinned();
 	// ram_buffer_tokens is empty
 	TrainStatus empty_status = ai.train(optimizer, empty_portion);
@@ -110,21 +110,21 @@ bool test_ai() {
 
 	// ── [7] Multi-Step Training Convergence ───────────────────────────────────
 	std::cout << "\n[7] Multi-Step Convergence\n";
-	Portion conv_portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
+	Portion conv_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	conv_portion.allocate_pinned();
 
 	// Initialize weights and biases to positive regime to ensure active gradient flow (avoid dead ReLU)
-	for (float& w : ai.h_weights) {
+	for (float& w : ai.host_weights) {
 		w = 0.01f;
 	}
-	for (float& b : ai.h_bias) {
+	for (float& b : ai.host_bias) {
 		b = 0.1f;
 	}
-	ai.upload_weights_to_gpu();
+	ai.upload_weights();
 
 	auto refill = [&]() {
-		conv_portion.ram_buffer_tokens.resize(RAM_BUF);
-		for (size_t i = 0; i < RAM_BUF; ++i) {
+		conv_portion.ram_buffer_tokens.resize(RAM_BUFFER);
+		for (size_t i = 0; i < RAM_BUFFER; ++i) {
 			conv_portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 4) + 1));
 		}
 	};
@@ -176,34 +176,34 @@ bool test_ai() {
 	test_check_eq(std::filesystem::file_size(test_weights_path), expected_file_size, "File size matches exact binary format", s_pass, s_fail);
 
 	// Snapshot of the saved parameters
-	std::vector<float> saved_weights = ai.h_weights;
-	std::vector<float> saved_bias = ai.h_bias;
-	std::vector<float> saved_embeddings = ai.h_embeddings;
+	std::vector<float> saved_weights = ai.host_weights;
+	std::vector<float> saved_bias = ai.host_bias;
+	std::vector<float> saved_embeddings = ai.host_embeddings;
 
 	// Reset memory to chaos (breaking current state)
 	ai.reset_weights(e);
-	test_check(ai.upload_weights_to_gpu(), "Upload chaotic weights to GPU VRAM", s_pass, s_fail);
+	test_check(ai.upload_weights(), "Upload chaotic weights to GPU VRAM", s_pass, s_fail);
 
 	// Verify host weights and embeddings are different from saved
-	bool weights_differ_from_saved = (ai.h_weights != saved_weights);
+	bool weights_differ_from_saved = (ai.host_weights != saved_weights);
 	test_check(weights_differ_from_saved, "Memory wiped: current weights differ from saved snapshot", s_pass, s_fail);
-	bool embeddings_differ_from_saved = (ai.h_embeddings != saved_embeddings);
+	bool embeddings_differ_from_saved = (ai.host_embeddings != saved_embeddings);
 	test_check(embeddings_differ_from_saved, "Memory wiped: current embeddings differ from saved snapshot", s_pass, s_fail);
 
 	// Load weights from file
 	test_check(ai.load_weights(test_weights_path), "ai.load_weights() returns true", s_pass, s_fail);
 
 	// Assert bit-for-bit equality on host memory
-	test_check(ai.h_weights == saved_weights, "Loaded weights match saved weights bit-for-bit", s_pass, s_fail);
-	test_check(ai.h_bias == saved_bias, "Loaded biases match saved biases bit-for-bit", s_pass, s_fail);
-	test_check(ai.h_embeddings == saved_embeddings, "Loaded embeddings match saved embeddings bit-for-bit", s_pass, s_fail);
+	test_check(ai.host_weights == saved_weights, "Loaded weights match saved weights bit-for-bit", s_pass, s_fail);
+	test_check(ai.host_bias == saved_bias, "Loaded biases match saved biases bit-for-bit", s_pass, s_fail);
+	test_check(ai.host_embeddings == saved_embeddings, "Loaded embeddings match saved embeddings bit-for-bit", s_pass, s_fail);
 
 	// Verify GPU VRAM was also restored by load_weights()
-	ai.h_weights[0] = 999.0f; // Tamper with CPU memory
-	ai.h_embeddings[0] = 999.0f;
-	test_check(ai.download_weights_from_gpu(), "download_weights_from_gpu() succeeds after load", s_pass, s_fail);
-	test_check(ai.h_weights == saved_weights, "VRAM verified: weights downloaded from GPU match saved bit-for-bit", s_pass, s_fail);
-	test_check(ai.h_embeddings == saved_embeddings, "VRAM verified: embeddings downloaded from GPU match saved bit-for-bit", s_pass, s_fail);
+	ai.host_weights[0] = 999.0f; // Tamper with CPU memory
+	ai.host_embeddings[0] = 999.0f;
+	test_check(ai.download_weights(), "download_weights() succeeds after load", s_pass, s_fail);
+	test_check(ai.host_weights == saved_weights, "VRAM verified: weights downloaded from GPU match saved bit-for-bit", s_pass, s_fail);
+	test_check(ai.host_embeddings == saved_embeddings, "VRAM verified: embeddings downloaded from GPU match saved bit-for-bit", s_pass, s_fail);
 
 	// Test error cases: non-existent file and invalid magic header
 	test_check(!ai.load_weights("non_existent_file.axiom"), "load_weights() fails on non-existent file", s_pass, s_fail);
@@ -274,7 +274,7 @@ bool test_ai() {
 	for (size_t d = 0; d < out_dim; ++d) {
 		fox_float_vec[d] = static_cast<float>(fox_emb[d]);
 	}
-	uint32_t decoded_id = test_parser.decode_embedding_to_token(parser_input, fox_float_vec);
+	uint32_t decoded_id = test_parser.decode_token(parser_input, fox_float_vec);
 	test_check_eq(decoded_id, static_cast<uint32_t>(4), "Exact embedding vector decodes to token ID #4 ('fox')", s_pass, s_fail);
 
 	std::string decoded_str = test_parser.decode_prediction(parser_input, fox_float_vec);
@@ -284,7 +284,7 @@ bool test_ai() {
 	std::vector<float> noisy_fox_vec = fox_float_vec;
 	noisy_fox_vec[0] += 0.001f;
 	noisy_fox_vec[1] -= 0.001f;
-	uint32_t noisy_decoded_id = test_parser.decode_embedding_to_token(parser_input, noisy_fox_vec);
+	uint32_t noisy_decoded_id = test_parser.decode_token(parser_input, noisy_fox_vec);
 	test_check_eq(noisy_decoded_id, static_cast<uint32_t>(4), "Perturbed embedding robustly decodes to nearest token ID #4", s_pass, s_fail);
 
 	// Verify decoding model's live prediction
@@ -296,32 +296,32 @@ bool test_ai() {
 	test_check_eq(prompt_tokens.size(), static_cast<size_t>(5), "tokenize_prompt parses 5 tokens", s_pass, s_fail);
 	test_check_eq(parser_input.main_dictionary["jumps"], static_cast<uint32_t>(5), "New word 'jumps' assigned token ID #5", s_pass, s_fail);
 
-	std::vector<std::bfloat16_t> prompt_ctx = test_parser.tokens_to_context_window(parser_input, prompt_tokens, 128);
-	test_check_eq(prompt_ctx.size(), static_cast<size_t>(512), "tokens_to_context_window generates exact 512 bfloat16_t elements", s_pass, s_fail);
+	std::vector<std::bfloat16_t> prompt_context = test_parser.build_context_window(parser_input, prompt_tokens, 128);
+	test_check_eq(prompt_context.size(), static_cast<size_t>(512), "build_context_window generates exact 512 bfloat16_t elements", s_pass, s_fail);
 
 	std::vector<float> prompt_pred;
-	test_check(ai.predict(prompt_ctx, prompt_pred), "ai.predict(prompt_ctx) succeeds on user prompt context", s_pass, s_fail);
+	test_check(ai.predict(prompt_context, prompt_pred), "ai.predict(prompt_context) succeeds on user prompt context", s_pass, s_fail);
 	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == 4", s_pass, s_fail);
 
 	// ── [10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning ──
 	std::cout << "\n[10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning\n";
 	{
 		// 1. Verify embedding chaos initialization
-		float emb_bound = 1.0f / sqrtf(static_cast<float>(ai.embedding_dim));
+		float embedding_bound = 1.0f / sqrtf(static_cast<float>(ai.embedding_dim));
 		bool emb_in_bounds = true;
-		float emb_sum = 0.0f;
-		for (float val : ai.h_embeddings) {
-			if (val < -emb_bound || val > emb_bound) {
+		float embedding_sum = 0.0f;
+		for (float val : ai.host_embeddings) {
+			if (val < -embedding_bound || val > embedding_bound) {
 				emb_in_bounds = false;
 				break;
 			}
-			emb_sum += val;
+			embedding_sum += val;
 		}
 		test_check(emb_in_bounds, "Embeddings bounded in [-1/sqrt(D), +1/sqrt(D)]", s_pass, s_fail);
-		test_check(std::abs(emb_sum) > 0.01f, "Embeddings have non-zero chaotic distribution", s_pass, s_fail);
+		test_check(std::abs(embedding_sum) > 0.01f, "Embeddings have non-zero chaotic distribution", s_pass, s_fail);
 
 		// 2. Token-based training step
-		Portion token_portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
+		Portion token_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 		token_portion.allocate_pinned();
 
 		// Populate ram_buffer_token_ids with 200 token IDs
@@ -331,22 +331,22 @@ bool test_ai() {
 		}
 
 		// Snapshot target token embedding before training
-		uint32_t tracked_tok = token_portion.ram_buffer_token_ids[0];
-		float before_emb0 = ai.h_embeddings[tracked_tok * ai.embedding_dim];
+		uint32_t tracked_token = token_portion.ram_buffer_token_ids[0];
+		float before_emb0 = ai.host_embeddings[tracked_token * ai.embedding_dim];
 
-		TrainStatus tok_status = ai.train(optimizer, token_portion);
-		test_check(tok_status == TrainStatus::Trained, "ai.train() succeeds using 128 uint32_t token IDs across PCIe", s_pass, s_fail);
+		TrainStatus token_status = ai.train(optimizer, token_portion);
+		test_check(token_status == TrainStatus::Trained, "ai.train() succeeds using 128 uint32_t token IDs across PCIe", s_pass, s_fail);
 		test_check(token_portion.has_token_ids, "Portion flagged has_token_ids == true", s_pass, s_fail);
 
-		double tok_loss = 0.0;
-		size_t tok_steps = 0;
-		test_check(ai.read_loss(tok_loss, tok_steps), "read_loss() succeeds after token training step", s_pass, s_fail);
-		test_check_eq(tok_steps, size_t {1}, "1 token training step recorded", s_pass, s_fail);
-		test_check(tok_loss >= 0.0 && std::isfinite(tok_loss), "Token training step produces valid finite loss", s_pass, s_fail);
+		double token_loss = 0.0;
+		size_t token_steps = 0;
+		test_check(ai.read_loss(token_loss, token_steps), "read_loss() succeeds after token training step", s_pass, s_fail);
+		test_check_eq(token_steps, size_t {1}, "1 token training step recorded", s_pass, s_fail);
+		test_check(token_loss >= 0.0 && std::isfinite(token_loss), "Token training step produces valid finite loss", s_pass, s_fail);
 
 		// Verify backward scatter updated the embedding table
-		ai.download_weights_from_gpu();
-		float after_emb0 = ai.h_embeddings[tracked_tok * ai.embedding_dim];
+		ai.download_weights();
+		float after_emb0 = ai.host_embeddings[tracked_token * ai.embedding_dim];
 		test_check(std::isfinite(after_emb0), "Master embedding table value remains finite after backward scatter", s_pass, s_fail);
 		test_check(after_emb0 != before_emb0, "Backward scatter physically updated embedding coordinate in VRAM", s_pass, s_fail);
 

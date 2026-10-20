@@ -195,7 +195,7 @@ public:
 
 	void disk_to_ram(Portion& portion);
 
-	bool ram_to_contextWindow(Portion& portion);
+	bool load_context_window(Portion& portion);
 };
 
 #endif

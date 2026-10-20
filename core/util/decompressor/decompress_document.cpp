@@ -1,4 +1,4 @@
-#include "decompressor/decom_doc.hpp"
+#include "decompressor/decompress_document.hpp"
 #include "Identifier.hpp"
 
 #include <algorithm>
@@ -8,8 +8,8 @@
 #include <sstream>
 #include <vector>
 
-std::string Decom_doc::decom_TXT(const std::filesystem::path& filepath) {
-	std::ifstream in(filepath, std::ios::binary);
+std::string DecompressDocument::decompress_text(const std::filesystem::path& file_path) {
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return "";
 	}
@@ -28,12 +28,12 @@ std::string Decom_doc::decom_TXT(const std::filesystem::path& filepath) {
 	return content;
 }
 
-std::string Decom_doc::decom_MD(const std::filesystem::path& filepath) {
-	return decom_TXT(filepath);
+std::string DecompressDocument::decompress_markdown(const std::filesystem::path& file_path) {
+	return decompress_text(file_path);
 }
 
-std::string Decom_doc::decom_PDF(const std::filesystem::path& filepath) {
-	std::ifstream in(filepath, std::ios::binary);
+std::string DecompressDocument::decompress_pdf(const std::filesystem::path& file_path) {
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return "";
 	}
@@ -155,8 +155,8 @@ std::string Decom_doc::decom_PDF(const std::filesystem::path& filepath) {
 	return extracted.str();
 }
 
-std::string Decom_doc::decom_DOCX(const std::filesystem::path& filepath) {
-	std::ifstream in(filepath, std::ios::binary);
+std::string DecompressDocument::decompress_docx(const std::filesystem::path& file_path) {
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return "";
 	}
@@ -206,21 +206,21 @@ std::string Decom_doc::decom_DOCX(const std::filesystem::path& filepath) {
 	return extracted.str();
 }
 
-std::string Decom_doc::extract_text(const std::filesystem::path& filepath) {
-	IdentifiedFile info = Identifier::identify(filepath);
+std::string DecompressDocument::extract_text(const std::filesystem::path& file_path) {
+	IdentifiedFile info = Identifier::identify(file_path);
 	switch (info.format) {
 	case FileFormat::PDF:
-		return decom_PDF(filepath);
+		return decompress_pdf(file_path);
 	case FileFormat::DOCX:
-		return decom_DOCX(filepath);
+		return decompress_docx(file_path);
 	case FileFormat::MD:
-		return decom_MD(filepath);
+		return decompress_markdown(file_path);
 	case FileFormat::TXT:
 	case FileFormat::JSON:
 	case FileFormat::CSV:
 	case FileFormat::LOG:
 	case FileFormat::CODE:
 	default:
-		return decom_TXT(filepath);
+		return decompress_text(file_path);
 	}
 }

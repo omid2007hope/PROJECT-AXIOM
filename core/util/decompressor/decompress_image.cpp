@@ -1,4 +1,4 @@
-#include "decompressor/decom_image.hpp"
+#include "decompressor/decompress_image.hpp"
 #include "Identifier.hpp"
 
 #include <algorithm>
@@ -6,9 +6,9 @@
 #include <fstream>
 #include <iostream>
 
-DecodedImage Decom_image::decom_BMP(const std::filesystem::path& filepath) {
+DecodedImage DecompressImage::decompress_bmp(const std::filesystem::path& file_path) {
 	DecodedImage img;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return img;
 	}
@@ -92,9 +92,9 @@ DecodedImage Decom_image::decom_BMP(const std::filesystem::path& filepath) {
 	return img;
 }
 
-DecodedImage Decom_image::decom_JPG(const std::filesystem::path& filepath) {
+DecodedImage DecompressImage::decompress_jpeg(const std::filesystem::path& file_path) {
 	DecodedImage img;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return img;
 	}
@@ -156,9 +156,9 @@ DecodedImage Decom_image::decom_JPG(const std::filesystem::path& filepath) {
 	return img;
 }
 
-DecodedImage Decom_image::PNG(const std::filesystem::path& filepath) {
+DecodedImage DecompressImage::decompress_png(const std::filesystem::path& file_path) {
 	DecodedImage img;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return img;
 	}
@@ -187,9 +187,9 @@ DecodedImage Decom_image::PNG(const std::filesystem::path& filepath) {
 	return img;
 }
 
-DecodedImage Decom_image::decom_WEBP(const std::filesystem::path& filepath) {
+DecodedImage DecompressImage::decompress_webp(const std::filesystem::path& file_path) {
 	DecodedImage img;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return img;
 	}
@@ -207,17 +207,17 @@ DecodedImage Decom_image::decom_WEBP(const std::filesystem::path& filepath) {
 	return img;
 }
 
-DecodedImage Decom_image::decode_image(const std::filesystem::path& filepath) {
-	IdentifiedFile info = Identifier::identify(filepath);
+DecodedImage DecompressImage::decode_image(const std::filesystem::path& file_path) {
+	IdentifiedFile info = Identifier::identify(file_path);
 	switch (info.format) {
 	case FileFormat::BMP:
-		return decom_BMP(filepath);
+		return decompress_bmp(file_path);
 	case FileFormat::PNG:
-		return PNG(filepath);
+		return decompress_png(file_path);
 	case FileFormat::WEBP:
-		return decom_WEBP(filepath);
+		return decompress_webp(file_path);
 	case FileFormat::JPEG:
 	default:
-		return decom_JPG(filepath);
+		return decompress_jpeg(file_path);
 	}
 }

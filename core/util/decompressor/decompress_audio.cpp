@@ -1,13 +1,13 @@
-#include "decompressor/decom_audio.hpp"
+#include "decompressor/decompress_audio.hpp"
 #include "Identifier.hpp"
 
 #include <cstring>
 #include <fstream>
 #include <iostream>
 
-DecodedAudio Decom_audio::decom_WAV(const std::filesystem::path& filepath) {
+DecodedAudio DecompressAudio::decompress_wav(const std::filesystem::path& file_path) {
 	DecodedAudio audio;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return audio;
 	}
@@ -70,9 +70,9 @@ DecodedAudio Decom_audio::decom_WAV(const std::filesystem::path& filepath) {
 	return audio;
 }
 
-DecodedAudio Decom_audio::decom_OGG(const std::filesystem::path& filepath) {
+DecodedAudio DecompressAudio::decompress_ogg(const std::filesystem::path& file_path) {
 	DecodedAudio audio;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return audio;
 	}
@@ -131,9 +131,9 @@ DecodedAudio Decom_audio::decom_OGG(const std::filesystem::path& filepath) {
 	return audio;
 }
 
-DecodedAudio Decom_audio::decom_MP3(const std::filesystem::path& filepath) {
+DecodedAudio DecompressAudio::decompress_mp3(const std::filesystem::path& file_path) {
 	DecodedAudio audio;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return audio;
 	}
@@ -168,15 +168,15 @@ DecodedAudio Decom_audio::decom_MP3(const std::filesystem::path& filepath) {
 	return audio;
 }
 
-DecodedAudio Decom_audio::decode_audio(const std::filesystem::path& filepath) {
-	IdentifiedFile info = Identifier::identify(filepath);
+DecodedAudio DecompressAudio::decode_audio(const std::filesystem::path& file_path) {
+	IdentifiedFile info = Identifier::identify(file_path);
 	switch (info.format) {
 	case FileFormat::WAV:
-		return decom_WAV(filepath);
+		return decompress_wav(file_path);
 	case FileFormat::MP3:
-		return decom_MP3(filepath);
+		return decompress_mp3(file_path);
 	case FileFormat::OGG:
 	default:
-		return decom_OGG(filepath);
+		return decompress_ogg(file_path);
 	}
 }

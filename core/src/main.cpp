@@ -50,7 +50,7 @@ bool test_transfer();
 bool test_ai();
 bool test_inference();
 bool test_identifier();
-bool test_decom();
+bool test_decompressor();
 
 // *****************************************************************************
 // Configuration: the single source of truth for everything the backend uses
@@ -608,33 +608,33 @@ void run_inference_engine(AI& ai,
 		}
 
 		// Generate 128-token context window (512 BF16 floats)
-		std::vector<std::bfloat16_t> ctx_window =
-			parser.tokens_to_context_window(input, tokens, config::context_window_size);
+		std::vector<std::bfloat16_t> context_window =
+			parser.build_context_window(input, tokens, config::context_window_size);
 
 		AxiomTelemetry telemetry;
 		telemetry.begin_inference();
 
 		// Run forward prediction on Tensor Cores
 		std::vector<float> prediction;
-		if (!ai.predict(ctx_window, prediction)) {
+		if (!ai.predict(context_window, prediction)) {
 			std::cerr << "[!] Forward prediction failed.\n";
 			continue;
 		}
 		telemetry.record_first_token();
 
 		// Milestone 3: GPU Argmax decoding (bypasses CPU distance bottleneck)
-		uint32_t pred_token_id = ai.last_predicted_token_id;
-		if (pred_token_id == 0 && !input.embedding_table.empty()) {
-			pred_token_id = parser.decode_embedding_to_token(input, prediction);
+		uint32_t predicted_token_id = ai.last_predicted_token_id;
+		if (predicted_token_id == 0 && !input.embedding_table.empty()) {
+			predicted_token_id = parser.decode_token(input, prediction);
 		}
-		std::string pred_token_str = parser.token_to_string(input, pred_token_id);
-		telemetry.end_inference(ai.h_weights.size());
+		std::string predicted_token_string = parser.token_to_string(input, predicted_token_id);
+		telemetry.end_inference(ai.host_weights.size());
 
 		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] ["
 			  << prediction[0] << ", " << prediction[1] << ", " << prediction[2] << ", "
 			  << prediction[3] << "]\n"
-			  << "[Next Token ID] #" << pred_token_id << "\n"
-			  << "[Prediction]    \"" << pred_token_str << "\"\n";
+			  << "[Next Token ID] #" << predicted_token_id << "\n"
+			  << "[Prediction]    \"" << predicted_token_string << "\"\n";
 	}
 }
 
@@ -682,7 +682,7 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 			telemetry.record_token();
 		}
 	}
-	telemetry.end_inference(ai.h_weights.size(), "INFERENCE DISPATCH LATENCY");
+	telemetry.end_inference(ai.host_weights.size(), "INFERENCE DISPATCH LATENCY");
 
 	// Stage 2: High-Capacity VRAM Allocation & Memory Bus Saturation Stress
 	std::cout << "--------------------------------------------------------\n"
@@ -840,7 +840,7 @@ void run_training_loop(AI& ai,
 			if (ch == 'r' || ch == 'R') {
 				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
 				ai.reset_weights(elements);
-				if (ai.upload_weights_to_gpu()) { // push new chaotic weights to VRAM
+				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
 					first_loss.reset();
 					std::cout
@@ -975,7 +975,7 @@ void restore_brain(AI& ai, Elements& elements, const std::filesystem::path& weig
 	}
 
 	ai.reset_weights(elements);
-	if (ai.upload_weights_to_gpu()) {
+	if (ai.upload_weights()) {
 		std::cout
 			<< "[OK] No checkpoint found: live brain reset to a pristine chaotic state.\n";
 	} else {
@@ -1017,8 +1017,8 @@ bool run_tests(const std::filesystem::path& embedded_path) {
 	std::cout << "--- test_identifier AI ---\n";
 	all_ok &= test_identifier();
 
-	std::cout << "--- test_decom AI ---\n";
-	all_ok &= test_decom();
+	std::cout << "--- test_decompressor AI ---\n";
+	all_ok &= test_decompressor();
 
 	// The tests are done with the generated embedding stream
 	std::error_code cleanup_ec;
@@ -1139,15 +1139,15 @@ bool execute_training_session(AI& ai,
 			<< " tokens) is shorter than context window ("
 			<< config::context_window_size
 			<< " tokens). Repeating sequence to enable continuous autoregressive training...\n";
-		const size_t orig_sz = input.tokenized_data.size();
+		const size_t original_size = input.tokenized_data.size();
 		const size_t target_tokens = config::context_window_size * 8;
 		input.tokenized_data.reserve(target_tokens);
 		while (input.tokenized_data.size() < target_tokens) {
 			for (size_t i = 0;
-			     i < orig_sz && input.tokenized_data.size() < target_tokens;
+			     i < original_size && input.tokenized_data.size() < target_tokens;
 			     ++i) {
-				const uint32_t tok_val = input.tokenized_data[i];
-				input.tokenized_data.push_back(tok_val);
+				const uint32_t token_value = input.tokenized_data[i];
+				input.tokenized_data.push_back(token_value);
 			}
 		}
 	}
@@ -1171,11 +1171,11 @@ bool execute_training_session(AI& ai,
 				  << " -> tokenized embedded into -> [";
 
 			// Query actual master embedding table from AI VRAM/host state
-			if (token_id < ai.vocab_size && !ai.h_embeddings.empty()) {
+			if (token_id < ai.vocab_size && !ai.host_embeddings.empty()) {
 				for (size_t d = 0; d < ai.embedding_dim; ++d) {
 					std::cout
 						<< std::fixed << std::setprecision(4)
-						<< ai.h_embeddings[token_id * ai.embedding_dim + d]
+						<< ai.host_embeddings[token_id * ai.embedding_dim + d]
 						<< (d + 1 < ai.embedding_dim ? ", " : "");
 				}
 			} else {
@@ -1638,7 +1638,7 @@ int main(int argc, char* argv[]) {
 	      config::weight_max,
 	      ai_elements);
 
-	if (!ai.upload_weights_to_gpu()) {
+	if (!ai.upload_weights()) {
 		std::cerr << "[!] Failed to upload the AI weights to VRAM.\n";
 		if (is_interactive) {
 			pause_exit();

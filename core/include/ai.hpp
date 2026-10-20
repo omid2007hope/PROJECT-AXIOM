@@ -15,8 +15,8 @@
 
 struct AxiomWeightHeader {
 	char magic[8] = {'A', 'X', 'I', 'O', 'M', '_', 'V', '1'};
-	uint64_t in_dim = 0;
-	uint64_t out_dim = 0;
+	uint64_t input_dimension = 0;
+	uint64_t output_dimension = 0;
 	uint64_t weight_count = 0;
 	uint64_t bias_count = 0;
 	uint64_t vocab_size = 0;
@@ -41,8 +41,8 @@ enum class TrainStatus {
 
 class AI {
 private:
-	size_t input_dim;
-	size_t output_dim;
+	size_t input_dimension;
+	size_t output_dimension;
 
 	// Bounds of the uniform distribution used to initialize the weights
 	float weight_min;
@@ -61,9 +61,9 @@ public:
 	size_t active_vocab_size = 0;
 
 	// CPU Memory (High precision float for initialization and updates)
-	std::vector<float> h_weights;
-	std::vector<float> h_bias;
-	std::vector<float> h_embeddings;
+	std::vector<float> host_weights;
+	std::vector<float> host_bias;
+	std::vector<float> host_embeddings;
 
 	// GPU Memory State (The pointers for the VRAM)
 	GpuWeights gpu_weights;
@@ -75,18 +75,18 @@ public:
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
 	// inside [weight_min, weight_max]
-	AI(size_t in_dim, size_t out_dim, float weight_min, float weight_max, Elements& e);
+	AI(size_t input_dimension, size_t output_dimension, float weight_min, float weight_max, Elements& elements);
 
 	~AI();
 
 	// Method to move memory to GPU
-	bool upload_weights_to_gpu();
+	bool upload_weights();
 
-	// Method to copy the trained weights back into h_weights / h_bias
-	bool download_weights_from_gpu();
+	// Method to copy the trained weights back into host_weights / host_bias
+	bool download_weights();
 
 	// Method to reset all parameters/weights back to chaotic state
-	void reset_weights(Elements& e);
+	void reset_weights(Elements& elements);
 
 	// The Training Loop Orchestrator
 	TrainStatus train(Optimizer& optimizer, Portion& portion);

@@ -79,18 +79,18 @@ void Optimizer::disk_to_ram(Portion& portion) {
 		       portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
 			file_stream.clear();
 			file_stream.seekg(0, std::ios::beg);
-			size_t cur_sz = portion.ram_buffer_tokens.size();
-			size_t needed = (portion.all_elements + portion.target_elements) - cur_sz;
-			portion.ram_buffer_tokens.resize(cur_sz + needed);
+			size_t current_size = portion.ram_buffer_tokens.size();
+			size_t needed = (portion.all_elements + portion.target_elements) - current_size;
+			portion.ram_buffer_tokens.resize(current_size + needed);
 			file_stream.read(
-				reinterpret_cast<char*>(portion.ram_buffer_tokens.data() + cur_sz),
+				reinterpret_cast<char*>(portion.ram_buffer_tokens.data() + current_size),
 				needed * sizeof(std::bfloat16_t));
 			std::streamsize more_bytes = file_stream.gcount();
 			if (more_bytes == 0) {
-				portion.ram_buffer_tokens.resize(cur_sz);
+				portion.ram_buffer_tokens.resize(current_size);
 				break;
 			}
-			portion.ram_buffer_tokens.resize(cur_sz + (more_bytes / sizeof(std::bfloat16_t)));
+			portion.ram_buffer_tokens.resize(current_size + (more_bytes / sizeof(std::bfloat16_t)));
 		}
 
 		// Atomic release: all prior writes are visible to any thread that
@@ -102,7 +102,7 @@ void Optimizer::disk_to_ram(Portion& portion) {
 // Tier 2: Extract sliding context windows from RAM buffer to feed neural
 // network
 
-bool Optimizer::ram_to_contextWindow(Portion& portion) {
+bool Optimizer::load_context_window(Portion& portion) {
 
 	if (portion.context_in_use.load(std::memory_order_acquire) == false &&
 	    portion.buffer_in_use.load(std::memory_order_acquire) == false) {
@@ -111,11 +111,11 @@ bool Optimizer::ram_to_contextWindow(Portion& portion) {
 		portion.context_in_use.store(true, std::memory_order_release);
 		portion.buffer_in_use.store(true, std::memory_order_release);
 
-		int b_idx = portion.buffer_index;
+		int buffer_index = portion.buffer_index;
 
 		// Guard: pinned buffers must be allocated before we write to them.
-		if (!portion.context_window_tokens[b_idx] ||
-		    !portion.target_tokens[b_idx]) {
+		if (!portion.context_window_tokens[buffer_index] ||
+		    !portion.target_tokens[buffer_index]) {
 			std::cerr << "[Optimizer] Pinned memory not allocated. Call "
 				     "portion.allocate_pinned() first.\n";
 			portion.buffer_in_use.store(false, std::memory_order_release);
@@ -126,15 +126,15 @@ bool Optimizer::ram_to_contextWindow(Portion& portion) {
 		// Priority 1: Dense Early-Fusion Token ID Streaming
 		if (!portion.ram_buffer_token_ids.empty()) {
 			if (portion.offset + portion.context_window_size + 1 <= portion.ram_buffer_token_ids.size()) {
-				if (portion.context_token_ids[b_idx]) {
-					std::memcpy(portion.context_token_ids[b_idx],
+				if (portion.context_token_ids[buffer_index]) {
+					std::memcpy(portion.context_token_ids[buffer_index],
 						    portion.ram_buffer_token_ids.data() + portion.offset,
 						    portion.context_window_size * sizeof(uint32_t));
 				}
 				uint32_t target_id = portion.ram_buffer_token_ids[portion.offset + portion.context_window_size];
-				std::memset(portion.target_tokens[b_idx], 0,
+				std::memset(portion.target_tokens[buffer_index], 0,
 					    portion.target_elements * sizeof(std::bfloat16_t));
-				*reinterpret_cast<uint32_t*>(portion.target_tokens[b_idx]) = target_id;
+				*reinterpret_cast<uint32_t*>(portion.target_tokens[buffer_index]) = target_id;
 
 				portion.has_token_ids = true;
 				portion.offset += 1;
@@ -157,12 +157,12 @@ bool Optimizer::ram_to_contextWindow(Portion& portion) {
 			// Write X into the pinned context window buffer via memcpy.
 			// The write-combining hardware coalesces these writes and pushes them
 			// directly to the PCIe bus interface — no L1/L2 cache pollution.
-			std::memcpy(portion.context_window_tokens[b_idx],
+			std::memcpy(portion.context_window_tokens[buffer_index],
 				    portion.ram_buffer_tokens.data() + portion.offset,
 				    portion.all_elements * sizeof(std::bfloat16_t));
 
 			// Write Y into the pinned target buffer.
-			std::memcpy(portion.target_tokens[b_idx],
+			std::memcpy(portion.target_tokens[buffer_index],
 				    portion.ram_buffer_tokens.data() + portion.offset +
 					    portion.all_elements,
 				    portion.target_elements * sizeof(std::bfloat16_t));

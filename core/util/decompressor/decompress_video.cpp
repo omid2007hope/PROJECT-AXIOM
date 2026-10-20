@@ -1,13 +1,13 @@
-#include "decompressor/decom_video.hpp"
+#include "decompressor/decompress_video.hpp"
 #include "Identifier.hpp"
 
 #include <cstring>
 #include <fstream>
 #include <iostream>
 
-DecodedVideo Decom_video::decom_MP4(const std::filesystem::path& filepath) {
+DecodedVideo DecompressVideo::decompress_mp4(const std::filesystem::path& file_path) {
 	DecodedVideo video;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return video;
 	}
@@ -98,9 +98,9 @@ DecodedVideo Decom_video::decom_MP4(const std::filesystem::path& filepath) {
 	return video;
 }
 
-DecodedVideo Decom_video::decom_MKV(const std::filesystem::path& filepath) {
+DecodedVideo DecompressVideo::decompress_mkv(const std::filesystem::path& file_path) {
 	DecodedVideo video;
-	std::ifstream in(filepath, std::ios::binary);
+	std::ifstream in(file_path, std::ios::binary);
 	if (!in) {
 		return video;
 	}
@@ -121,14 +121,14 @@ DecodedVideo Decom_video::decom_MKV(const std::filesystem::path& filepath) {
 	return video;
 }
 
-DecodedVideo Decom_video::decode_video(const std::filesystem::path& filepath) {
-	IdentifiedFile info = Identifier::identify(filepath);
+DecodedVideo DecompressVideo::decode_video(const std::filesystem::path& file_path) {
+	IdentifiedFile info = Identifier::identify(file_path);
 	switch (info.format) {
 	case FileFormat::MKV:
 	case FileFormat::WEBM:
-		return decom_MKV(filepath);
+		return decompress_mkv(file_path);
 	case FileFormat::MP4:
 	default:
-		return decom_MP4(filepath);
+		return decompress_mp4(file_path);
 	}
 }

@@ -108,14 +108,14 @@ static void test_gpu_portion_mock() {
 	check_eq(g.target_elements, size_t {0}, "GpuPortion target_elements init 0");
 
 	// Simulate context window for 128 tokens * 4 dim
-	const size_t ctx_bytes = 128 * 4 * sizeof(std::bfloat16_t);
-	check_eq(ctx_bytes,
+	const size_t context_bytes = 128 * 4 * sizeof(std::bfloat16_t);
+	check_eq(context_bytes,
 		 size_t {1024},
 		 "context window byte size == 1024 (128 tokens * 4 dim * 2 bytes)");
 
 	// Simulate target for 1 token * 4 dim
-	const size_t tgt_bytes = 1 * 4 * sizeof(std::bfloat16_t);
-	check_eq(tgt_bytes, size_t {8}, "target byte size == 8 (1 token * 4 dim * 2 bytes)");
+	const size_t target_bytes = 1 * 4 * sizeof(std::bfloat16_t);
+	check_eq(target_bytes, size_t {8}, "target byte size == 8 (1 token * 4 dim * 2 bytes)");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,69 +129,69 @@ static void test_gpu_roundtrip() {
 	GpuPortion gpu {};
 
 	// Create CPU context data (128 tokens * 4 dim = 512 elements)
-	const size_t ctx_elems = 512;
-	std::vector<std::bfloat16_t> h_ctx_in(ctx_elems);
-	for (size_t i = 0; i < ctx_elems; ++i) {
-		h_ctx_in[i] = static_cast<std::bfloat16_t>(i * 0.5f);
+	const size_t context_elements = 512;
+	std::vector<std::bfloat16_t> host_context_input(context_elements);
+	for (size_t i = 0; i < context_elements; ++i) {
+		host_context_input[i] = static_cast<std::bfloat16_t>(i * 0.5f);
 	}
 
 	// Create CPU target data (1 token * 4 dim = 4 elements)
-	const size_t tgt_elems = 4;
-	std::vector<std::bfloat16_t> h_tgt_in(tgt_elems);
-	for (size_t i = 0; i < tgt_elems; ++i) {
-		h_tgt_in[i] = static_cast<std::bfloat16_t>(i * 0.1f);
+	const size_t target_elements = 4;
+	std::vector<std::bfloat16_t> host_target_input(target_elements);
+	for (size_t i = 0; i < target_elements; ++i) {
+		host_target_input[i] = static_cast<std::bfloat16_t>(i * 0.1f);
 	}
 
 	// 1. First call: cudaMalloc + cudaMemcpy
-	bool up1 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu, 0);
+	bool up1 = upload_to_gpu(host_context_input.data(), context_elements, host_target_input.data(), target_elements, &gpu, 0);
 	check(up1, "upload_to_gpu() — first call allocates and copies");
 	check(gpu.d_context_window[0] != nullptr, "gpu.d_context_window is not null");
 	check(gpu.d_target[0] != nullptr, "gpu.d_target is not null");
-	check_eq(gpu.context_elements, ctx_elems, "gpu.context_elements matches");
-	check_eq(gpu.target_elements, tgt_elems, "gpu.target_elements matches");
+	check_eq(gpu.context_elements, context_elements, "gpu.context_elements matches");
+	check_eq(gpu.target_elements, target_elements, "gpu.target_elements matches");
 
 	// Save pointers to check reuse
-	void* old_ctx_ptr = gpu.d_context_window[0];
-	void* old_tgt_ptr = gpu.d_target[0];
+	void* old_context_pointer = gpu.d_context_window[0];
+	void* old_target_pointer = gpu.d_target[0];
 
 	// 2. Second call same size: reuse buffer
-	bool up2 = upload_to_gpu(h_ctx_in.data(), ctx_elems, h_tgt_in.data(), tgt_elems, &gpu, 0);
+	bool up2 = upload_to_gpu(host_context_input.data(), context_elements, host_target_input.data(), target_elements, &gpu, 0);
 	check(up2, "upload_to_gpu() — second call succeeds");
-	check(gpu.d_context_window[0] == old_ctx_ptr,
+	check(gpu.d_context_window[0] == old_context_pointer,
 	      "d_context_window pointer reused (no realloc)");
-	check(gpu.d_target[0] == old_tgt_ptr, "d_target pointer reused (no realloc)");
+	check(gpu.d_target[0] == old_target_pointer, "d_target pointer reused (no realloc)");
 
 	// 3. Verify H→D values match by downloading back (D→H)
-	std::vector<std::bfloat16_t> h_ctx_out(ctx_elems, static_cast<std::bfloat16_t>(0.0f));
-	std::vector<std::bfloat16_t> h_tgt_out(tgt_elems, static_cast<std::bfloat16_t>(0.0f));
+	std::vector<std::bfloat16_t> host_context_output(context_elements, static_cast<std::bfloat16_t>(0.0f));
+	std::vector<std::bfloat16_t> host_target_output(target_elements, static_cast<std::bfloat16_t>(0.0f));
 
 	bool down = download_from_gpu(
-		h_ctx_out.data(), ctx_elems, h_tgt_out.data(), tgt_elems, &gpu, 0);
+		host_context_output.data(), context_elements, host_target_output.data(), target_elements, &gpu, 0);
 	check(down, "download_from_gpu() succeeds");
 
-	bool ctx_match = true;
-	for (size_t i = 0; i < ctx_elems; ++i) {
-		if (h_ctx_in[i] != h_ctx_out[i])
-			ctx_match = false;
+	bool context_match = true;
+	for (size_t i = 0; i < context_elements; ++i) {
+		if (host_context_input[i] != host_context_output[i])
+			context_match = false;
 	}
-	check(ctx_match, "upload_to_gpu() — verify H→D→H context values match precisely");
+	check(context_match, "upload_to_gpu() — verify H→D→H context values match precisely");
 
-	bool tgt_match = true;
-	for (size_t i = 0; i < tgt_elems; ++i) {
-		if (h_tgt_in[i] != h_tgt_out[i])
-			tgt_match = false;
+	bool target_match = true;
+	for (size_t i = 0; i < target_elements; ++i) {
+		if (host_target_input[i] != host_target_output[i])
+			target_match = false;
 	}
-	check(tgt_match, "upload_to_gpu() — verify H→D→H target values match precisely");
+	check(target_match, "upload_to_gpu() — verify H→D→H target values match precisely");
 
 	// 4. Size change: free + realloc
-	const size_t new_ctx_elems = 1024;
-	std::vector<std::bfloat16_t> new_h_ctx_in(new_ctx_elems,
-						  static_cast<std::bfloat16_t>(1.0f));
+	const size_t new_context_elements = 1024;
+	std::vector<std::bfloat16_t> new_host_context_input(new_context_elements,
+							    static_cast<std::bfloat16_t>(1.0f));
 	bool up3 = upload_to_gpu(
-		new_h_ctx_in.data(), new_ctx_elems, h_tgt_in.data(), tgt_elems, &gpu, 0);
+		new_host_context_input.data(), new_context_elements, host_target_input.data(), target_elements, &gpu, 0);
 	check(up3, "upload_to_gpu() — size change succeeds");
-	check(gpu.d_context_window[0] != old_ctx_ptr, "d_context_window reallocated for new size");
-	check_eq(gpu.context_elements, new_ctx_elems, "context_elements updated to new size");
+	check(gpu.d_context_window[0] != old_context_pointer, "d_context_window reallocated for new size");
+	check_eq(gpu.context_elements, new_context_elements, "context_elements updated to new size");
 
 	// 5. Free GPU
 	free_gpu(&gpu);
@@ -336,23 +336,23 @@ static void test_learnable_embeddings_and_adamw() {
 	GpuEmbeddings embeddings {};
 
 	const size_t vocab_size = 65536;
-	const size_t emb_dim = 4;
+	const size_t embedding_dimension = 4;
 	const size_t num_tokens = 128;
-	const size_t in_dim = num_tokens * emb_dim; // 512
-	const size_t out_dim = 4;
+	const size_t input_dimension = num_tokens * embedding_dimension; // 512
+	const size_t output_dimension = 4;
 
 	// 1. Allocate embeddings matrix
-	bool alloc_ok = allocate_gpu_embeddings(&embeddings, vocab_size, emb_dim);
+	bool alloc_ok = allocate_gpu_embeddings(&embeddings, vocab_size, embedding_dimension);
 	check(alloc_ok, "allocate_gpu_embeddings allocates bf16 + FP32 tables and AdamW moments");
 
 	// 2. Download chaos initialized embeddings to verify chaos bounds
-	std::vector<float> h_emb(vocab_size * emb_dim);
-	bool dl_ok = download_embeddings(h_emb.data(), &embeddings);
+	std::vector<float> host_embeddings(vocab_size * embedding_dimension);
+	bool dl_ok = download_embeddings(host_embeddings.data(), &embeddings);
 	check(dl_ok, "download_embeddings downloads chaos initialized embeddings");
-	float bound = 1.0f / std::sqrt(static_cast<float>(emb_dim));
+	float bound = 1.0f / std::sqrt(static_cast<float>(embedding_dimension));
 	bool bounds_ok = true;
 	for (size_t i = 0; i < 1000; ++i) {
-		if (h_emb[i] < -bound || h_emb[i] > bound) {
+		if (host_embeddings[i] < -bound || host_embeddings[i] > bound) {
 			bounds_ok = false;
 			break;
 		}
@@ -360,31 +360,31 @@ static void test_learnable_embeddings_and_adamw() {
 	check(bounds_ok, "Initial embeddings strictly within [-1/sqrt(D), +1/sqrt(D)]");
 
 	// 3. Setup weights
-	std::vector<float> h_w(in_dim * out_dim, 0.05f);
-	std::vector<float> h_b(out_dim, 0.0f);
-	upload_ai_weights(h_w.data(), h_w.size(), h_b.data(), h_b.size(), &weights);
+	std::vector<float> host_weights(input_dimension * output_dimension, 0.05f);
+	std::vector<float> host_bias(output_dimension, 0.0f);
+	upload_ai_weights(host_weights.data(), host_weights.size(), host_bias.data(), host_bias.size(), &weights);
 
 	// 4. Upload 128 uint32_t token IDs across PCIe
 	std::vector<uint32_t> token_ids(num_tokens);
 	for (size_t i = 0; i < num_tokens; ++i) {
 		token_ids[i] = static_cast<uint32_t>(10 + (i % 30));
 	}
-	std::vector<std::bfloat16_t> h_tgt(out_dim, static_cast<std::bfloat16_t>(1.0f));
-	bool up_tok_ok = upload_tokens_to_gpu(token_ids.data(), num_tokens, h_tgt.data(), out_dim, &gpu, 0);
-	check(up_tok_ok, "upload_tokens_to_gpu uploads 128 token IDs across PCIe");
+	std::vector<std::bfloat16_t> host_target(output_dimension, static_cast<std::bfloat16_t>(1.0f));
+	bool upload_tokens_success = upload_tokens_to_gpu(token_ids.data(), num_tokens, host_target.data(), output_dimension, &gpu, 0);
+	check(upload_tokens_success, "upload_tokens_to_gpu uploads 128 token IDs across PCIe");
 
 	// 5. Forward pass with embeddings gather
-	bool fwd_ok = forward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, in_dim, out_dim, 0);
+	bool fwd_ok = forward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, input_dimension, output_dimension, 0);
 	check(fwd_ok, "forward_pass_with_embeddings gathers from d_table and executes CUTLASS GEMM");
 
 	// 6. Backward pass with AdamW + scatter into master embedding table
 	uint32_t tracked_id = token_ids[0];
-	bool bwd_ok = backward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, in_dim, out_dim, 0.01f, 0, true);
+	bool bwd_ok = backward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, input_dimension, output_dimension, 0.01f, 0, true);
 	check(bwd_ok, "backward_pass_with_embeddings executes AdamW and scatters into embedding table");
 
 	// Verify embedding remains finite after update
-	download_embeddings(h_emb.data(), &embeddings);
-	float tracked_val_after = h_emb[tracked_id * emb_dim];
+	download_embeddings(host_embeddings.data(), &embeddings);
+	float tracked_val_after = host_embeddings[tracked_id * embedding_dimension];
 	check(std::isfinite(tracked_val_after), "Embedding after backward scatter is finite");
 
 	free_gpu(&gpu);

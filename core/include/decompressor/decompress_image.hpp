@@ -1,5 +1,5 @@
-#ifndef include_decom_image
-#define include_decom_image
+#ifndef include_decompress_image
+#define include_decompress_image
 
 #include <cstdint>
 #include <filesystem>
@@ -13,16 +13,16 @@ struct DecodedImage {
 	bool is_valid = false;
 };
 
-class Decom_image {
+class DecompressImage {
 public:
 	// Master image decoder
-	static DecodedImage decode_image(const std::filesystem::path& filepath);
+	static DecodedImage decode_image(const std::filesystem::path& file_path);
 
 	// Individual format decoders
-	static DecodedImage PNG(const std::filesystem::path& filepath);
-	static DecodedImage decom_JPG(const std::filesystem::path& filepath);
-	static DecodedImage decom_BMP(const std::filesystem::path& filepath);
-	static DecodedImage decom_WEBP(const std::filesystem::path& filepath);
+	static DecodedImage decompress_png(const std::filesystem::path& file_path);
+	static DecodedImage decompress_jpeg(const std::filesystem::path& file_path);
+	static DecodedImage decompress_bmp(const std::filesystem::path& file_path);
+	static DecodedImage decompress_webp(const std::filesystem::path& file_path);
 };
 
-#endif // include_decom_image
+#endif // include_decompress_image

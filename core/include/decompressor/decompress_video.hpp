@@ -1,5 +1,5 @@
-#ifndef include_decom_video
-#define include_decom_video
+#ifndef include_decompress_video
+#define include_decompress_video
 
 #include <cstdint>
 #include <filesystem>
@@ -14,14 +14,14 @@ struct DecodedVideo {
 	bool is_valid = false;
 };
 
-class Decom_video {
+class DecompressVideo {
 public:
 	// Master video decoder
-	static DecodedVideo decode_video(const std::filesystem::path& filepath);
+	static DecodedVideo decode_video(const std::filesystem::path& file_path);
 
 	// Individual format decoders
-	static DecodedVideo decom_MP4(const std::filesystem::path& filepath);
-	static DecodedVideo decom_MKV(const std::filesystem::path& filepath);
+	static DecodedVideo decompress_mp4(const std::filesystem::path& file_path);
+	static DecodedVideo decompress_mkv(const std::filesystem::path& file_path);
 };
 
-#endif // include_decom_video
+#endif // include_decompress_video

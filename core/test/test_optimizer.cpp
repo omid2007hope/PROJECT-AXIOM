@@ -38,17 +38,18 @@ bool test_optimizer() {
 	// Use small buffer so tests are fast yet cover all code paths.
 	// ram_buffer_size = 100 floats = 25 tokens
 	// context_window_size = 4 tokens → window=16 floats, target=4 floats
-	const size_t RAM_BUF = 100;
-	const size_t CTX_WIN = 4;
-	const size_t WIN_ELEMS = CTX_WIN * TOKEN_DIM; // 16
-	const size_t TGT_ELEMS = 1 * TOKEN_DIM;	      //  4
+	// context_window_size = 4 tokens → window=16 floats, target=4 floats
+	const size_t RAM_BUFFER = 100;
+	const size_t CONTEXT_WINDOW = 4;
+	const size_t WINDOW_ELEMENTS = CONTEXT_WINDOW * TOKEN_DIM; // 16
+	const size_t TARGET_ELEMENTS = 1 * TOKEN_DIM;	      //  4
 
-	// Expected windows per chunk: floor((RAM_BUF - WIN_ELEMS - TGT_ELEMS) / TOKEN_DIM) + 1
-	const size_t EXPECTED_WINDOWS = (RAM_BUF - WIN_ELEMS - TGT_ELEMS) / TOKEN_DIM + 1; // = 21
+	// Expected windows per chunk: floor((RAM_BUFFER - WINDOW_ELEMENTS - TARGET_ELEMENTS) / TOKEN_DIM) + 1
+	const size_t EXPECTED_WINDOWS = (RAM_BUFFER - WINDOW_ELEMENTS - TARGET_ELEMENTS) / TOKEN_DIM + 1; // = 21
 
 	// ── [1] Initial Portion state ────────────────────────────────────────────
 	std::cout << "\n[1] Initial Portion state\n";
-	Portion portion(RAM_BUF, TOKEN_DIM, CTX_WIN);
+	Portion portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	check_eq(portion.ram_buffer_tokens.size(), size_t {0}, "ram_buffer empty");
 	// Pinned buffers: nullptr until allocate_pinned() is called
 	check(portion.context_window_tokens[0] == nullptr, "context_window_tokens == nullptr");
@@ -56,8 +57,8 @@ bool test_optimizer() {
 	check(portion.buffer_in_use.load() == false, "buffer_in_use == false");
 	check(portion.context_in_use.load() == false, "context_in_use == false");
 
-	check_eq(portion.all_elements, WIN_ELEMS, "all_elements derived");
-	check_eq(portion.target_elements, TGT_ELEMS, "target_elements derived");
+	check_eq(portion.all_elements, WINDOW_ELEMENTS, "all_elements derived");
+	check_eq(portion.target_elements, TARGET_ELEMENTS, "target_elements derived");
 
 	// Allocate the pinned host buffers (cudaHostAllocWriteCombined)
 	bool pinned_ok = portion.allocate_pinned();
@@ -70,12 +71,12 @@ bool test_optimizer() {
 	// ── [2] disk_to_ram — first load ─────────────────────────────────────────
 	std::cout << "\n[2] disk_to_ram — first load\n";
 	optimizer.disk_to_ram(portion);
-	check_eq(portion.ram_buffer_tokens.size(), RAM_BUF, "ram_buffer filled to RAM_BUF");
+	check_eq(portion.ram_buffer_tokens.size(), RAM_BUFFER, "ram_buffer filled to RAM_BUFFER");
 	check(portion.buffer_in_use.load() == false, "buffer lock released after load");
 
-	// ── [3] ram_to_contextWindow — slide one window ──────────────────────────
-	std::cout << "\n[3] ram_to_contextWindow — slide " << EXPECTED_WINDOWS << " windows\n";
-	optimizer.ram_to_contextWindow(portion);
+	// ── [3] load_context_window — slide one window ──────────────────────────
+	std::cout << "\n[3] load_context_window — slide " << EXPECTED_WINDOWS << " windows\n";
+	optimizer.load_context_window(portion);
 
 	// After the call the pinned buffers must be filled
 	// (we check element count via the Portion size fields, not .size())
@@ -92,23 +93,23 @@ bool test_optimizer() {
 	// ── [4] disk_to_ram — second load (carry-forward) ────────────────────────
 	std::cout << "\n[4] disk_to_ram — second load (carry-forward)\n";
 	// ram_buffer_tokens still holds the old 100 elements.
-	// disk_to_ram must: read carry (last WIN_ELEMS=16), clear, prepend carry,
-	// then fill so total == RAM_BUF again.
+	// disk_to_ram must: read carry (last WINDOW_ELEMENTS=16), clear, prepend carry,
+	// then fill so total == RAM_BUFFER again.
 	check_eq(portion.ram_buffer_tokens.size(),
-		 RAM_BUF,
-		 "buffer still holds data (not cleared by ram_to_contextWindow)");
+		 RAM_BUFFER,
+		 "buffer still holds data (not cleared by load_context_window)");
 	optimizer.disk_to_ram(portion);
 	check_eq(portion.ram_buffer_tokens.size(),
-		 RAM_BUF,
-		 "ram_buffer refilled to RAM_BUF on 2nd call");
+		 RAM_BUFFER,
+		 "ram_buffer refilled to RAM_BUFFER on 2nd call");
 	check(portion.buffer_in_use.load() == false, "buffer lock released 2nd load");
 
 	// ── [5] Carry-forward correctness ────────────────────────────────────────
 	std::cout << "\n[5] Carry-forward sanity\n";
-	check(portion.ram_buffer_tokens.size() == RAM_BUF, "carry prepended + disk fill = RAM_BUF");
+	check(portion.ram_buffer_tokens.size() == RAM_BUFFER, "carry prepended + disk fill = RAM_BUFFER");
 	// Every element at the carry positions should be a valid BF16 value
 	bool carry_nonzero = false;
-	for (size_t i = 0; i < WIN_ELEMS; ++i) {
+	for (size_t i = 0; i < WINDOW_ELEMENTS; ++i) {
 		if (static_cast<double>(portion.ram_buffer_tokens[i]) != 0.0) {
 			carry_nonzero = true;
 			break;
@@ -119,7 +120,7 @@ bool test_optimizer() {
 	// ── [6] Lock safety — buffer_in_use blocks disk_to_ram ───────────────────
 	std::cout << "\n[6] Lock safety\n";
 	{
-		Portion locked(64, TOKEN_DIM, CTX_WIN);
+		Portion locked(64, TOKEN_DIM, CONTEXT_WINDOW);
 		locked.buffer_in_use.store(true, std::memory_order_relaxed);
 		Optimizer opt2(test_embedded_path(), 0.001f);
 		opt2.disk_to_ram(locked); // must be a no-op
@@ -128,7 +129,7 @@ bool test_optimizer() {
 			 "disk_to_ram skipped when buffer_in_use=true");
 	}
 	{
-		Portion locked(64, TOKEN_DIM, CTX_WIN);
+		Portion locked(64, TOKEN_DIM, CONTEXT_WINDOW);
 		locked.context_in_use.store(true, std::memory_order_relaxed);
 		Optimizer opt3(test_embedded_path(), 0.001f);
 		opt3.disk_to_ram(locked); // must be a no-op
@@ -141,10 +142,10 @@ bool test_optimizer() {
 	std::cout << "\n[7] Full training cycle — 3 consecutive cycles\n";
 	for (int cycle = 0; cycle < 3; ++cycle) {
 		optimizer.disk_to_ram(portion);
-		size_t buf_size = portion.ram_buffer_tokens.size();
-		optimizer.ram_to_contextWindow(portion);
+		size_t buffer_size = portion.ram_buffer_tokens.size();
+		optimizer.load_context_window(portion);
 
-		std::cout << "  cycle " << cycle + 1 << ": ram=" << buf_size
+		std::cout << "  cycle " << cycle + 1 << ": ram=" << buffer_size
 			  << " → ctx_elems=" << portion.all_elements
 			  << " tgt_elems=" << portion.target_elements << "\n";
 

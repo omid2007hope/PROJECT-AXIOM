@@ -86,9 +86,9 @@ struct Input {
 
 	// Optimization for test
 	size_t CHUNK_TOKENS = 65536;
-	size_t chunk_pos = 0;
+	size_t chunk_position = 0;
 	size_t tokens_written = 0;
-	size_t last_pct = 0;
+	size_t last_percentage = 0;
 
 	// Demonstrate progress with bar
 	size_t minimum_limit = 500000;
@@ -331,8 +331,8 @@ public:
 	std::vector<std::bfloat16_t> embedding(Input& input, Test& test);
 
 	// Decoder: finds the nearest token ID in the embedding space for a continuous prediction vector
-	uint32_t decode_embedding_to_token(const Input& input,
-					   const std::vector<float>& embedding_vector);
+	uint32_t decode_token(const Input& input,
+			      const std::vector<float>& embedding_vector);
 
 	// Formats a discrete token ID back into its human-readable representation
 	std::string token_to_string(const Input& input, uint32_t token_id);
@@ -348,9 +348,9 @@ public:
 	std::vector<uint32_t> tokenize_prompt(Input& input, const std::string& prompt);
 
 	// Converts a sequence of token IDs into a 128-token context window vector (size = context_tokens * embedding_dim)
-	std::vector<std::bfloat16_t> tokens_to_context_window(const Input& input,
-							      const std::vector<uint32_t>& tokens,
-							      size_t context_tokens = 128);
+	std::vector<std::bfloat16_t> build_context_window(const Input& input,
+							  const std::vector<uint32_t>& tokens,
+							  size_t context_tokens = 128);
 
 	// Vocabulary serialization & persistence (Flat binary AXVK format)
 	bool save_vocabulary(const std::filesystem::path& filepath, const Input& input);

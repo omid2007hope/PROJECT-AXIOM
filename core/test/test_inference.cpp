@@ -37,7 +37,7 @@ bool test_inference() {
 
 	Elements ai_elements {};
 	AI ai(in_dim, out_dim, w_min, w_max, ai_elements);
-	ai.upload_weights_to_gpu();
+	ai.upload_weights();
 
 	Input input;
 	input.embedding_dim = out_dim;
@@ -79,10 +79,10 @@ bool test_inference() {
 	std::cout << "\n[2] Autoregressive Context Window Generation & Padding Logistics\n";
 
 	// 2.1 Zero tokens input -> exact 512 zeros
-	std::vector<std::bfloat16_t> zero_win = parser.tokens_to_context_window(input, {}, 128);
-	test_check_eq(zero_win.size(), static_cast<size_t>(512), "Zero tokens produces exact 512 elements", s_pass, s_fail);
+	std::vector<std::bfloat16_t> zero_window = parser.build_context_window(input, {}, 128);
+	test_check_eq(zero_window.size(), static_cast<size_t>(512), "Zero tokens produces exact 512 elements", s_pass, s_fail);
 	bool all_zero = true;
-	for (auto val : zero_win) {
+	for (auto val : zero_window) {
 		if (static_cast<float>(val) != 0.0f) {
 			all_zero = false;
 			break;
@@ -91,22 +91,22 @@ bool test_inference() {
 	test_check(all_zero, "Zero-token context window is 100% zero-padded", s_pass, s_fail);
 
 	// 2.2 Single token input -> padded with 127 zero tokens (508 floats) and 1 token at end
-	std::vector<uint32_t> single_tok = {normal_tokens[0]};
-	std::vector<std::bfloat16_t> single_win =
-		parser.tokens_to_context_window(input, single_tok, 128);
-	test_check_eq(single_win.size(), static_cast<size_t>(512), "Single token produces exact 512 elements", s_pass, s_fail);
+	std::vector<uint32_t> single_token = {normal_tokens[0]};
+	std::vector<std::bfloat16_t> single_window =
+		parser.build_context_window(input, single_token, 128);
+	test_check_eq(single_window.size(), static_cast<size_t>(512), "Single token produces exact 512 elements", s_pass, s_fail);
 	bool prefix_zero = true;
 	for (size_t i = 0; i < 508; ++i) {
-		if (static_cast<float>(single_win[i]) != 0.0f) {
+		if (static_cast<float>(single_window[i]) != 0.0f) {
 			prefix_zero = false;
 			break;
 		}
 	}
 	test_check(prefix_zero, "Single token has 508 leading zero floats (127 padded tokens)", s_pass, s_fail);
-	const auto& expected_tok_emb = input.embedding_table[single_tok[0]];
+	const auto& expected_tok_emb = input.embedding_table[single_token[0]];
 	bool suffix_matches = true;
 	for (size_t d = 0; d < 4; ++d) {
-		if (single_win[508 + d] != expected_tok_emb[d]) {
+		if (single_window[508 + d] != expected_tok_emb[d]) {
 			suffix_matches = false;
 			break;
 		}
@@ -118,16 +118,16 @@ bool test_inference() {
 	for (size_t i = 0; i < 200; ++i) {
 		large_tokens[i] = normal_tokens[i % normal_tokens.size()];
 	}
-	std::vector<std::bfloat16_t> large_win =
-		parser.tokens_to_context_window(input, large_tokens, 128);
-	test_check_eq(large_win.size(), static_cast<size_t>(512), "Overflow context window maintains exact 512 elements", s_pass, s_fail);
+	std::vector<std::bfloat16_t> large_window =
+		parser.build_context_window(input, large_tokens, 128);
+	test_check_eq(large_window.size(), static_cast<size_t>(512), "Overflow context window maintains exact 512 elements", s_pass, s_fail);
 
 	// The very first token of the 128-window must correspond to large_tokens[200 - 128 = 72]
-	uint32_t expected_first_slice_tok = large_tokens[72];
-	const auto& first_slice_emb = input.embedding_table[expected_first_slice_tok];
+	uint32_t expected_first_slice_token = large_tokens[72];
+	const auto& first_slice_emb = input.embedding_table[expected_first_slice_token];
 	bool slice_start_matches = true;
 	for (size_t d = 0; d < 4; ++d) {
-		if (large_win[d] != first_slice_emb[d]) {
+		if (large_window[d] != first_slice_emb[d]) {
 			slice_start_matches = false;
 			break;
 		}
@@ -178,14 +178,14 @@ bool test_inference() {
 	parser.build_embedding_table(input);
 
 	// 4.1 Exact Match on Known Token
-	uint32_t target_tok = 42; // "Axiom"
-	const auto& target_emb = input.embedding_table[target_tok];
+	uint32_t target_token = 42; // "Axiom"
+	const auto& target_emb = input.embedding_table[target_token];
 	std::vector<float> target_vec(out_dim);
 	for (size_t d = 0; d < out_dim; ++d) {
 		target_vec[d] = static_cast<float>(target_emb[d]);
 	}
-	uint32_t decoded_tok = parser.decode_embedding_to_token(input, target_vec);
-	test_check_eq(decoded_tok, target_tok, "Exact embedding vector decodes to exact token ID #42", s_pass, s_fail);
+	uint32_t decoded_token = parser.decode_token(input, target_vec);
+	test_check_eq(decoded_token, target_token, "Exact embedding vector decodes to exact token ID #42", s_pass, s_fail);
 
 	// 4.2 Distance Monotonicity under Noise Perturbation
 	std::vector<float> noisy_vec = target_vec;
@@ -193,14 +193,14 @@ bool test_inference() {
 	noisy_vec[1] -= 0.005f;
 	noisy_vec[2] += 0.002f;
 	noisy_vec[3] -= 0.001f;
-	uint32_t noisy_tok = parser.decode_embedding_to_token(input, noisy_vec);
-	test_check_eq(noisy_tok, target_tok, "Perturbed vector robustly clusters to nearest neighbor #42", s_pass, s_fail);
+	uint32_t noisy_token = parser.decode_token(input, noisy_vec);
+	test_check_eq(noisy_token, target_token, "Perturbed vector robustly clusters to nearest neighbor #42", s_pass, s_fail);
 
 	// 4.3 Empty Vocabulary Safety Guard
 	Input empty_input;
 	empty_input.embedding_dim = 4;
-	uint32_t empty_tok = parser.decode_embedding_to_token(empty_input, target_vec);
-	test_check_eq(empty_tok, static_cast<uint32_t>(0), "Empty vocabulary safely returns token ID 0", s_pass, s_fail);
+	uint32_t empty_token = parser.decode_token(empty_input, target_vec);
+	test_check_eq(empty_token, static_cast<uint32_t>(0), "Empty vocabulary safely returns token ID 0", s_pass, s_fail);
 	test_check_eq(parser.decode_prediction(empty_input, target_vec), std::string("[Empty Vocabulary]"),
 		      "Empty vocabulary safely decodes to '[Empty Vocabulary]'", s_pass, s_fail);
 
@@ -259,8 +259,8 @@ bool test_inference() {
 	test_check(ai.save_weights(valid_weights_file), "ai.save_weights() creates baseline valid checkpoint", s_pass, s_fail);
 
 	// Snapshot of working memory
-	std::vector<float> baseline_weights = ai.h_weights;
-	std::vector<float> baseline_bias = ai.h_bias;
+	std::vector<float> baseline_weights = ai.host_weights;
+	std::vector<float> baseline_bias = ai.host_bias;
 
 	// 6.1 Sub-56-byte truncated header file
 	{
@@ -278,8 +278,8 @@ bool test_inference() {
 		std::string dim_mismatch_path = "test_dim_mismatch.axiom";
 		std::ofstream out(dim_mismatch_path, std::ios::binary);
 		AxiomWeightHeader bad_hdr {};
-		bad_hdr.in_dim = 1024; // Mismatch with model's in_dim 512
-		bad_hdr.out_dim = 4;
+		bad_hdr.input_dimension = 1024; // Mismatch with model's in_dim 512
+		bad_hdr.output_dimension = 4;
 		bad_hdr.weight_count = 1024 * 4;
 		bad_hdr.bias_count = 4;
 		bad_hdr.vocab_size = ai.vocab_size;
@@ -295,8 +295,8 @@ bool test_inference() {
 		std::string trunc_payload_path = "test_trunc_payload.axiom";
 		std::ofstream out(trunc_payload_path, std::ios::binary);
 		AxiomWeightHeader hdr {};
-		hdr.in_dim = in_dim;
-		hdr.out_dim = out_dim;
+		hdr.input_dimension = in_dim;
+		hdr.output_dimension = out_dim;
 		hdr.weight_count = in_dim * out_dim;
 		hdr.bias_count = out_dim;
 		hdr.vocab_size = ai.vocab_size;
@@ -310,8 +310,8 @@ bool test_inference() {
 	}
 
 	// 6.4 State preservation assertion: Failed loads must NOT mutate active brain
-	test_check(ai.h_weights == baseline_weights, "State immunity: Host weights unchanged after failed load attempts", s_pass, s_fail);
-	test_check(ai.h_bias == baseline_bias, "State immunity: Host biases unchanged after failed load attempts", s_pass, s_fail);
+	test_check(ai.host_weights == baseline_weights, "State immunity: Host weights unchanged after failed load attempts", s_pass, s_fail);
+	test_check(ai.host_bias == baseline_bias, "State immunity: Host biases unchanged after failed load attempts", s_pass, s_fail);
 
 	std::filesystem::remove(valid_weights_file);
 

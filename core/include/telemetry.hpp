@@ -131,7 +131,7 @@ public:
 		}
 
 		// Calculations
-		float tok_per_sec = (token_count > 0 && total_gpu_ms > 0.0f)
+		float tokens_per_second = (token_count > 0 && total_gpu_ms > 0.0f)
 					? (static_cast<float>(token_count) / total_gpu_ms) * 1000.0f
 					: 0.0f;
 
@@ -155,40 +155,40 @@ public:
 
 		std::string arch_tag = "sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
-		print_compact_hud(ttft_ms, tok_per_sec, bandwidth_gb_s, bandwidth_pct, mfu_pct, arch_tag, title);
+		print_compact_hud(ttft_ms, tokens_per_second, bandwidth_gb_s, bandwidth_pct, mfu_pct, arch_tag, title);
 	}
 
 	static void print_box_line(const std::string& content, int inner_width = 72) {
-		int display_len = 0;
+		int display_length = 0;
 		for (size_t i = 0; i < content.length();) {
 			unsigned char c = static_cast<unsigned char>(content[i]);
 			if ((c & 0x80) == 0) {
-				display_len += 1;
+				display_length += 1;
 				i += 1;
 			} else if ((c & 0xE0) == 0xC0) {
-				display_len += 1;
+				display_length += 1;
 				i += 2;
 			} else if ((c & 0xF0) == 0xE0) {
-				display_len += 1; // e.g. '•' (0xE2 0x80 0xA2) is 3 bytes, 1 display column
+				display_length += 1; // e.g. '•' (0xE2 0x80 0xA2) is 3 bytes, 1 display column
 				i += 3;
 			} else if ((c & 0xF8) == 0xF0) {
-				display_len += 2;
+				display_length += 2;
 				i += 4;
 			} else {
-				display_len += 1;
+				display_length += 1;
 				i += 1;
 			}
 		}
-		int pad = inner_width - display_len;
+		int pad = inner_width - display_length;
 		if (pad < 0) pad = 0;
 		std::cout << "│" << content << std::string(pad, ' ') << "│\n";
 	}
 
-	static void print_compact_hud(double ttft_ms, float tok_per_sec,
+	static void print_compact_hud(double ttft_ms, float tokens_per_second,
 				       double bandwidth_gb_s, float bandwidth_pct,
 				       float mfu_pct, const std::string& arch_tag = "sm_89",
 				       const std::string& title = "BARE-METAL HARDWARE SATURATION") {
-		float ms_per_tok = (tok_per_sec > 0.0f) ? (1000.0f / tok_per_sec) : 0.0f;
+		float milliseconds_per_token = (tokens_per_second > 0.0f) ? (1000.0f / tokens_per_second) : 0.0f;
 		std::string header = "  PROJECT AXIOM v1.0 • " + title + " [" + arch_tag + "]";
 
 		std::cout << "\n"
@@ -203,8 +203,8 @@ public:
 
 		std::ostringstream l2;
 		l2 << std::fixed;
-		l2 << "  2. DECODE THROUGHPUT       : " << std::right << std::setw(7) << std::setprecision(1) << tok_per_sec
-		   << " tok/s  (" << std::setw(5) << std::setprecision(2) << ms_per_tok << " ms/tok)";
+		l2 << "  2. DECODE THROUGHPUT       : " << std::right << std::setw(7) << std::setprecision(1) << tokens_per_second
+		   << " tok/s  (" << std::setw(5) << std::setprecision(2) << milliseconds_per_token << " ms/tok)";
 		print_box_line(l2.str());
 
 		std::ostringstream l3;

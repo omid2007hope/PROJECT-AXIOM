@@ -30,23 +30,23 @@ bool test_transfer() {
 
 	size_t pending_steps = 42;
 
-	// ── [1] Test Transfer::upload_weights_to_gpu ──────────────────────────────
+	// ── [1] Test Transfer::upload_weights ────────────────────────────────────
 	std::cout << "\n[1] Upload weights to GPU & pending_steps reset\n";
-	bool upload_ok = Transfer::upload_weights_to_gpu(
+	bool upload_ok = Transfer::upload_weights(
 		h_weights, h_bias, pending_steps, gpu_weights, gpu_activations);
-	test_check(upload_ok, "upload_weights_to_gpu succeeds", s_pass, s_fail);
+	test_check(upload_ok, "upload_weights succeeds", s_pass, s_fail);
 	test_check_eq(pending_steps, size_t {0}, "pending_steps reset to 0 after upload", s_pass, s_fail);
 	test_check(gpu_weights.d_weights_master != nullptr, "d_weights_master allocated on GPU", s_pass, s_fail);
 	test_check(gpu_weights.d_bias_master != nullptr, "d_bias_master allocated on GPU", s_pass, s_fail);
 
-	// ── [2] Test Transfer::download_weights_from_gpu ────────────────────────────
+	// ── [2] Test Transfer::download_weights ───────────────────────────────────
 	std::cout << "\n[2] Download weights from GPU & bitwise accuracy\n";
 	std::vector<float> downloaded_w(weight_count, 0.0f);
 	std::vector<float> downloaded_b(bias_count, 0.0f);
 
-	bool download_ok = Transfer::download_weights_from_gpu(
+	bool download_ok = Transfer::download_weights(
 		downloaded_w, downloaded_b, gpu_weights);
-	test_check(download_ok, "download_weights_from_gpu succeeds", s_pass, s_fail);
+	test_check(download_ok, "download_weights succeeds", s_pass, s_fail);
 
 	bool weights_matched = true;
 	for (size_t i = 0; i < weight_count; ++i) {

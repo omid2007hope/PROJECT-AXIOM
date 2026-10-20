@@ -13,10 +13,10 @@
 #include <vector>
 
 #include "../include/Identifier.hpp"
-#include "../include/decompressor/decom_audio.hpp"
-#include "../include/decompressor/decom_doc.hpp"
-#include "../include/decompressor/decom_image.hpp"
-#include "../include/decompressor/decom_video.hpp"
+#include "../include/decompressor/decompress_audio.hpp"
+#include "../include/decompressor/decompress_document.hpp"
+#include "../include/decompressor/decompress_image.hpp"
+#include "../include/decompressor/decompress_video.hpp"
 
 
 // Data Streaming (or Batching).
@@ -129,9 +129,9 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 // Streams directly to disk in fixed-size chunks to eliminate RAM saturation
 // and SSD page thrashing on massive datasets (hundreds of millions of tokens).
 std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
-	input.chunk_pos = 0;
+	input.chunk_position = 0;
 	input.tokens_written = 0;
-	input.last_pct = 0;
+	input.last_percentage = 0;
 
 	build_embedding_table(input);
 
@@ -197,20 +197,20 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 		}
 
 		for (size_t d = 0; d < input.embedding_dim; ++d) {
-			chunk[input.chunk_pos++] = current_vec[d];
+			chunk[input.chunk_position++] = current_vec[d];
 		}
 
-		if (input.chunk_pos == chunk.size()) {
+		if (input.chunk_position == chunk.size()) {
 			out.write(reinterpret_cast<const char*>(chunk.data()),
 				  chunk.size() * sizeof(std::bfloat16_t));
 			input.tokens_written += input.CHUNK_TOKENS;
-			input.chunk_pos = 0;
+			input.chunk_position = 0;
 
 			if (show_progress) {
 				const size_t pct =
 					(input.tokens_written * 100) / input.tokenized_data.size();
-				if (pct != input.last_pct) {
-					input.last_pct = pct;
+				if (pct != input.last_percentage) {
+					input.last_percentage = pct;
 					constexpr int bar_w = 24;
 					const int filled = static_cast<int>((pct / 100.0) * bar_w);
 					std::string bar = "[";
@@ -234,10 +234,10 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 	}
 
 	// std::ofstream out(embedded_path, std::ios::binary | std::ios::trunc)
-	if (input.chunk_pos > 0) {
+	if (input.chunk_position > 0) {
 		out.write(reinterpret_cast<const char*>(chunk.data()),
-			  input.chunk_pos * sizeof(std::bfloat16_t));
-		input.tokens_written += (input.chunk_pos / input.embedding_dim);
+			  input.chunk_position * sizeof(std::bfloat16_t));
+		input.tokens_written += (input.chunk_position / input.embedding_dim);
 	}
 	out.close();
 
@@ -288,8 +288,8 @@ void Parser::build_embedding_table(Input& input) {
 		ensure_embedding(id);
 }
 
-uint32_t Parser::decode_embedding_to_token(const Input& input,
-					   const std::vector<float>& embedding_vector) {
+uint32_t Parser::decode_token(const Input& input,
+			      const std::vector<float>& embedding_vector) {
 	if (input.embedding_table.empty()) {
 		return 0;
 	}
@@ -398,7 +398,7 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 
 std::string Parser::decode_prediction(const Input& input,
 				      const std::vector<float>& embedding_vector) {
-	uint32_t token_id = decode_embedding_to_token(input, embedding_vector);
+	uint32_t token_id = decode_token(input, embedding_vector);
 	if (token_id == 0)
 		return "[Empty Vocabulary]";
 	return token_to_string(input, token_id);
@@ -435,9 +435,9 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	return tokens;
 }
 
-std::vector<std::bfloat16_t> Parser::tokens_to_context_window(const Input& input,
-							      const std::vector<uint32_t>& tokens,
-							      size_t context_tokens) {
+std::vector<std::bfloat16_t> Parser::build_context_window(const Input& input,
+							  const std::vector<uint32_t>& tokens,
+							  size_t context_tokens) {
 	std::vector<std::bfloat16_t> window(context_tokens * input.embedding_dim,
 					    static_cast<std::bfloat16_t>(0.0f));
 	if (tokens.empty())
@@ -447,8 +447,8 @@ std::vector<std::bfloat16_t> Parser::tokens_to_context_window(const Input& input
 	size_t start_token_idx = context_tokens - count;
 
 	for (size_t i = 0; i < count; ++i) {
-		uint32_t tok_id = tokens[tokens.size() - count + i];
-		auto it = input.embedding_table.find(tok_id);
+		uint32_t token_id = tokens[tokens.size() - count + i];
+		auto it = input.embedding_table.find(token_id);
 		if (it != input.embedding_table.end()) {
 			for (size_t d = 0; d < input.embedding_dim; ++d) {
 				window[(start_token_idx + i) * input.embedding_dim + d] =
@@ -620,7 +620,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		if (is_doc) {
 			// Phase 1.2: Sanitize Document Ingestion & Eliminate PDF Byte Streaming
 			// Extract clean text from PDF, DOCX, TXT, MD so linguistic terms enter main_dictionary
-			std::string extracted_text = Decom_doc::extract_text(fpath);
+			std::string extracted_text = DecompressDocument::extract_text(fpath);
 			std::istringstream iss(extracted_text);
 			std::string word;
 			while (iss >> word) {

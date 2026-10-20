@@ -4,15 +4,15 @@
 #include <string>
 #include <vector>
 
-#include "../include/decompressor/decom_audio.hpp"
-#include "../include/decompressor/decom_doc.hpp"
-#include "../include/decompressor/decom_image.hpp"
-#include "../include/decompressor/decom_video.hpp"
+#include "../include/decompressor/decompress_audio.hpp"
+#include "../include/decompressor/decompress_document.hpp"
+#include "../include/decompressor/decompress_image.hpp"
+#include "../include/decompressor/decompress_video.hpp"
 #include "test_header.hpp"
 
-bool test_decom() {
-	int s_pass = 0;
-	int s_fail = 0;
+bool test_decompressor() {
+	int pass_count = 0;
+	int fail_count = 0;
 
 	std::cout << "\n=== Multimodal Decompressor Test Suite ===\n\n";
 
@@ -20,8 +20,8 @@ bool test_decom() {
 	std::filesystem::create_directories(temp_dir);
 	std::filesystem::path asset_dir = test_asset_dirs()[0];
 
-	// ─── [1] Document Decompressor (Decom_doc) ──────────────────────────────────
-	std::cout << "[1] Document Decompressor (Decom_doc: TXT, MD, PDF, DOCX)\n";
+	// ─── [1] Document Decompressor (DecompressDocument) ──────────────────────────
+	std::cout << "[1] Document Decompressor (DecompressDocument: TXT, MD, PDF, DOCX)\n";
 
 	// 1.1 TXT / MD extraction
 	{
@@ -30,9 +30,9 @@ bool test_decom() {
 			std::ofstream out(txt_file);
 			out << "Silicon native computation with Zero Overhead.";
 		}
-		std::string txt_content = Decom_doc::decom_TXT(txt_file);
-		test_check(txt_content.find("Silicon") != std::string::npos, "decom_TXT extracts raw text content", s_pass, s_fail);
-		test_check(txt_content.find("Overhead") != std::string::npos, "decom_TXT preserves all vocabulary words", s_pass, s_fail);
+		std::string txt_content = DecompressDocument::decompress_text(txt_file);
+		test_check(txt_content.find("Silicon") != std::string::npos, "decompress_text extracts raw text content", pass_count, fail_count);
+		test_check(txt_content.find("Overhead") != std::string::npos, "decompress_text preserves all vocabulary words", pass_count, fail_count);
 	}
 
 	// 1.2 PDF text extraction (BT ... ET text operators)
@@ -53,9 +53,9 @@ bool test_decom() {
 			    << "endstream endobj\n"
 			    << "xref\ntrailer << /Root 1 0 R >>\nstartxref\n%%EOF";
 		}
-		std::string pdf_content = Decom_doc::decom_PDF(pdf_file);
-		test_check(pdf_content.find("Quantum Mechanics") != std::string::npos, "decom_PDF extracts text from (text) Tj operators", s_pass, s_fail);
-		test_check(pdf_content.find("Wavefunction") != std::string::npos, "decom_PDF extracts multiple stream tokens", s_pass, s_fail);
+		std::string pdf_content = DecompressDocument::decompress_pdf(pdf_file);
+		test_check(pdf_content.find("Quantum Mechanics") != std::string::npos, "decompress_pdf extracts text from (text) Tj operators", pass_count, fail_count);
+		test_check(pdf_content.find("Wavefunction") != std::string::npos, "decompress_pdf extracts multiple stream tokens", pass_count, fail_count);
 	}
 
 	// 1.3 DOCX text extraction (<w:t> XML tags)
@@ -71,13 +71,13 @@ bool test_decom() {
 			    << "<w:p><w:r><w:t>9.80665</w:t></w:r></w:p>"
 			    << "</w:body></w:document>";
 		}
-		std::string docx_content = Decom_doc::decom_DOCX(docx_file);
-		test_check(docx_content.find("Gravitational Constant") != std::string::npos, "decom_DOCX extracts text enclosed in <w:t> tags", s_pass, s_fail);
-		test_check(docx_content.find("9.80665") != std::string::npos, "decom_DOCX extracts numerical and equation tokens", s_pass, s_fail);
+		std::string docx_content = DecompressDocument::decompress_docx(docx_file);
+		test_check(docx_content.find("Gravitational Constant") != std::string::npos, "decompress_docx extracts text enclosed in <w:t> tags", pass_count, fail_count);
+		test_check(docx_content.find("9.80665") != std::string::npos, "decompress_docx extracts numerical and equation tokens", pass_count, fail_count);
 	}
 
-	// ─── [2] Image Decompressor (Decom_image) ───────────────────────────────────
-	std::cout << "\n[2] Image Decompressor (Decom_image: BMP, JPG, PNG)\n";
+	// ─── [2] Image Decompressor (DecompressImage) ───────────────────────────────
+	std::cout << "\n[2] Image Decompressor (DecompressImage: BMP, JPG, PNG)\n";
 
 	// 2.1 Synthetic BMP 24-bit generation and bit-for-bit decode
 	{
@@ -116,29 +116,29 @@ bool test_decom() {
 			}
 		}
 
-		DecodedImage decoded = Decom_image::decom_BMP(bmp_file);
-		test_check(decoded.is_valid, "decom_BMP parses valid BMP", s_pass, s_fail);
-		test_check_eq(decoded.width, 4, "decom_BMP width is 4", s_pass, s_fail);
-		test_check_eq(decoded.height, 4, "decom_BMP height is 4", s_pass, s_fail);
-		test_check_eq(decoded.channels, 3, "decom_BMP channels is 3 (RGB)", s_pass, s_fail);
-		test_check_eq(static_cast<int>(decoded.pixels[0]), 0xFF, "decom_BMP pixel 0 is Red (0xFF)", s_pass, s_fail);
-		test_check_eq(static_cast<int>(decoded.pixels[1]), 0x00, "decom_BMP pixel 1 is Green (0x00)", s_pass, s_fail);
-		test_check_eq(static_cast<int>(decoded.pixels[2]), 0x00, "decom_BMP pixel 2 is Blue (0x00)", s_pass, s_fail);
+		DecodedImage decoded = DecompressImage::decompress_bmp(bmp_file);
+		test_check(decoded.is_valid, "decompress_bmp parses valid BMP", pass_count, fail_count);
+		test_check_eq(decoded.width, 4, "decompress_bmp width is 4", pass_count, fail_count);
+		test_check_eq(decoded.height, 4, "decompress_bmp height is 4", pass_count, fail_count);
+		test_check_eq(decoded.channels, 3, "decompress_bmp channels is 3 (RGB)", pass_count, fail_count);
+		test_check_eq(static_cast<int>(decoded.pixels[0]), 0xFF, "decompress_bmp pixel 0 is Red (0xFF)", pass_count, fail_count);
+		test_check_eq(static_cast<int>(decoded.pixels[1]), 0x00, "decompress_bmp pixel 1 is Green (0x00)", pass_count, fail_count);
+		test_check_eq(static_cast<int>(decoded.pixels[2]), 0x00, "decompress_bmp pixel 2 is Blue (0x00)", pass_count, fail_count);
 	}
 
 	// 2.2 Live Photo.jpeg asset decode
 	{
 		std::filesystem::path photo_path = asset_dir / "Photo.jpeg";
 		if (std::filesystem::exists(photo_path)) {
-			DecodedImage decoded = Decom_image::decode_image(photo_path);
-			test_check(decoded.is_valid, "decode_image successfully decodes Photo.jpeg", s_pass, s_fail);
-			test_check(decoded.width > 0 && decoded.height > 0, "Photo.jpeg resolution extracted from SOF marker", s_pass, s_fail);
-			test_check(!decoded.pixels.empty(), "Photo.jpeg pixel byte array populated", s_pass, s_fail);
+			DecodedImage decoded = DecompressImage::decode_image(photo_path);
+			test_check(decoded.is_valid, "decode_image successfully decodes Photo.jpeg", pass_count, fail_count);
+			test_check(decoded.width > 0 && decoded.height > 0, "Photo.jpeg resolution extracted from SOF marker", pass_count, fail_count);
+			test_check(!decoded.pixels.empty(), "Photo.jpeg pixel byte array populated", pass_count, fail_count);
 		}
 	}
 
-	// ─── [3] Audio Decompressor (Decom_audio) ───────────────────────────────────
-	std::cout << "\n[3] Audio Decompressor (Decom_audio: WAV, OGG, MP3)\n";
+	// ─── [3] Audio Decompressor (DecompressAudio) ───────────────────────────────
+	std::cout << "\n[3] Audio Decompressor (DecompressAudio: WAV, OGG, MP3)\n";
 
 	// 3.1 Synthetic WAV generation and PCM extraction
 	{
@@ -174,36 +174,36 @@ bool test_decom() {
 			out.write(reinterpret_cast<char*>(dummy_samples.data()), pcm_data_size);
 		}
 
-		DecodedAudio decoded = Decom_audio::decom_WAV(wav_file);
-		test_check(decoded.is_valid, "decom_WAV parses valid RIFF/WAVE container", s_pass, s_fail);
-		test_check_eq(decoded.sample_rate, 44100, "decom_WAV sample rate is 44100 Hz", s_pass, s_fail);
-		test_check_eq(decoded.channels, 2, "decom_WAV channels is 2 (Stereo)", s_pass, s_fail);
-		test_check_eq(decoded.bits_per_sample, 16, "decom_WAV bits per sample is 16-bit", s_pass, s_fail);
-		test_check_eq(decoded.pcm_bytes.size(), static_cast<size_t>(128), "decom_WAV extracted exact 128 raw PCM bytes", s_pass, s_fail);
+		DecodedAudio decoded = DecompressAudio::decompress_wav(wav_file);
+		test_check(decoded.is_valid, "decompress_wav parses valid RIFF/WAVE container", pass_count, fail_count);
+		test_check_eq(decoded.sample_rate, 44100, "decompress_wav sample rate is 44100 Hz", pass_count, fail_count);
+		test_check_eq(decoded.channels, 2, "decompress_wav channels is 2 (Stereo)", pass_count, fail_count);
+		test_check_eq(decoded.bits_per_sample, 16, "decompress_wav bits per sample is 16-bit", pass_count, fail_count);
+		test_check_eq(decoded.pcm_bytes.size(), static_cast<size_t>(128), "decompress_wav extracted exact 128 raw PCM bytes", pass_count, fail_count);
 	}
 
 	// 3.2 Live Voice.ogg asset decode
 	{
 		std::filesystem::path voice_path = asset_dir / "Voice.ogg";
 		if (std::filesystem::exists(voice_path)) {
-			DecodedAudio decoded = Decom_audio::decode_audio(voice_path);
-			test_check(decoded.is_valid, "decode_audio successfully decodes Voice.ogg", s_pass, s_fail);
-			test_check(decoded.sample_rate > 0, "Voice.ogg sample rate extracted", s_pass, s_fail);
-			test_check(!decoded.pcm_bytes.empty(), "Voice.ogg linear PCM samples populated", s_pass, s_fail);
+			DecodedAudio decoded = DecompressAudio::decode_audio(voice_path);
+			test_check(decoded.is_valid, "decode_audio successfully decodes Voice.ogg", pass_count, fail_count);
+			test_check(decoded.sample_rate > 0, "Voice.ogg sample rate extracted", pass_count, fail_count);
+			test_check(!decoded.pcm_bytes.empty(), "Voice.ogg linear PCM samples populated", pass_count, fail_count);
 		}
 	}
 
-	// ─── [4] Video Decompressor (Decom_video) ───────────────────────────────────
-	std::cout << "\n[4] Video Decompressor (Decom_video: MP4, MKV)\n";
+	// ─── [4] Video Decompressor (DecompressVideo) ───────────────────────────────
+	std::cout << "\n[4] Video Decompressor (DecompressVideo: MP4, MKV)\n";
 
 	// 4.1 Live Video.mp4 asset decode
 	{
 		std::filesystem::path video_path = asset_dir / "Video.mp4";
 		if (std::filesystem::exists(video_path)) {
-			DecodedVideo decoded = Decom_video::decode_video(video_path);
-			test_check(decoded.is_valid, "decode_video successfully parses Video.mp4", s_pass, s_fail);
-			test_check(decoded.width > 0 && decoded.height > 0, "Video.mp4 resolution extracted from MP4 atoms", s_pass, s_fail);
-			test_check(!decoded.raw_frames.empty(), "Video.mp4 frame bytes extracted from mdat box", s_pass, s_fail);
+			DecodedVideo decoded = DecompressVideo::decode_video(video_path);
+			test_check(decoded.is_valid, "decode_video successfully parses Video.mp4", pass_count, fail_count);
+			test_check(decoded.width > 0 && decoded.height > 0, "Video.mp4 resolution extracted from MP4 atoms", pass_count, fail_count);
+			test_check(!decoded.raw_frames.empty(), "Video.mp4 frame bytes extracted from mdat box", pass_count, fail_count);
 		}
 	}
 
@@ -211,6 +211,6 @@ bool test_decom() {
 	std::error_code ec;
 	std::filesystem::remove_all(temp_dir, ec);
 
-	std::cout << "=== Multimodal Decompressor Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
-	return (s_fail == 0);
+	std::cout << "=== Multimodal Decompressor Test Suite: " << pass_count << " passed, " << fail_count << " failed ===\n";
+	return (fail_count == 0);
 }

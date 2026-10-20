@@ -56,10 +56,10 @@ enum class FileFormat {
 };
 
 enum class ModalityCategory {
-	DOCUMENT, // Pure text, code, PDF, DOCX -> Handled by Decom_doc
-	IMAGE,    // Discrete visual pixels -> Handled by Decom_image
-	VIDEO,    // Sequential video frames -> Handled by Decom_video
-	AUDIO,    // Linear PCM waveforms -> Handled by Decom_audio
+	DOCUMENT, // Pure text, code, PDF, DOCX -> Handled by DecompressDocument
+	IMAGE,    // Discrete visual pixels -> Handled by DecompressImage
+	VIDEO,    // Sequential video frames -> Handled by DecompressVideo
+	AUDIO,    // Linear PCM waveforms -> Handled by DecompressAudio
 	THREE_D,  // 3D coordinates & meshes
 	ARCHIVE,  // Container archives
 	UNKNOWN
@@ -82,7 +82,7 @@ public:
 
 	// Identify all files under a directory (e.g., asset_sample/)
 	static std::vector<IdentifiedFile> identify_directory(
-		const std::filesystem::path& dir_path,
+		const std::filesystem::path& directory_path,
 		bool recursive = true);
 
 	// Classification and string conversions
@@ -96,8 +96,8 @@ public:
 	static bool is_video(FileFormat format);
 
 private:
-	static FileFormat detect_magic_bytes(const uint8_t* header, size_t len, const std::string& ext);
-	static FileFormat detect_by_extension(const std::string& ext);
+	static FileFormat detect_magic_bytes(const uint8_t* header, size_t length, const std::string& extension);
+	static FileFormat detect_by_extension(const std::string& extension);
 	static std::string to_lower(std::string str);
 };
 
