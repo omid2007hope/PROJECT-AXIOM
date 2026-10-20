@@ -12,6 +12,7 @@
 #include "optimizer.hpp"
 
 #pragma pack(push, 1)
+
 struct AxiomWeightHeader {
 	char magic[8] = {'A', 'X', 'I', 'O', 'M', '_', 'V', '1'};
 	uint64_t in_dim = 0;
@@ -21,7 +22,9 @@ struct AxiomWeightHeader {
 	uint64_t vocab_size = 0;
 	uint64_t embedding_dim = 0;
 };
+
 #pragma pack(pop)
+
 static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactly 56 bytes");
 
 struct Elements {
@@ -50,6 +53,7 @@ private:
 
 public:
 	AI(const AI&) = delete;
+
 	AI& operator=(const AI&) = delete;
 
 	size_t vocab_size = 65536;
@@ -64,7 +68,9 @@ public:
 	// GPU Memory State (The pointers for the VRAM)
 	GpuWeights gpu_weights;
 	GpuActivations gpu_activations;
-	GpuPortion gpu_portion; // Reused across iterations to prevent reallocation
+	GpuPortion gpu_portion; // Reused across
+
+	// iterations to prevent reallocation
 	GpuEmbeddings gpu_embeddings;
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
@@ -92,11 +98,19 @@ public:
 
 	// Weight persistence methods
 	bool save_weights(const std::string& path = "weights.axiom");
+
 	bool load_weights(const std::string& path = "weights.axiom");
 
 	// Forward Inference Engine (no gradient updates)
-	bool predict(const Portion& portion, std::vector<float>& output_prediction);
-	bool predict(const std::vector<std::bfloat16_t>& context_window, std::vector<float>& output_prediction);
+	bool predict(const std::vector<std::bfloat16_t>& context_window,
+		     std::vector<float>& output_prediction);
+
+	// streaming word-by-word continuously,
+	bool generate(const std::string prompt,
+		      size_t max_new_tokens,
+		      float temperature,
+		      int top_k,
+		      float top_d);
 
 	// Milestone 3: Discrete Autoregressive Token Classification
 	uint32_t last_predicted_token_id = 0;
