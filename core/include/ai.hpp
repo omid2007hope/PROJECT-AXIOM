@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <stdfloat>
 #include <string>
 #include <vector>
@@ -38,6 +39,9 @@ enum class TrainStatus {
 	NoData,	 // the RAM buffer is exhausted: the caller must refill it
 	Failed	 // a CUDA step failed (already reported on stderr)
 };
+
+class Parser;
+struct Input;
 
 class AI {
 private:
@@ -75,7 +79,11 @@ public:
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
 	// inside [weight_min, weight_max]
-	AI(size_t input_dimension, size_t output_dimension, float weight_min, float weight_max, Elements& elements);
+	AI(size_t input_dimension,
+	   size_t output_dimension,
+	   float weight_min,
+	   float weight_max,
+	   Elements& elements);
 
 	~AI();
 
@@ -105,12 +113,15 @@ public:
 	bool predict(const std::vector<std::bfloat16_t>& context_window,
 		     std::vector<float>& output_prediction);
 
-	// streaming word-by-word continuously,
-	bool generate(const std::string prompt,
-		      size_t max_new_tokens,
-		      float temperature,
-		      int top_k,
-		      float top_d);
+	// Autoregressive generation loop with real-time streaming
+	bool generate(const std::string& prompt,
+		      Parser& parser,
+		      Input& input,
+		      size_t max_new_tokens = 128,
+		      float temperature = 0.7f,
+		      int top_k = 40,
+		      float top_p = 0.9f,
+		      std::function<void(const std::string&)> token_callback = nullptr);
 
 	// Milestone 3: Discrete Autoregressive Token Classification
 	uint32_t last_predicted_token_id = 0;

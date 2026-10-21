@@ -607,12 +607,8 @@ void run_inference_engine(AI& ai,
 			break;
 		}
 
-		Input input;
-
-		std::vector<unit32_t> tokens = input.tokenized_data;
-
 		// Tokenize input prompt
-		generate(line, size_t 128, float 0.5, int 1, float 1);
+		std::vector<uint32_t> tokens = parser.tokenize_prompt(input, line);
 
 		std::cout << "[Tokens] (" << tokens.size() << " tokens): ";
 		for (size_t i = 0; i < tokens.size(); ++i) {
@@ -648,6 +644,19 @@ void run_inference_engine(AI& ai,
 			  << prediction[3] << "]\n"
 			  << "[Next Token ID] #" << predicted_token_id << "\n"
 			  << "[Prediction]    \"" << predicted_token_string << "\"\n";
+
+		std::cout << "[Autoregressive Stream]: ";
+		ai.generate(line,
+			    parser,
+			    input,
+			    128,
+			    0.7f,
+			    40,
+			    0.9f,
+			    [](const std::string& token_string) {
+				    std::cout << token_string << " " << std::flush;
+			    });
+		std::cout << "\n";
 	}
 }
 

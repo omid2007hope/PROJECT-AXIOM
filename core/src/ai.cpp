@@ -8,7 +8,6 @@
 
 #include "../include/parser.hpp"
 #include "../include/transfer.hpp"
-#include "../util/parser.cpp"
 
 
 AI::AI(size_t input_dimension,
@@ -515,17 +514,63 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 	return true;
 }
 
-bool AI::generate(const std::string prompt,
+bool AI::generate(const std::string& prompt,
+		  Parser& parser,
+		  Input& input,
 		  size_t max_new_tokens,
 		  float temperature,
 		  int top_k,
-		  float top_d) {
+		  float top_p,
+		  std::function<void(const std::string&)> token_callback) {
+	(void)temperature;
+	(void)top_k;
+	(void)top_p;
 
-	Input input;
-	Parser parser;
+	if (prompt.empty()) {
+		return false;
+	}
 
-	//tokenize_prompt receives prompt, responses token
-	std::vector<uint32_t> tokenized_data = parser.tokenize_prompt(Input, prompt);
+	std::vector<uint32_t> tokens = parser.tokenize_prompt(input, prompt);
+	if (tokens.empty()) {
+		return false;
+	}
 
-	return false;
+	if (input.next_text_id > 4) {
+		active_vocab_size = input.next_text_id;
+	}
+
+	const size_t context_token_count =
+		(embedding_dim > 0) ? (input_dimension / embedding_dim) : 128;
+
+	std::vector<std::bfloat16_t> context_window =
+		parser.build_context_window(input, tokens, context_token_count);
+
+	std::vector<float> prediction(output_dimension, 0.0f);
+
+	for (size_t step = 0; step < max_new_tokens; ++step) {
+		if (!predict(context_window, prediction)) {
+			return false;
+		}
+
+		uint32_t token_id = last_predicted_token_id;
+
+		if (token_id == 0 && !input.embedding_table.empty()) {
+			token_id = parser.decode_token(input, prediction);
+		}
+
+		if (token_id == 0 || token_id == vocab::EOS) {
+			break;
+		}
+
+		std::string token_string = parser.token_to_string(input, token_id);
+
+		if (token_callback) {
+			token_callback(token_string);
+		}
+
+		tokens.push_back(token_id);
+		context_window = parser.build_context_window(input, tokens, context_token_count);
+	}
+
+	return true;
 }
