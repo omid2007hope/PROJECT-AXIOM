@@ -398,43 +398,52 @@ Hardware Device : NVIDIA GeForce RTX 4080 Laptop GPU
 Architecture    : sm_89 (Ada Lovelace)
 Memory Bus      : 192-bit | Peak Bandwidth: 432.0 GB/s
 Compute Engine  : 67.7 Peak Dense BF16 TFLOPs
-VRAM Footprint  : 11061 MB Free / 12281 MB Total
+VRAM Footprint  : 8629 MB Free / 12281 MB Total
 --------------------------------------------------------
-[BENCHMARK 1/2] Interactive Micro-Perceptron Inference (512 -> 4)
+[STAGE 1/3] Micro-Dispatch Latency & Decode Throughput Profile
 [..] Warming up Tensor Cores (10 forward passes)...
 [..] Executing 100 Hardware-Timed Tensor Core Inferences...
 
 ┌────────────────────────────────────────────────────────────────────────┐
 │  PROJECT AXIOM v1.0 • INFERENCE DISPATCH LATENCY [sm_89]               │
 ├────────────────────────────────────────────────────────────────────────┤
-│  1. PREFILL LATENCY (TTFT)  :     0.1 ms                                │
-│  2. DECODE THROUGHPUT       :  9302.3 tok/s  ( 0.11 ms/tok)             │
-│  3. MEMORY BUS SATURATION   :   0.04 GB/s   (<0.1% of Peak)           │
-│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core L1-Resident)  │
+│  1. PREFILL LATENCY (TTFT)  :     5.2 ms                               │
+│  2. DECODE THROUGHPUT       :   215.5 tok/s  ( 4.64 ms/tok)            │
+│  3. MEMORY BUS SATURATION   :  115.7 GB/s   ( 26.8% of Peak)           │
+│  4. COMPUTE EFFICIENCY (MFU):   0.2% MFU   (Tensor Core Saturation)    │
 └────────────────────────────────────────────────────────────────────────┘
 
 --------------------------------------------------------
-[BENCHMARK 2/2] CUTLASS EVT Kernel Saturation Sweep (M=128, N=4096, K=4096)
-[..] Allocating transformer-scale tensor buffers (34 MB VRAM footprint)...
-[..] Warming up all Ada Lovelace Streaming Multiprocessors...
-[..] Executing 50 Hardware-Timed Fused EVT Tensor Core Sweeps...
+[STAGE 2/3] High-Capacity VRAM Allocation & Memory Bus Saturation
+[..] Querying dynamic GPU memory constraints & safety margin...
+[OK] Dynamically allocated 6.00 GB synthetic tensors in VRAM (leaving 2.00 GB OS safety headroom)
+[OK] Vectorized GDDR6 memory streaming bandwidth: 21.7 GB/s (5.0% of physical bus)
+[OK] 100% memory integrity verified; VRAM cleanly deallocated.
+--------------------------------------------------------
+[STAGE 3/3] Ada Lovelace Tensor Core Saturation Sweep
+            Configuration: M=2048, N=4096, K=4096 (68.7 GFLOPs/sweep)
+[..] Saturating all 58 Streaming Multiprocessors across 2,048 thread blocks...
+[..] Locking GPU into P0 Boost Clock and executing 1,000 sustained sweeps...
 
 ┌────────────────────────────────────────────────────────────────────────┐
-│  PROJECT AXIOM v1.0 • TRANSFORMER KERNEL SATURATION [sm_89]            │
+│  PROJECT AXIOM v1.0 • HARDWARE BENCHMARK & SATURATION [sm_89]          │
 ├────────────────────────────────────────────────────────────────────────┤
-│  1. FUSED EVT SWEEP TIME    :    0.13 ms                                │
-│  2. SUSTAINED COMPUTE POWER :    33.6 TFLOPs (BF16 Dense)                 │
-│  3. MEMORY BUS SATURATION   :  278.9 GB/s   (64.5% of Peak)          │
-│  4. COMPUTE EFFICIENCY (MFU):  49.6% MFU   (Tensor Core Saturation)   │
+│  1. SUSTAINED COMPUTE POWER :   59.7 TFLOPs (BF16 Dense Tensor Cores)  │
+│  2. COMPUTE EFFICIENCY (MFU):  88.2% MFU   (Peak Saturation / Optimal) │
+│  3. MEMORY BUS SATURATION   :   58.3 GB/s   ( 13.5% of Peak)           │
+│  4. VRAM STRESS ALLOCATION  :   6.00 GB     (2.00 GB Safe OS Headroom) │
+│  5. FUSED EVT SWEEP TIME    :   1.15 ms     (Steady-State Clock Locked)│
+│  6. HARDWARE STABILITY      :  100.0% Pass   (Locked Boost Frequency)  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### The Two-Stage Benchmark Architecture Explained
+### The Three-Stage Benchmark Architecture Explained
 
-| Stage                      | Benchmark Focus                                            | Measured Metrics                                                                                                                                                    | What It Physically Proves                                                                                                                                                                                                                    |
-| :------------------------- | :--------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **[1/2] Micro-Perceptron** | **Interactive Dispatch Latency**                           | **$0.1\text{ ms}$ TTFT**<br>**$\sim 9,300+\text{ tok/s}$** ($0.11\text{ ms/tok}$)<br>**$0.04\text{ GB/s}$** ($<0.1\%$ peak)<br>**$0.0\%\text{ MFU}$** (L1-Resident) | Proves ultra-low driver latency and instant PCIe DMA dispatch. Because all 2,048 weights fit entirely in L1/L2 cache, VRAM bus saturation and MFU are near-zero as expected for a micro-model.                                               |
-| **[2/2] CUTLASS EVT**      | **Hardware Saturation Sweep**<br>($M=128, N=4096, K=4096$) | **$0.13\text{ ms}$ Sweep Time**<br>**$33.6\text{ TFLOPs}$ Sustained**<br>**$278.9\text{ GB/s}$** ($64.5\%$ peak)<br>**$49.6\%\text{ MFU}$** (SM Saturation)         | Exercises all Streaming Multiprocessors with transformer-scale matrix tiles (34 MB VRAM footprint). Proves the CUTLASS Epilogue Visitor Tree (EVT) kernel saturates Ada Lovelace Tensor Cores and memory bus without kernel-launch overhead. |
+| Stage | Benchmark Focus | Measured Metrics | What It Physically Proves |
+| :--- | :--- | :--- | :--- |
+| **[1/3] Micro-Dispatch** | **Interactive Inference Latency** | **$5.2\text{ ms}$ TTFT**<br>**$\sim 215+\text{ tok/s}$** ($4.64\text{ ms/tok}$)<br>**$115.7\text{ GB/s}$** ($26.8\%$ peak)<br>**$0.2\%\text{ MFU}$** | Evaluates driver-level kernel dispatch latency and host-to-device streaming roundtrips under single-token decoding passes. |
+| **[2/3] VRAM Allocation** | **Memory Bus Saturation Stress** | **$6.00\text{ GB}$ Allocated**<br>**$2.00\text{ GB}$ OS Headroom**<br>**$21.7\text{ GB/s}$** streaming | Dynamically stress-allocates massive synthetic tensors in VRAM while maintaining strict OS/DWM safety headroom, verifying vector memory integrity and bus stability. |
+| **[3/3] Tensor Core Sweep** | **Kernel Saturation Sweep (HFU)**<br>($M=2048, N=4096, K=4096$) | **$1.15\text{ ms}$ Sweep Time**<br>**$59.7\text{ TFLOPs}$ Sustained**<br>**$88.2\%\text{ MFU / HFU}$** ($100\%$ Pass) | Saturates all 58 Streaming Multiprocessors across 2,048 thread blocks executing 1,000 sustained sweeps ($68.7\text{ TFLOPs total}$). Proves CUTLASS EVT kernels reach peak Tensor Core utilization on Ada Lovelace. |
 
 ---
 
@@ -716,34 +725,42 @@ Hardware Device : NVIDIA GeForce RTX 4080 Laptop GPU
 Architecture    : sm_89 (Ada Lovelace)
 Memory Bus      : 192-bit | Peak Bandwidth: 432.0 GB/s
 Compute Engine  : 67.7 Peak Dense BF16 TFLOPs
-VRAM Footprint  : 11061 MB Free / 12281 MB Total
+VRAM Footprint  : 8629 MB Free / 12281 MB Total
 --------------------------------------------------------
-[BENCHMARK 1/2] Interactive Micro-Perceptron Inference (512 -> 4)
+[STAGE 1/3] Micro-Dispatch Latency & Decode Throughput Profile
 [..] Warming up Tensor Cores (10 forward passes)...
 [..] Executing 100 Hardware-Timed Tensor Core Inferences...
 
 ┌────────────────────────────────────────────────────────────────────────┐
 │  PROJECT AXIOM v1.0 • INFERENCE DISPATCH LATENCY [sm_89]               │
 ├────────────────────────────────────────────────────────────────────────┤
-│  1. PREFILL LATENCY (TTFT)  :     0.1 ms                                │
-│  2. DECODE THROUGHPUT       :  9302.3 tok/s  ( 0.11 ms/tok)             │
-│  3. MEMORY BUS SATURATION   :   0.04 GB/s   (<0.1% of Peak)           │
-│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core L1-Resident)  │
+│  1. PREFILL LATENCY (TTFT)  :     5.2 ms                               │
+│  2. DECODE THROUGHPUT       :   215.5 tok/s  ( 4.64 ms/tok)            │
+│  3. MEMORY BUS SATURATION   :  115.7 GB/s   ( 26.8% of Peak)           │
+│  4. COMPUTE EFFICIENCY (MFU):   0.2% MFU   (Tensor Core Saturation)    │
 └────────────────────────────────────────────────────────────────────────┘
 
 --------------------------------------------------------
-[BENCHMARK 2/2] CUTLASS EVT Kernel Saturation Sweep (M=128, N=4096, K=4096)
-[..] Allocating transformer-scale tensor buffers (34 MB VRAM footprint)...
-[..] Warming up all Ada Lovelace Streaming Multiprocessors...
-[..] Executing 50 Hardware-Timed Fused EVT Tensor Core Sweeps...
+[STAGE 2/3] High-Capacity VRAM Allocation & Memory Bus Saturation
+[..] Querying dynamic GPU memory constraints & safety margin...
+[OK] Dynamically allocated 6.00 GB synthetic tensors in VRAM (leaving 2.00 GB OS safety headroom)
+[OK] Vectorized GDDR6 memory streaming bandwidth: 21.7 GB/s (5.0% of physical bus)
+[OK] 100% memory integrity verified; VRAM cleanly deallocated.
+--------------------------------------------------------
+[STAGE 3/3] Ada Lovelace Tensor Core Saturation Sweep
+            Configuration: M=2048, N=4096, K=4096 (68.7 GFLOPs/sweep)
+[..] Saturating all 58 Streaming Multiprocessors across 2,048 thread blocks...
+[..] Locking GPU into P0 Boost Clock and executing 1,000 sustained sweeps...
 
 ┌────────────────────────────────────────────────────────────────────────┐
-│  PROJECT AXIOM v1.0 • TRANSFORMER KERNEL SATURATION [sm_89]            │
+│  PROJECT AXIOM v1.0 • HARDWARE BENCHMARK & SATURATION [sm_89]          │
 ├────────────────────────────────────────────────────────────────────────┤
-│  1. FUSED EVT SWEEP TIME    :    0.13 ms                                │
-│  2. SUSTAINED COMPUTE POWER :    33.6 TFLOPs (BF16 Dense)                 │
-│  3. MEMORY BUS SATURATION   :  278.9 GB/s   (64.5% of Peak)          │
-│  4. COMPUTE EFFICIENCY (MFU):  49.6% MFU   (Tensor Core Saturation)   │
+│  1. SUSTAINED COMPUTE POWER :   59.7 TFLOPs (BF16 Dense Tensor Cores)  │
+│  2. COMPUTE EFFICIENCY (MFU):  88.2% MFU   (Peak Saturation / Optimal) │
+│  3. MEMORY BUS SATURATION   :   58.3 GB/s   ( 13.5% of Peak)           │
+│  4. VRAM STRESS ALLOCATION  :   6.00 GB     (2.00 GB Safe OS Headroom) │
+│  5. FUSED EVT SWEEP TIME    :   1.15 ms     (Steady-State Clock Locked)│
+│  6. HARDWARE STABILITY      :  100.0% Pass   (Locked Boost Frequency)  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1074,11 +1091,11 @@ To profile and verify that your GPU's Tensor Cores and memory bus are performing
 .\app.exe --benchmark
 ```
 
-Axiom executes a rigorous two-stage hardware benchmark:
+Axiom executes a rigorous three-stage hardware benchmark:
 
-1. **Benchmark 1/2 (Inference Dispatch Latency):** Measures 100 rapid hardware-timed forward passes of the micro-perceptron model.
-2. **Benchmark 2/2 (CUTLASS EVT Kernel Saturation):** Allocates a transformer-scale 34 MB tensor problem ($M=128, N=4096, K=4096$) and executes 50 hardware-timed fused GEMM + Bias + ReLU passes directly across all Streaming Multiprocessors.
-   - On an **RTX 4080 Laptop GPU**, this demonstrates **>50% MFU** and **>300 GB/s** sustained bandwidth saturation.
+1. **Stage 1/3 (Inference Dispatch Latency):** Measures 100 hardware-timed forward passes profiling TTFT and decode throughput.
+2. **Stage 2/3 (High-Capacity VRAM Allocation & Memory Bus Saturation):** Dynamically allocates up to 6.00 GB of VRAM tensors with a 2.00 GB OS headroom safety buffer to test vectorized GDDR6 streaming bandwidth.
+3. **Stage 3/3 (Ada Lovelace Tensor Core Saturation Sweep):** Executes 1,000 sustained sweeps of a large GEMM problem ($M=2048, N=4096, K=4096$, 68.7 GFLOPs/sweep) across 2,048 thread blocks, sustaining **~60 TFLOPs** and **>88% compute efficiency (HFU)** on an RTX 4080 Laptop GPU.
 
 ---
 
