@@ -21,6 +21,7 @@ Welcome to the definitive engineering documentation for **Project Axiom** ðŸŒŒ â
 | **11** | [11_ROADMAP_AND_SCALING_V2.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/11_ROADMAP_AND_SCALING_V2.md) | Technical blueprint for Version 2.0: Four-Stage Ingestion, Learnable VRAM Embeddings, AdamW Optimizer State, BFC Allocator, PagedAttention, CUDA Graphs, and Mixture of Experts (MoE). |
 | **12** | [12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md) | Release kits for LinkedIn, X (Twitter), Reddit, and Hacker News outlining the project launch, four-stage multimodal pipeline, zero-amnesia optimizer state, and open-source contribution workflow. |
 | **13** | [training_structure.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/training_structure.md) | Domain-specific expert training blueprint, Assembly God specialization (x86_64/PTX), 500 MB dataset curation, corpus hygiene rules, multi-epoch progression, multimodal scaling, and Crawl-Walk-Run strategy. |
+| **14** | [roadmap_to_first_training_phase.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/roadmap_to_first_training_phase.md) | Technical execution sequence to start training: Tokenizer injection (60% compression), batched CUDA dispatch (M=32, 4000 tok/s), Horizon 2 Attention, semantic intent annotations, and 34.7h weekend compute budget. |
 
 ---
 
