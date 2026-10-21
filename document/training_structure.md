@@ -141,7 +141,55 @@ Before committing to massive multi-epoch runs, the engine architecture must inco
 
 ---
 
-## 7. Immediate Action Checklist Prior to Training
+## 7. Multimodal Scaling Reality (Hardware-Constrained Modal Taxonomy)
+
+Project Axiom's unified codebook ($V = 65,536$) is natively pre-allocated for multimodal tokens:
+* **Visual Byte Tokens:** `[64,512 .. 64,767]` (256 discrete visual slots).
+* **Acoustic Byte Tokens:** `[64,768 .. 65,023]` (256 discrete acoustic slots).
+
+Mathematically, NVIDIA Tensor Cores process matrix geometry identically regardless of modality: Token `#64,520` (a visual byte) and Token `#1,024` (a C++ keyword) exist on the exact same continuous embedding manifold. However, physical hardware constraints (16 GB VRAM on the RTX 4080) impose strict operational limits across modalities:
+
+| Modality | Feasibility on RTX 4080 | Context Footprint | Required Representation & Architecture |
+| :--- | :--- | :--- | :--- |
+| **1. Text & Code** | **Immediate (Priority 1)** | Minimal (128–256 tokens per block) | Raw categorical vocabulary. Proves MHA convergence and syntactic reasoning with minimal VRAM overhead. |
+| **2. Voice & Audio** | **High (Priority 2)** | Moderate (discrete acoustic tokens) | EnCodec / AudioLM autoregression. Text prompt $\rightarrow$ acoustic token prediction. Enables local sound effect generation and lightweight TTS. |
+| **3. Image Generation** | **Feasible via Latents (Priority 3)** | Compressed ($16 \times 16$ latent grid) | **Mandatory VQ-VAE**. Direct RGB pixel modeling is forbidden (context explosion). Autoregressive latent token prediction decoded via VQ-VAE. |
+| **4. Video Generation** | **Postponed (Out of Scope)** | Prohibitive (4D Tensors: $B \times T \times H \times W$) | Temporal attention maps exceed 16 GB VRAM during backward backprop; causes immediate device Out-Of-Memory (OOM). |
+
+---
+
+## 8. Staged Execution Strategy: Crawl, Walk, Run
+
+To prevent debugging VRAM starvation and architectural divergence simultaneously, multimodal development follows a strict staged progression:
+
+```
++-----------------------------------------------------------------------------------+
+|                        STAGE 1: CRAWL (TEXT & CODE FOUNDATION)                    |
+|  - Implement Horizon 2 Multi-Head Self-Attention (MHA)                            |
+|  - Train 50M parameter model on 500 MB pristine C++ / CUDA source code            |
+|  - Verify mathematical loss convergence and syntax synthesis                      |
++-----------------------------------------------------------------------------------+
+                                          │
+                                          ▼
++-----------------------------------------------------------------------------------+
+|                        STAGE 2: WALK (ACOUSTIC GENERATION)                        |
+|  - Connect decompress_audio pipeline to acoustic token range [64,768 .. 65,023]    |
+|  - Implement discrete waveform tokenization (EnCodec / AudioLM paradigm)          |
+|  - Train targeted sound-effect / phoneme generator from text conditioning         |
++-----------------------------------------------------------------------------------+
+                                          │
+                                          ▼
++-----------------------------------------------------------------------------------+
+|                        STAGE 3: RUN (LATENT VISUAL GENERATION)                    |
+|  - Implement Vector Quantized Variational Autoencoder (VQ-VAE)                    |
+|  - Compress 256x256 images into 16x16 discrete visual token sequences            |
+|  - Train autoregressive latent generation for procedural pixel art and textures   |
++-----------------------------------------------------------------------------------+
+```
+
+---
+
+## 9. Immediate Action Checklist Prior to Training
 
 - [ ] Select domain focus (**Option A: Systems/CUDA C++** or **Option B: Kinetic Physics**).
 - [ ] Collate raw `.cpp` / `.cu` files or extract uncompressed research text to `asset_sample/`.
@@ -149,3 +197,5 @@ Before committing to massive multi-epoch runs, the engine architecture must inco
 - [ ] Enforce frequency threshold ($\ge 3$ occurrences) to preserve dictionary vocabulary slots.
 - [ ] Implement batched sliding window gathering in CUDA to maximize Tensor Core MFU.
 - [ ] Integrate Horizon 2 Self-Attention layer prior to final weight convergence pass.
+- [ ] Adhere to the **Crawl, Walk, Run** sequence: master code logic before hooking acoustic or visual codecs.
+
