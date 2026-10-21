@@ -20,6 +20,7 @@ Welcome to the definitive engineering documentation for **Project Axiom** ðŸŒŒ â
 | **10** | [10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md) | Mathematical derivations of autoregression, Shannon entropy of compressed files vs semantic manifolds, shared text/number representations, AdamW momentum dynamics, and "The Rewind Test". |
 | **11** | [11_ROADMAP_AND_SCALING_V2.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/11_ROADMAP_AND_SCALING_V2.md) | Technical blueprint for Version 2.0: Four-Stage Ingestion, Learnable VRAM Embeddings, AdamW Optimizer State, BFC Allocator, PagedAttention, CUDA Graphs, and Mixture of Experts (MoE). |
 | **12** | [12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md) | Release kits for LinkedIn, X (Twitter), Reddit, and Hacker News outlining the project launch, four-stage multimodal pipeline, zero-amnesia optimizer state, and open-source contribution workflow. |
+| **13** | [training_structure.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/training_structure.md) | Domain-specific expert training blueprint, 500 MB dataset curation, corpus hygiene rules, multi-epoch progression, and Attention prerequisite. |
 
 ---
 
