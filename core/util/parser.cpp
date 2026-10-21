@@ -331,24 +331,38 @@ uint32_t Parser::decode_token(const Input& input, const std::vector<float>& embe
 		}
 	}
 
+	float y_norm_sq = 0.0f;
+	for (size_t d = 0; d < compared_dims; ++d) {
+		y_norm_sq += embedding_vector[d] * embedding_vector[d];
+	}
+	float y_inv_norm = 1.0f / (std::sqrt(y_norm_sq) + 1e-8f);
+
 	const float* row = input.decode_vectors.data();
 
 	uint32_t best_id = 0;
-	float min_dist_sq = std::numeric_limits<float>::max();
+	float best_sim = -1e30f;
 
 	for (size_t i = 0; i < input.decode_ids.size(); ++i, row += input.embedding_dim) {
-		float dist_sq = 0.0f;
+		uint32_t id = input.decode_ids[i];
+		if (id == vocab::PAD) {
+			continue;
+		}
+
+		float dot = 0.0f;
+		float e_norm_sq = 0.0f;
 		for (size_t d = 0; d < compared_dims; ++d) {
-			const float diff = embedding_vector[d] - row[d];
-			dist_sq += diff * diff;
-			if (dist_sq >= min_dist_sq) {
-				break;
-			}
+			dot += embedding_vector[d] * row[d];
+			e_norm_sq += row[d] * row[d];
 		}
-		if (dist_sq < min_dist_sq) {
-			min_dist_sq = dist_sq;
-			best_id = input.decode_ids[i];
+		float cosine_sim = dot * y_inv_norm / (std::sqrt(e_norm_sq) + 1e-8f);
+		if (cosine_sim > best_sim) {
+			best_sim = cosine_sim;
+			best_id = id;
 		}
+	}
+
+	if (best_id == 0 && !input.decode_ids.empty()) {
+		best_id = input.decode_ids[0];
 	}
 
 	return best_id;
