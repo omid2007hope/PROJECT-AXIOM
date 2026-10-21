@@ -12,11 +12,12 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../include/Identifier.hpp"
 #include "../include/decompressor/decompress_audio.hpp"
 #include "../include/decompressor/decompress_document.hpp"
 #include "../include/decompressor/decompress_image.hpp"
 #include "../include/decompressor/decompress_video.hpp"
+#include "../include/Identifier.hpp"
+
 
 
 // Data Streaming (or Batching).
@@ -32,7 +33,8 @@ Now isolated from the neural network entirely.
 
 // Cleans raw token strings: lowercases ASCII and strips leading/trailing punctuation
 static std::string sanitize_word(const std::string& raw) {
-	if (raw.empty()) return "";
+	if (raw.empty())
+		return "";
 	if (raw.size() >= 3 && raw.front() == '<' && raw.back() == '>') {
 		return raw;
 	}
@@ -44,7 +46,8 @@ static std::string sanitize_word(const std::string& raw) {
 	while (end > start && (std::ispunct(static_cast<unsigned char>(raw[end - 1])))) {
 		--end;
 	}
-	if (start >= end) return "";
+	if (start >= end)
+		return "";
 	std::string clean = raw.substr(start, end - start);
 	for (char& c : clean) {
 		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -65,7 +68,8 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 		for (const std::string& word : test.test_input) {
 			std::string clean = sanitize_word(word);
 			if (!clean.empty()) {
-				add_assign_increase(clean, input.main_dictionary, input.next_text_id, input);
+				add_assign_increase(
+					clean, input.main_dictionary, input.next_text_id, input);
 			}
 		}
 
@@ -97,7 +101,8 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 		for (const std::string& word : input.user_input) {
 			std::string clean = sanitize_word(word);
 			if (!clean.empty()) {
-				add_assign_increase(clean, input.main_dictionary, input.next_text_id, input);
+				add_assign_increase(
+					clean, input.main_dictionary, input.next_text_id, input);
 			}
 		}
 
@@ -178,13 +183,19 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 			if (it != input.embedding_table.end()) {
 				current_vec = it->second;
 			} else {
-				float bound = 1.0f / std::sqrt(static_cast<float>(input.embedding_dim > 0 ? input.embedding_dim : 4));
+				float bound =
+					1.0f /
+					std::sqrt(static_cast<float>(
+						input.embedding_dim > 0 ? input.embedding_dim : 4));
 				for (size_t d = 0; d < input.embedding_dim; ++d) {
-					uint32_t h = id * 0x45d9f3b + static_cast<uint32_t>(d + 1) * 0x119de1f3;
+					uint32_t h = id * 0x45d9f3b +
+						     static_cast<uint32_t>(d + 1) * 0x119de1f3;
 					h = ((h >> 16) ^ h) * 0x45d9f3b;
 					h = ((h >> 16) ^ h);
-					float norm = static_cast<float>(h) / static_cast<float>(0xFFFFFFFFU);
-					current_vec[d] = static_cast<std::bfloat16_t>(-bound + 2.0f * bound * norm);
+					float norm = static_cast<float>(h) /
+						     static_cast<float>(0xFFFFFFFFU);
+					current_vec[d] = static_cast<std::bfloat16_t>(
+						-bound + 2.0f * bound * norm);
 				}
 			}
 		}
@@ -256,22 +267,25 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 }
 
 void Parser::build_embedding_table(Input& input) {
-	const size_t total_unique = input.main_dictionary.size() +
-				    input.image_dictionary.size() + input.video_dictionary.size() +
-				    input.voice_dictionary.size();
+	const size_t total_unique = input.main_dictionary.size() + input.image_dictionary.size() +
+				    input.video_dictionary.size() + input.voice_dictionary.size();
 	if (total_unique > 0) {
 		input.embedding_table.reserve(total_unique);
 	}
 
-	float bound = 1.0f / std::sqrt(static_cast<float>(input.embedding_dim > 0 ? input.embedding_dim : 4));
+	float bound =
+		1.0f /
+		std::sqrt(static_cast<float>(input.embedding_dim > 0 ? input.embedding_dim : 4));
 	auto ensure_embedding = [&](uint32_t id) {
 		if (input.embedding_table.find(id) == input.embedding_table.end()) {
 			std::vector<std::bfloat16_t> vec(input.embedding_dim);
 			for (uint32_t d = 0; d < input.embedding_dim; ++d) {
-				uint32_t h = id * 0x45d9f3b + static_cast<uint32_t>(d + 1) * 0x119de1f3;
+				uint32_t h =
+					id * 0x45d9f3b + static_cast<uint32_t>(d + 1) * 0x119de1f3;
 				h = ((h >> 16) ^ h) * 0x45d9f3b;
 				h = ((h >> 16) ^ h);
-				float norm = static_cast<float>(h) / static_cast<float>(0xFFFFFFFFU);
+				float norm =
+					static_cast<float>(h) / static_cast<float>(0xFFFFFFFFU);
 				vec[d] = static_cast<std::bfloat16_t>(-bound + 2.0f * bound * norm);
 			}
 			input.embedding_table[id] = std::move(vec);
@@ -288,8 +302,7 @@ void Parser::build_embedding_table(Input& input) {
 		ensure_embedding(id);
 }
 
-uint32_t Parser::decode_token(const Input& input,
-			      const std::vector<float>& embedding_vector) {
+uint32_t Parser::decode_token(const Input& input, const std::vector<float>& embedding_vector) {
 	if (input.embedding_table.empty()) {
 		return 0;
 	}
@@ -377,15 +390,13 @@ std::string Parser::token_to_string(const Input& input, uint32_t token_id) {
 				       std::to_string(static_cast<int>(byte_val)) + "]";
 			}
 		}
-		return "[Image byte: " +
-		       std::to_string(static_cast<int>(byte_val)) + "]";
+		return "[Image byte: " + std::to_string(static_cast<int>(byte_val)) + "]";
 	}
 
 	// 3. Acoustic Modality (Voice & Audio waveforms: 64,768 to 65,023)
 	if (token_id >= vocab::ACOUSTIC_START_ID && token_id <= vocab::ACOUSTIC_END_ID) {
 		uint8_t byte_val = static_cast<uint8_t>(token_id - vocab::ACOUSTIC_START_ID);
-		return "[Voice byte: " +
-		       std::to_string(static_cast<int>(byte_val)) + "]";
+		return "[Voice byte: " + std::to_string(static_cast<int>(byte_val)) + "]";
 	}
 
 	// 4. Reserved Expansion Slots (65,024 to 65,535)
@@ -410,18 +421,27 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	std::string word;
 	while (iss >> word) {
 		std::string clean = sanitize_word(word);
-		if (clean.empty()) continue;
+		if (clean.empty())
+			continue;
 
 		auto it = input.main_dictionary.find(clean);
 		if (it == input.main_dictionary.end()) {
 			it = input.main_dictionary.find(word);
 		}
 
+		// last element of main == new data
 		if (it == input.main_dictionary.end()) {
+
+			// check if we didn't pass the limit
 			if (input.next_text_id <= vocab::TEXT_MAX_ID) {
 				uint32_t new_id = input.next_text_id++;
+
+				// sanitized_word in main_Dictionary assign it a id
 				input.main_dictionary[clean] = new_id;
+
+				// id in reverse_main_Dictionary assign it, it's exact data
 				input.reverse_main_dictionary[new_id] = clean;
+				// put all in tokens
 				tokens.push_back(new_id);
 			} else {
 				input.main_dictionary[clean] = vocab::UNK;
@@ -605,16 +625,17 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		bool is_doc = (id_file.modality == ModalityCategory::DOCUMENT || is_text_ext ||
 			       ext == ".pdf" || ext == ".docx");
 
-		bool is_image = (id_file.modality == ModalityCategory::IMAGE ||
-				 ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" ||
-				 ext == ".webp" || ext == ".gif" || ext == ".tiff" || ext == ".tif");
+		bool is_image =
+			(id_file.modality == ModalityCategory::IMAGE || ext == ".jpg" ||
+			 ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".webp" ||
+			 ext == ".gif" || ext == ".tiff" || ext == ".tif");
 
-		bool is_video = (id_file.modality == ModalityCategory::VIDEO ||
-				 ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov" ||
+		bool is_video = (id_file.modality == ModalityCategory::VIDEO || ext == ".mp4" ||
+				 ext == ".mkv" || ext == ".avi" || ext == ".mov" ||
 				 ext == ".webm" || ext == ".wmv");
 
-		bool is_audio = (id_file.modality == ModalityCategory::AUDIO ||
-				 ext == ".ogg" || ext == ".wav" || ext == ".mp3" || ext == ".flac" ||
+		bool is_audio = (id_file.modality == ModalityCategory::AUDIO || ext == ".ogg" ||
+				 ext == ".wav" || ext == ".mp3" || ext == ".flac" ||
 				 ext == ".aac" || ext == ".m4a" || ext == ".wma" || ext == ".opus");
 
 		if (is_doc) {
@@ -626,11 +647,16 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			while (iss >> word) {
 				std::string clean = sanitize_word(word);
 				if (!clean.empty()) {
-					add_assign_increase(clean, input.main_dictionary, input.next_text_id, input);
+					add_assign_increase(clean,
+							    input.main_dictionary,
+							    input.next_text_id,
+							    input);
 				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
-			std::string tag = (ext == ".pdf") ? "PDF Document" : ((ext == ".docx") ? "DOCX Document" : "Text");
+			std::string tag = (ext == ".pdf")
+						  ? "PDF Document"
+						  : ((ext == ".docx") ? "DOCX Document" : "Text");
 			report_file_done(fpath, fsize, tag, added);
 		} else if (is_image) {
 			// Phase 1.3: Genuine visual media to discrete visual byte tokenizer

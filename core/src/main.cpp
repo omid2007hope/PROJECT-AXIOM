@@ -573,15 +573,22 @@ void run_inference_engine(AI& ai,
 		  << "--------------------------------------------------------\n"
 		  << "Enter text or prompt to predict next token (type 'exit' to quit):\n";
 
+	// ****
+	// Use
+	// ****
+
 	std::string line;
+
 	while (true) {
 		std::cout << "\nPrompt > ";
 		if (!std::getline(std::cin, line)) {
 			break;
 		}
+
 		strip_utf8_bom(line);
 
 		while (_isatty(_fileno(stdin)) && _kbhit()) {
+
 			std::string next_line;
 			if (std::getline(std::cin, next_line)) {
 				strip_utf8_bom(next_line);
@@ -600,8 +607,13 @@ void run_inference_engine(AI& ai,
 			break;
 		}
 
+		Input input;
+
+		std::vector<unit32_t> tokens = input.tokenized_data;
+
 		// Tokenize input prompt
-		std::vector<uint32_t> tokens = parser.tokenize_prompt(input, line);
+		generate(line, size_t 128, float 0.5, int 1, float 1);
+
 		std::cout << "[Tokens] (" << tokens.size() << " tokens): ";
 		for (size_t i = 0; i < tokens.size(); ++i) {
 			std::cout << tokens[i] << (i + 1 < tokens.size() ? ", " : "\n");
@@ -627,7 +639,8 @@ void run_inference_engine(AI& ai,
 		if (predicted_token_id == 0 && !input.embedding_table.empty()) {
 			predicted_token_id = parser.decode_token(input, prediction);
 		}
-		std::string predicted_token_string = parser.token_to_string(input, predicted_token_id);
+		std::string predicted_token_string =
+			parser.token_to_string(input, predicted_token_id);
 		telemetry.end_inference(ai.host_weights.size());
 
 		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] ["
@@ -1175,7 +1188,8 @@ bool execute_training_session(AI& ai,
 				for (size_t d = 0; d < ai.embedding_dim; ++d) {
 					std::cout
 						<< std::fixed << std::setprecision(4)
-						<< ai.host_embeddings[token_id * ai.embedding_dim + d]
+						<< ai.host_embeddings[token_id * ai.embedding_dim +
+								      d]
 						<< (d + 1 < ai.embedding_dim ? ", " : "");
 				}
 			} else {

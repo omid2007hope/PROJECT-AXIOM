@@ -6,10 +6,20 @@
 #include <iostream>
 #include <random>
 
+#include "../include/parser.hpp"
 #include "../include/transfer.hpp"
+#include "../util/parser.cpp"
 
-AI::AI(size_t input_dimension, size_t output_dimension, float weight_min, float weight_max, Elements& elements)
-    : input_dimension(input_dimension), output_dimension(output_dimension), weight_min(weight_min), weight_max(weight_max) {
+
+AI::AI(size_t input_dimension,
+       size_t output_dimension,
+       float weight_min,
+       float weight_max,
+       Elements& elements)
+    : input_dimension(input_dimension),
+      output_dimension(output_dimension),
+      weight_min(weight_min),
+      weight_max(weight_max) {
 
 	// input_dimension = token * dim = 512
 	// output_dimension = target * dim = 4
@@ -245,7 +255,8 @@ bool AI::save_weights(const std::string& path) {
 	header.vocab_size = vocab_size;
 	header.embedding_dim = embedding_dim;
 
-	if (header.weight_count != input_dimension * output_dimension || header.bias_count != output_dimension) {
+	if (header.weight_count != input_dimension * output_dimension ||
+	    header.bias_count != output_dimension) {
 		std::cerr << "[AI Brain] Weight or bias dimension mismatch during serialization.\n";
 		return false;
 	}
@@ -290,7 +301,8 @@ bool AI::save_weights(const std::string& path) {
 	out.write(reinterpret_cast<const char*>(&header), sizeof(header));
 	out.write(reinterpret_cast<const char*>(host_weights.data()),
 		  header.weight_count * sizeof(float));
-	out.write(reinterpret_cast<const char*>(host_bias.data()), header.bias_count * sizeof(float));
+	out.write(reinterpret_cast<const char*>(host_bias.data()),
+		  header.bias_count * sizeof(float));
 	out.write(reinterpret_cast<const char*>(host_embeddings.data()),
 		  header.vocab_size * header.embedding_dim * sizeof(float));
 
@@ -353,14 +365,17 @@ bool AI::load_weights(const std::string& path) {
 	}
 
 	// Validate model dimensions
-	if (header.input_dimension != input_dimension || header.output_dimension != output_dimension) {
+	if (header.input_dimension != input_dimension ||
+	    header.output_dimension != output_dimension) {
 		std::cerr << "[AI Brain] Dimension mismatch in " << path << ": file has ("
-			  << header.input_dimension << " -> " << header.output_dimension << "), model expects ("
-			  << input_dimension << " -> " << output_dimension << ")\n";
+			  << header.input_dimension << " -> " << header.output_dimension
+			  << "), model expects (" << input_dimension << " -> " << output_dimension
+			  << ")\n";
 		return false;
 	}
 
-	if (header.weight_count != input_dimension * output_dimension || header.bias_count != output_dimension) {
+	if (header.weight_count != input_dimension * output_dimension ||
+	    header.bias_count != output_dimension) {
 		std::cerr << "[AI Brain] Element count mismatch in " << path << "\n";
 		return false;
 	}
@@ -452,7 +467,8 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 
 	synchronize_stream(&gpu_portion, 0);
 
-	std::vector<std::bfloat16_t> dummy_target(output_dimension, static_cast<std::bfloat16_t>(0.0f));
+	std::vector<std::bfloat16_t> dummy_target(output_dimension,
+						  static_cast<std::bfloat16_t>(0.0f));
 
 	if (!upload_to_gpu(context_window.data(),
 			   context_window.size(),
@@ -504,5 +520,12 @@ bool AI::generate(const std::string prompt,
 		  float temperature,
 		  int top_k,
 		  float top_d) {
+
+	Input input;
+	Parser parser;
+
+	//tokenize_prompt receives prompt, responses token
+	std::vector<uint32_t> tokenized_data = parser.tokenize_prompt(Input, prompt);
+
 	return false;
 }
