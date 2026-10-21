@@ -52,6 +52,7 @@ Given the 16 GB physical VRAM ceiling of the RTX 4080, training an unconstrained
 | **Option A: The Systems Engineer** | C++23 & NVIDIA CUDA Kernels | Production repositories (CUTLASS, PyTorch ATen, Godot) | Low-level memory management, RAII, warp intrinsics, pointer arithmetic |
 | **Option B: The Ballistics Physicist** | Terminal ballistics & material impact | Research papers, textbook chapters, MOP terminal simulation assets | Continuum mechanics, shock waves, penetration depth formulas, equation of state |
 | **Option C: The Stylistic Author** | Specialized narrative fiction | Curated literary series, single-author anthologies | Coherent character voice, dialogue mechanics, narrative pacing |
+| **Option D: The Bare-Metal Assembly God** | Direct Silicon Machine Code | x86_64 NASM/Intel or NVIDIA PTX repositories, disassembled kernels | Direct CPU/GPU register control, vector intrinsics (AVX-512), zero-compiler overhead |
 
 > **Architectural Law:** The narrower the target domain, the faster the loss manifold converges on deterministic logic rather than memorizing disjointed surface statistics.
 
@@ -73,9 +74,43 @@ The target dataset footprint is **100 MB to 500 MB** of uncompressed, plain-text
 1. Collect 20 to 40 academic textbooks, peer-reviewed journals, and declassified impact mechanics papers.
 2. Feed PDF and compressed documents through the Project Axiom [`Decompressor`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md#the-four-stage-multimodal-ingestion-pipeline) pipeline to extract continuous text streams, discarding raster graphics and layout artifacts.
 
+### Domain C: Bare-Metal Assembly & ISA Ingestion
+1. Curate heavily commented assembly projects and standalone kernel bootloaders.
+2. Isolate strictly `.asm`, `.s`, `.nasm`, or `.ptx` files matching your chosen target silicon.
+3. Exclude mixed architecture files or compiler-generated un-annotated disassemblies lacking semantic intent markers.
+
 ---
 
-## 4. Phase 3: Corpus Hygiene & Formatting
+## 4. Specialization Blueprint: The Bare-Metal Assembly God (ISA Engineering)
+
+Bypassing the compiler to build a silicon-whisperer that speaks directly to hardware registers eliminates layer bloat. However, because Assembly has low semantic density and high verbosity compared to C++, training an Assembly model within a 256-token context window on an RTX 4080 requires adhering to three unbreakable architectural rules:
+
+### Rule 1: Pick One Dialect and Burn the Rest
+Assembly changes fundamentally based on physical silicon. Mixing x86_64, ARM (AArch64), and RISC-V within the same training corpus causes fatal modal hallucinations (e.g., attempting to push an ARM `w0` register into an x86 `rax` instruction):
+* **Target Option 1 (Host CPU Native):** Train strictly on **x86_64 (NASM or Intel syntax)** for host PC execution.
+* **Target Option 2 (GPU Native / CUDA God):** Train strictly on **NVIDIA PTX (Parallel Thread Execution)** assembly for GPU micro-kernels.
+
+### Rule 2: Heavy "Intent-to-Opcode" Commenting
+A model observing thousands of raw, unannotated lines of `mov`, `lea`, `cmp`, and `jmp` learns statistical sequence patterns without understanding *why* instructions are executed. Structured comments bridge human logic and hardware opcodes:
+
+```nasm
+; [INTENT] Fast inverse square root calculation
+; [VAR] xmm0 = input float
+movss   xmm1, dword [rel magic_number]  ; Load 0x5f3759df
+movd    eax, xmm0                       ; Bit-level integer hack
+```
+
+This conditioning enables the Attention mechanism to mathematically bind the English conceptual intention ("fast inverse square root") directly to physical register manipulations (`movss`, `movd`).
+
+### Rule 3: Rig the Tokenizer (`vocab.axiom`) for Registers & Opcodes
+Default character/byte tokenization splinters vectorized instructions (e.g., `vfmadd231ps` split into `vf`, `madd`, `231`, `ps`), rapidly exhausting context memory.
+* **Pre-Allocate Single-Token Register IDs:** Pre-seed `main_dictionary` and `vocab.axiom` so every hardware register (`rax`, `rsp`, `rbp`, `r8`..`r15`, `xmm0`..`xmm15`, `ymm0`..`ymm31`) receives a **single, unique integer ID**.
+* **Pre-Allocate Unified Opcode IDs:** Assign atomic token IDs to core opcodes (`mov`, `xor`, `lea`, `vfmadd231ps`, `syscall`).
+* **Context Compression:** Treating registers and opcodes as atomic tokens compresses Assembly verbosity by **~60%**, allowing complete 80-to-120 line algorithms to fit within the 256-token context window.
+
+---
+
+## 5. Phase 3: Corpus Hygiene & Formatting
 
 Raw textual data frequently contains non-semantic byte sequences (corrupted PDF symbols, Base64 strings, unescaped HTML, or hex dumps) that degrade Tensor Core efficiency.
 
@@ -93,7 +128,7 @@ Before raw text enters the [`Identifier`](file:///c:/Users/Omid/X/Code/PROJECT-A
 
 ---
 
-## 5. Phase 4: Multi-Epoch Training Loop Strategy
+## 6. Phase 4: Multi-Epoch Training Loop Strategy
 
 A single linear pass over the dataset is insufficient for functional synthesis. The dataset must be trained over **multiple shuffled epochs**:
 
@@ -126,7 +161,7 @@ A single linear pass over the dataset is insufficient for functional synthesis. 
 
 ---
 
-## 6. Architectural Prerequisite: Multi-Head Self-Attention (Horizon 2)
+## 7. Architectural Prerequisite: Multi-Head Self-Attention (Horizon 2)
 
 Training 500 MB of high-density domain data on a single-layer perceptron projection risks creating a high-capacity memorization engine ("drunk historian") that predicts the next token based only on the immediate static average of the context window.
 
@@ -141,7 +176,7 @@ Before committing to massive multi-epoch runs, the engine architecture must inco
 
 ---
 
-## 7. Multimodal Scaling Reality (Hardware-Constrained Modal Taxonomy)
+## 8. Multimodal Scaling Reality (Hardware-Constrained Modal Taxonomy)
 
 Project Axiom's unified codebook ($V = 65,536$) is natively pre-allocated for multimodal tokens:
 * **Visual Byte Tokens:** `[64,512 .. 64,767]` (256 discrete visual slots).
@@ -158,7 +193,7 @@ Mathematically, NVIDIA Tensor Cores process matrix geometry identically regardle
 
 ---
 
-## 8. Staged Execution Strategy: Crawl, Walk, Run
+## 9. Staged Execution Strategy: Crawl, Walk, Run
 
 To prevent debugging VRAM starvation and architectural divergence simultaneously, multimodal development follows a strict staged progression:
 
@@ -189,13 +224,15 @@ To prevent debugging VRAM starvation and architectural divergence simultaneously
 
 ---
 
-## 9. Immediate Action Checklist Prior to Training
+## 10. Immediate Action Checklist Prior to Training
 
-- [ ] Select domain focus (**Option A: Systems/CUDA C++** or **Option B: Kinetic Physics**).
-- [ ] Collate raw `.cpp` / `.cu` files or extract uncompressed research text to `asset_sample/`.
+- [ ] Select domain focus (**Option A: Systems/CUDA C++**, **Option B: Kinetic Physics**, or **Option D: Bare-Metal Assembly God**).
+- [ ] If training **Option D (Assembly God)**: Lock strictly to one dialect (x86_64 NASM or PTX), enforce intent comments, and pre-allocate registers in `vocab.axiom`.
+- [ ] Collate raw `.cpp` / `.cu` / `.asm` files or extract uncompressed research text to `asset_sample/`.
 - [ ] Execute UTF-8 sanitization and whitespace normalization script.
 - [ ] Enforce frequency threshold ($\ge 3$ occurrences) to preserve dictionary vocabulary slots.
 - [ ] Implement batched sliding window gathering in CUDA to maximize Tensor Core MFU.
 - [ ] Integrate Horizon 2 Self-Attention layer prior to final weight convergence pass.
 - [ ] Adhere to the **Crawl, Walk, Run** sequence: master code logic before hooking acoustic or visual codecs.
+
 
