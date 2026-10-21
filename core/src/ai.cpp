@@ -239,14 +239,7 @@ bool AI::save_weights(const std::string& path) {
 
 	// 3. Populate binary header
 	AxiomWeightHeader header {};
-	header.magic[0] = 'A';
-	header.magic[1] = 'X';
-	header.magic[2] = 'I';
-	header.magic[3] = 'O';
-	header.magic[4] = 'M';
-	header.magic[5] = '_';
-	header.magic[6] = 'V';
-	header.magic[7] = '1';
+	std::memcpy(header.magic, "AXIOM_V1", 8);
 	header.input_dimension = input_dimension;
 	header.output_dimension = output_dimension;
 	header.weight_count = host_weights.size();
@@ -569,7 +562,22 @@ bool AI::generate(const std::string& prompt,
 		}
 
 		tokens.push_back(token_id);
-		context_window = parser.build_context_window(input, tokens, context_token_count);
+		const size_t roll_elements = embedding_dim;
+		if (context_window.size() >= roll_elements) {
+			std::memmove(context_window.data(),
+				     context_window.data() + roll_elements,
+				     (context_window.size() - roll_elements) * sizeof(std::bfloat16_t));
+			auto it = input.embedding_table.find(token_id);
+			if (it != input.embedding_table.end() && it->second.size() == roll_elements) {
+				std::memcpy(context_window.data() + context_window.size() - roll_elements,
+					    it->second.data(),
+					    roll_elements * sizeof(std::bfloat16_t));
+			} else {
+				std::memset(context_window.data() + context_window.size() - roll_elements,
+					    0,
+					    roll_elements * sizeof(std::bfloat16_t));
+			}
+		}
 	}
 
 	return true;

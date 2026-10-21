@@ -61,7 +61,7 @@ public:
 	AI& operator=(const AI&) = delete;
 
 	size_t vocab_size = 65536;
-	size_t embedding_dim = 32;
+	size_t embedding_dim = 4;
 	size_t active_vocab_size = 0;
 
 	// CPU Memory (High precision float for initialization and updates)
