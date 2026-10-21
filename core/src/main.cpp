@@ -68,10 +68,12 @@ constexpr float learning_rate = 0.0005f; // Scaled down for stable high-dimensio
 // How many training steps pass between two loss reports
 constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU synchronization stalls
 
-// Initial weights are drawn uniformly from [-1/sqrt(d), +1/sqrt(d)]
-// For d=1024, 1/sqrt(1024) = 0.03125f. Prevents activation explosion.
-constexpr float weight_min = -0.03125f;
-constexpr float weight_max = 0.03125f;
+// Initial weights are drawn uniformly from [-sqrt(3/K), +sqrt(3/K)], K = fan-in =
+// context_window_size * token_dim = 262144. That gives std 1/sqrt(K) = 1/512, so the
+// RMS-normalized input produces unit-variance outputs. (1/sqrt(token_dim) ignores the
+// 256x fan-in and explodes the logits.) sqrt(3)/512 = 0.0033854167f.
+constexpr float weight_min = -0.0033854167f;
+constexpr float weight_max = 0.0033854167f;
 
 // Folder layout, relative to the core/ folder
 constexpr const char* database_folder = "database";
@@ -607,24 +609,24 @@ void run_inference_engine(AI& ai,
 			break;
 		}
 
-		// Tokenize input prompt
-		std::vector<uint32_t> tokens = parser.tokenize_prompt(input, line);
+		// Read-only tokenization: unseen words become <UNK>, never a new untrained ID
+		std::vector<uint32_t> tokens = parser.tokenize_for_inference(input, line);
 
 		std::cout << "[Tokens] (" << tokens.size() << " tokens): ";
 		for (size_t i = 0; i < tokens.size(); ++i) {
 			std::cout << tokens[i] << (i + 1 < tokens.size() ? ", " : "\n");
 		}
 
-		// Generate 128-token context window (512 BF16 floats)
-		std::vector<std::bfloat16_t> context_window =
-			parser.build_context_window(input, tokens, config::context_window_size);
+		// Right-aligned token ID window (PAD = 0 on the left), same layout as training
+		std::vector<uint32_t> context_ids =
+			parser.build_context_ids(tokens, config::context_window_size);
 
 		AxiomTelemetry telemetry;
 		telemetry.begin_inference();
 
 		// Run forward prediction on Tensor Cores
 		std::vector<float> prediction;
-		if (!ai.predict(context_window, prediction)) {
+		if (!ai.predict_tokens(context_ids, prediction)) {
 			std::cerr << "[!] Forward prediction failed.\n";
 			continue;
 		}

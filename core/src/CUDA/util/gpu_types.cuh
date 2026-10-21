@@ -29,6 +29,9 @@ struct GpuPortion {
 	// in order while the PCIe uploads of the two buffers still overlap.
 	void* compute_done[2] = {nullptr, nullptr};
 
+	// true only while d_token_ids[i] holds the IDs of the step currently uploaded to buffer i
+	bool token_ids_active[2] = {false, false};
+
 	size_t token_count = 0;      // total token count in context window (e.g. 128)
 	size_t context_elements = 0; // total bfloat16 elements in X
 	size_t target_elements = 0;  // total bfloat16 elements in Y

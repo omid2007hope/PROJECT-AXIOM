@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -36,6 +37,8 @@ extern "C" CUDA_API void free_gpu(GpuPortion* gpu) {
 	}
 	gpu->context_elements = 0;
 	gpu->token_count = 0;
+	gpu->token_ids_active[0] = false;
+	gpu->token_ids_active[1] = false;
 
 	for (size_t i = 0; i < gpu->target_ptr; ++i) {
 		if (gpu->d_target[i]) {
@@ -137,6 +140,7 @@ extern "C" CUDA_API bool allocate_gpu_embeddings(GpuEmbeddings* gpu_emb,
 	for (size_t i = 0; i < total_elements; ++i) {
 		h_chaos[i] = dis(gen);
 	}
+	std::fill(h_chaos, h_chaos + embedding_dim, 0.0f); // PAD row
 
 	cudaMemcpy(gpu_emb->d_table_master, h_chaos, total_elements * sizeof(float), cudaMemcpyHostToDevice);
 	free(h_chaos);

@@ -239,7 +239,8 @@ __global__ static void backward_scatter_embeddings_kernel(
 		size_t dim_idx = j % embedding_dim;
 		uint32_t tok_id = token_ids[token_idx];
 
-		if (tok_id < vocab_size) {
+		// PAD (ID 0) is a fixed zero vector and never learns
+		if (tok_id != 0 && tok_id < vocab_size) {
 			size_t table_idx = tok_id * embedding_dim + dim_idx;
 			atomicAdd(&table_master[table_idx], -learning_rate * dx_j);
 
@@ -299,7 +300,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 			return false;
 	}
 
-	bool is_token_training = (gpu_portion->d_token_ids[buffer_index] != nullptr);
+	bool is_token_training = gpu_portion->token_ids_active[buffer_index];
 	size_t vocab_sz = (gpu_embeddings && gpu_embeddings->d_table)
 				  ? (gpu_embeddings->active_vocab_size > 0 ? gpu_embeddings->active_vocab_size
 									   : gpu_embeddings->vocab_size)
@@ -370,7 +371,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 		return false;
 
 	// Phase 5: Backward Scatter Kernel for learnable embedding matrix
-	if (gpu_portion->d_token_ids[buffer_index] && gpu_embeddings &&
+	if (gpu_portion->token_ids_active[buffer_index] && gpu_embeddings &&
 	    gpu_embeddings->d_table_master && gpu_embeddings->d_table) {
 		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count : (input_dim / emb_dim);
 		int threads = 256;

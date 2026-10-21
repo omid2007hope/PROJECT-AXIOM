@@ -55,6 +55,9 @@ private:
 	// Training steps launched since the last read_loss()
 	size_t pending_steps = 0;
 
+	// Copies the last forward pass output and the GPU-argmax token to the host
+	bool read_prediction(std::vector<float>& output_prediction);
+
 public:
 	AI(const AI&) = delete;
 
@@ -112,6 +115,11 @@ public:
 	// Forward Inference Engine (no gradient updates)
 	bool predict(const std::vector<std::bfloat16_t>& context_window,
 		     std::vector<float>& output_prediction);
+
+	// Forward Inference from token IDs (right-aligned, PAD = 0): the GPU gathers the
+	// trained embeddings, so inference sees the same inputs as training.
+	bool predict_tokens(const std::vector<uint32_t>& context_ids,
+			    std::vector<float>& output_prediction);
 
 	// Autoregressive generation loop with real-time streaming
 	bool generate(const std::string& prompt,

@@ -40,6 +40,7 @@ extern "C" CUDA_API bool upload_to_gpu(const void* h_context,
 		}
 	}
 	gpu->context_elements = context_elements;
+	gpu->token_ids_active[buffer_index] = false; // float context: nothing to gather
 
 	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_context_window[buffer_index],
 					h_context,
@@ -109,6 +110,7 @@ extern "C" CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
 		}
 	}
 	gpu->token_count = token_count;
+	gpu->token_ids_active[buffer_index] = true;
 
 	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_token_ids[buffer_index],
 					h_token_ids,

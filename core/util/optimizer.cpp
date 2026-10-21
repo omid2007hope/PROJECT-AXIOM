@@ -1,6 +1,8 @@
 #include "../include/optimizer.hpp"
 
-#include <cstring> // std::memcpy
+#include <algorithm> // std::shuffle
+#include <cstring>   // std::memcpy
+#include <numeric>   // std::iota
 
 // Tier 1: Stream chunks from disk into the RAM buffer
 void Optimizer::disk_to_ram(Portion& portion) {
@@ -125,13 +127,28 @@ bool Optimizer::load_context_window(Portion& portion) {
 
 		// Priority 1: Dense Early-Fusion Token ID Streaming
 		if (!portion.ram_buffer_token_ids.empty()) {
-			if (portion.offset + portion.context_window_size + 1 <= portion.ram_buffer_token_ids.size()) {
+			const size_t total_windows =
+				(portion.ram_buffer_token_ids.size() > portion.context_window_size)
+					? portion.ram_buffer_token_ids.size() - portion.context_window_size
+					: 0;
+
+			// New epoch (or new dataset): visit every window once, in random order
+			if (portion.offset == 0 || portion.window_order.size() != total_windows) {
+				portion.window_order.resize(total_windows);
+				std::iota(portion.window_order.begin(), portion.window_order.end(), 0U);
+				std::shuffle(portion.window_order.begin(),
+					     portion.window_order.end(),
+					     portion.shuffle_engine);
+			}
+
+			if (portion.offset < total_windows) {
+				const size_t window_start = portion.window_order[portion.offset];
 				if (portion.context_token_ids[buffer_index]) {
 					std::memcpy(portion.context_token_ids[buffer_index],
-						    portion.ram_buffer_token_ids.data() + portion.offset,
+						    portion.ram_buffer_token_ids.data() + window_start,
 						    portion.context_window_size * sizeof(uint32_t));
 				}
-				uint32_t target_id = portion.ram_buffer_token_ids[portion.offset + portion.context_window_size];
+				uint32_t target_id = portion.ram_buffer_token_ids[window_start + portion.context_window_size];
 				std::memset(portion.target_tokens[buffer_index], 0,
 					    portion.target_elements * sizeof(std::bfloat16_t));
 				*reinterpret_cast<uint32_t*>(portion.target_tokens[buffer_index]) = target_id;

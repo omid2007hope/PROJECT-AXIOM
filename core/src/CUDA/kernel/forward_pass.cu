@@ -122,6 +122,11 @@ __global__ static void gather_embeddings_kernel(const uint32_t* __restrict__ tok
 		size_t token_idx = idx / embedding_dim;
 		size_t dim_idx = idx % embedding_dim;
 		uint32_t tok_id = token_ids[token_idx];
+		if (tok_id == 0) {
+			// PAD must contribute exactly 0.0 to X * W
+			context_window[idx] = __float2bfloat16(0.0f);
+			return;
+		}
 		if (tok_id >= vocab_size) {
 			tok_id = 1; // UNK fallback
 		}
@@ -196,7 +201,7 @@ __global__ static void compute_tied_logits_kernel(const __nv_bfloat16* __restric
 		for (size_t d = 0; d < emb_dim; ++d) {
 			dot += __bfloat162float(y[d]) * __bfloat162float(emb_row[d]);
 		}
-		logits[v] = dot;
+		logits[v] = (v == 0) ? -1e30f : dot; // PAD is never a prediction
 	}
 }
 
@@ -342,7 +347,7 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 
 	// Phase 4: Forward Gather Kernel & PCIe Bandwidth Optimization
 	// If token IDs and embedding table are provided, branchlessly gather tokens into d_context_window on the GPU
-	if (gpu_portion->d_token_ids[buffer_index] && gpu_embeddings && gpu_embeddings->d_table) {
+	if (gpu_portion->token_ids_active[buffer_index] && gpu_embeddings && gpu_embeddings->d_table) {
 		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
 		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count : (input_dim / emb_dim);
 		int threads = 256;

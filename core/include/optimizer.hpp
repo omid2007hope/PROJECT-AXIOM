@@ -3,9 +3,11 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -109,6 +111,11 @@ struct Portion {
 
 	// RAM buffer for uint32_t token IDs
 	std::vector<uint32_t> ram_buffer_token_ids = {};
+
+	// Start index of every sliding window, reshuffled at the start of each epoch
+	// (offset == 0). Windows are visited as window_order[offset].
+	std::vector<uint32_t> window_order = {};
+	std::mt19937 shuffle_engine {std::random_device {}()};
 
 	// Allocate the pinned buffers. Must be called once before the training loop.
 	// Returns false if the CUDA DLL reports an allocation failure.

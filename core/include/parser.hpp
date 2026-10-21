@@ -347,6 +347,13 @@ public:
 	// Tokenizes a text prompt string into discrete token IDs, registering any unseen words
 	std::vector<uint32_t> tokenize_prompt(Input& input, const std::string& prompt);
 
+	// Read-only variant for inference: unseen words become <UNK>, the vocabulary never grows
+	std::vector<uint32_t> tokenize_for_inference(const Input& input, const std::string& prompt);
+
+	// Right-aligned window of token IDs: newest token in the last slot, leading slots are PAD (0)
+	std::vector<uint32_t> build_context_ids(const std::vector<uint32_t>& tokens,
+						size_t context_tokens);
+
 	// Converts a sequence of token IDs into a 128-token context window vector (size = context_tokens * embedding_dim)
 	std::vector<std::bfloat16_t> build_context_window(const Input& input,
 							  const std::vector<uint32_t>& tokens,

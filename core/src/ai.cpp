@@ -1,5 +1,6 @@
 #include "../include/ai.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -72,6 +73,7 @@ void AI::reset_weights(Elements& elements) {
 	for (float& val : host_embeddings) {
 		val = dis_emb(gen);
 	}
+	std::fill(host_embeddings.begin(), host_embeddings.begin() + embedding_dim, 0.0f); // PAD row
 
 	if (gpu_embeddings.d_table_master != nullptr) {
 		upload_embeddings(host_embeddings.data(), &gpu_embeddings);
@@ -486,6 +488,54 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 		return false;
 	}
 
+	return read_prediction(output_prediction);
+}
+
+bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
+			std::vector<float>& output_prediction) {
+	const size_t context_token_count = input_dimension / embedding_dim;
+	if (context_ids.size() != context_token_count) {
+		std::cerr << "[AI Brain] Context token count (" << context_ids.size()
+			  << ") does not match model window (" << context_token_count << ").\n";
+		return false;
+	}
+	if (gpu_embeddings.d_table == nullptr) {
+		std::cerr << "[AI Brain] GPU embedding table is not allocated.\n";
+		return false;
+	}
+
+	synchronize_stream(&gpu_portion, 0);
+
+	std::vector<std::bfloat16_t> dummy_target(output_dimension,
+						  static_cast<std::bfloat16_t>(0.0f));
+
+	// Same path as training: IDs cross PCIe, the GPU gathers the trained embeddings
+	if (!upload_tokens_to_gpu(context_ids.data(),
+				  context_ids.size(),
+				  dummy_target.data(),
+				  dummy_target.size(),
+				  &gpu_portion,
+				  0)) {
+		std::cerr << "[AI Brain] Failed to upload token IDs to GPU for prediction.\n";
+		return false;
+	}
+
+	gpu_embeddings.active_vocab_size = active_vocab_size;
+	if (!forward_pass_with_embeddings(&gpu_portion,
+					  &gpu_embeddings,
+					  &gpu_weights,
+					  &gpu_activations,
+					  input_dimension,
+					  output_dimension,
+					  0)) {
+		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
+		return false;
+	}
+
+	return read_prediction(output_prediction);
+}
+
+bool AI::read_prediction(std::vector<float>& output_prediction) {
 	std::vector<std::bfloat16_t> output_activations(output_dimension);
 	if (!download_output(&gpu_activations, output_activations.data(), output_dimension)) {
 		std::cerr << "[AI Brain] Failed to download prediction activations from GPU.\n";
@@ -523,7 +573,7 @@ bool AI::generate(const std::string& prompt,
 		return false;
 	}
 
-	std::vector<uint32_t> tokens = parser.tokenize_prompt(input, prompt);
+	std::vector<uint32_t> tokens = parser.tokenize_for_inference(input, prompt);
 	if (tokens.empty()) {
 		return false;
 	}
@@ -532,16 +582,15 @@ bool AI::generate(const std::string& prompt,
 		active_vocab_size = input.next_text_id;
 	}
 
-	const size_t context_token_count =
-		(embedding_dim > 0) ? (input_dimension / embedding_dim) : 128;
+	const size_t context_token_count = input_dimension / embedding_dim;
 
-	std::vector<std::bfloat16_t> context_window =
-		parser.build_context_window(input, tokens, context_token_count);
+	// Right-aligned: the newest token sits in the last slot, exactly as in training
+	std::vector<uint32_t> context_ids = parser.build_context_ids(tokens, context_token_count);
 
 	std::vector<float> prediction(output_dimension, 0.0f);
 
 	for (size_t step = 0; step < max_new_tokens; ++step) {
-		if (!predict(context_window, prediction)) {
+		if (!predict_tokens(context_ids, prediction)) {
 			return false;
 		}
 
@@ -561,23 +610,8 @@ bool AI::generate(const std::string& prompt,
 			token_callback(token_string);
 		}
 
-		tokens.push_back(token_id);
-		const size_t roll_elements = embedding_dim;
-		if (context_window.size() >= roll_elements) {
-			std::memmove(context_window.data(),
-				     context_window.data() + roll_elements,
-				     (context_window.size() - roll_elements) * sizeof(std::bfloat16_t));
-			auto it = input.embedding_table.find(token_id);
-			if (it != input.embedding_table.end() && it->second.size() == roll_elements) {
-				std::memcpy(context_window.data() + context_window.size() - roll_elements,
-					    it->second.data(),
-					    roll_elements * sizeof(std::bfloat16_t));
-			} else {
-				std::memset(context_window.data() + context_window.size() - roll_elements,
-					    0,
-					    roll_elements * sizeof(std::bfloat16_t));
-			}
-		}
+		std::rotate(context_ids.begin(), context_ids.begin() + 1, context_ids.end());
+		context_ids.back() = token_id;
 	}
 
 	return true;

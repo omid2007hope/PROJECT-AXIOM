@@ -455,6 +455,34 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	return tokens;
 }
 
+std::vector<uint32_t> Parser::tokenize_for_inference(const Input& input, const std::string& prompt) {
+	std::vector<uint32_t> tokens;
+	std::istringstream iss(prompt);
+	std::string word;
+	while (iss >> word) {
+		const std::string clean = sanitize_word(word);
+		if (clean.empty())
+			continue;
+
+		auto it = input.main_dictionary.find(clean);
+		if (it == input.main_dictionary.end()) {
+			it = input.main_dictionary.find(word);
+		}
+
+		// Unknown words map to <UNK>: the dictionary and ID counter stay untouched
+		tokens.push_back(it != input.main_dictionary.end() ? it->second : vocab::UNK);
+	}
+	return tokens;
+}
+
+std::vector<uint32_t> Parser::build_context_ids(const std::vector<uint32_t>& tokens,
+						size_t context_tokens) {
+	std::vector<uint32_t> context_ids(context_tokens, vocab::PAD);
+	const size_t copy_count = std::min(tokens.size(), context_tokens);
+	std::copy(tokens.end() - copy_count, tokens.end(), context_ids.end() - copy_count);
+	return context_ids;
+}
+
 std::vector<std::bfloat16_t> Parser::build_context_window(const Input& input,
 							  const std::vector<uint32_t>& tokens,
 							  size_t context_tokens) {
