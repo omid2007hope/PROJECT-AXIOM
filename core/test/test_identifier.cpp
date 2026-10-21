@@ -137,7 +137,7 @@ bool test_identifier() {
 	// 4. Directory Scanning (Bulk identification)
 	std::cout << "\n[4] Directory Scanning (asset_sample/)\n";
 	auto identified_files = Identifier::identify_directory(asset_dir, false);
-	if (identified_files.size() < 10) {
+	if (identified_files.size() < 3000) {
 		std::filesystem::path train_dir = test_core_dir() / "training_data" / "Data";
 		if (std::filesystem::exists(train_dir)) {
 			auto train_files = Identifier::identify_directory(train_dir, false);
