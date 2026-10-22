@@ -42,12 +42,12 @@
 ---
 
 ## [ ] Phase 1: Multi-Token Autoregressive Generation, Sampling & Corpus Hygiene [NEXT]
-- [ ] **1.1 Host Autoregressive Generation Loop** (`core/src/ai.cpp`, `core/src/main.cpp`)
-  - [ ] Implement `AI::generate(prompt, max_new_tokens, temperature, top_k, top_p, token_callback)`
-  - [ ] Tokenize input prompt and initialize 128-token sliding context window
-  - [ ] Execute forward pass with RMSNorm and tied logits projection ($Y \cdot E^T$)
-  - [ ] Decode sampled token ID via `token_to_string()` and stream to terminal via `token_callback`
-  - [ ] Append token ID, slide context window (FIFO roll), loop until `vocab::EOS` or `max_new_tokens`
+- [x] **1.1 Host Autoregressive Generation Loop** (`core/src/ai.cpp`, `core/src/main.cpp`)
+  - [x] Implement `AI::generate(prompt, max_new_tokens, temperature, top_k, top_p, token_callback)`
+  - [x] Tokenize input prompt and initialize 128-token sliding context window
+  - [x] Execute forward pass with RMSNorm and tied logits projection ($Y \cdot E^T$)
+  - [x] Decode sampled token ID via `token_to_string()` and stream to terminal via `token_callback`
+  - [x] Append token ID, slide context window (FIFO roll), loop until `vocab::EOS` or `max_new_tokens`
 - [ ] **1.2 Stochastic Sampling Engine** (`core/src/CUDA/kernel/forward_pass.cu`, `core/src/ai.cpp`)
   - [ ] Implement temperature scaling: $\hat{z}_i = z_i / T$ with $T \in (0.0, 2.0]$
   - [ ] Implement Top-K filtering: Isolate $K$ highest logits, mask remainder to $-\infty$
