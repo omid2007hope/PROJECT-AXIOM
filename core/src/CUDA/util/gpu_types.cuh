@@ -74,13 +74,6 @@ struct GpuWeights {
 	uint64_t step_count = 0;
 };
 
-struct GpuTemperatures {
-
-	float d_temperature = 0.0;
-	int d_top_k = 0;
-	float d_top_p = 0.0;
-};
-
 // GPU-side activations buffer
 struct GpuActivations {
 	void* d_output = nullptr; // device ptr to __nv_bfloat16

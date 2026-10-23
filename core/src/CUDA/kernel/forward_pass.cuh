@@ -7,8 +7,6 @@
 extern "C" {
 #endif
 
-CUDA_API bool temperature();
-
 CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 			   const GpuWeights* gpu_weights,
 			   GpuActivations* gpu_activations,

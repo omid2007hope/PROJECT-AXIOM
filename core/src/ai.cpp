@@ -561,13 +561,12 @@ bool AI::read_prediction(std::vector<float>& output_prediction) {
 bool AI::generate(const std::string& prompt,
 		  Parser& parser,
 		  Input& input,
-		  &max_new_tokens,
-		  Temperatures& temperature,
+		  size_t max_new_tokens,
+		  const SamplingConfig& config,
 		  std::function<void(const std::string&)> token_callback) {
-
-	(void)temperature.h_temperature;
-	(void)temperature.h_top_k;
-	(void)temperature.h_top_p;
+	(void)config.temperature;
+	(void)config.top_k;
+	(void)config.top_p;
 
 	if (prompt.empty()) {
 		return false;

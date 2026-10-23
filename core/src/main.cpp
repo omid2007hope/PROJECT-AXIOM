@@ -651,8 +651,8 @@ void run_inference_engine(AI& ai,
 		ai.generate(line,
 			    parser,
 			    input,
-			    &max_new_tokens,
-			    Temperatures & temperature,
+			    128,
+			    SamplingConfig {0.7f, 40, 0.9f},
 			    [](const std::string& token_string) {
 				    std::cout << token_string << " " << std::flush;
 			    });
