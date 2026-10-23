@@ -73,7 +73,8 @@ void AI::reset_weights(Elements& elements) {
 	for (float& val : host_embeddings) {
 		val = dis_emb(gen);
 	}
-	std::fill(host_embeddings.begin(), host_embeddings.begin() + embedding_dim, 0.0f); // PAD row
+	std::fill(
+		host_embeddings.begin(), host_embeddings.begin() + embedding_dim, 0.0f); // PAD row
 
 	if (gpu_embeddings.d_table_master != nullptr) {
 		upload_embeddings(host_embeddings.data(), &gpu_embeddings);
@@ -560,14 +561,13 @@ bool AI::read_prediction(std::vector<float>& output_prediction) {
 bool AI::generate(const std::string& prompt,
 		  Parser& parser,
 		  Input& input,
-		  size_t max_new_tokens,
-		  float temperature,
-		  int top_k,
-		  float top_p,
+		  &max_new_tokens,
+		  Temperatures& temperature,
 		  std::function<void(const std::string&)> token_callback) {
-	(void)temperature;
-	(void)top_k;
-	(void)top_p;
+
+	(void)temperature.h_temperature;
+	(void)temperature.h_top_k;
+	(void)temperature.h_top_p;
 
 	if (prompt.empty()) {
 		return false;

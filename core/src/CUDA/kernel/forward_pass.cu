@@ -35,7 +35,7 @@
 //              Store(bf16)
 //                  |
 //          Add( Accum , Bias )
-//           /               \
+//           /
 //   VisitorAccFetch    VisitorRowBroadcast
 // =============================================================================
 namespace {
@@ -57,27 +57,33 @@ using InstructionShape = cutlass::gemm::GemmShape<16, 8, 16>; // bf16 mma.sync m
 constexpr int NumStages = 4;
 constexpr int EpilogueStages = 1;
 
-using OutputTileThreadMap = cutlass::epilogue::threadblock::
-	OutputTileThreadLayout<ThreadblockShape, WarpShape, ElementIn, AlignmentOut, EpilogueStages>;
+using OutputTileThreadMap = cutlass::epilogue::threadblock::OutputTileThreadLayout<ThreadblockShape,
+										   WarpShape,
+										   ElementIn,
+										   AlignmentOut,
+										   EpilogueStages>;
 
 using Accum = cutlass::epilogue::threadblock::VisitorAccFetch;
 
 // One bias value per output column, repeated for every row (stride 0 along M)
-using Bias = cutlass::epilogue::threadblock::
-	VisitorRowBroadcast<OutputTileThreadMap, ElementIn, cute::Stride<cute::_0, cute::_1, int32_t>>;
+using Bias = cutlass::epilogue::threadblock::VisitorRowBroadcast<
+	OutputTileThreadMap,
+	ElementIn,
+	cute::Stride<cute::_0, cute::_1, int32_t>>;
 
-using AddBias = cutlass::epilogue::threadblock::VisitorCompute<cutlass::plus,
-							       ElementCompute,
-							       ElementCompute,
-							       cutlass::FloatRoundStyle::round_to_nearest>;
+using AddBias =
+	cutlass::epilogue::threadblock::VisitorCompute<cutlass::plus,
+						       ElementCompute,
+						       ElementCompute,
+						       cutlass::FloatRoundStyle::round_to_nearest>;
 
 using EvtAddBias = cutlass::epilogue::threadblock::Sm80EVT<AddBias, Accum, Bias>;
 
-using Store = cutlass::epilogue::threadblock::VisitorAuxStore<
-	OutputTileThreadMap,
-	ElementIn,
-	cutlass::FloatRoundStyle::round_to_nearest,
-	cute::Stride<int64_t, cute::_1, int64_t>>;
+using Store =
+	cutlass::epilogue::threadblock::VisitorAuxStore<OutputTileThreadMap,
+							ElementIn,
+							cutlass::FloatRoundStyle::round_to_nearest,
+							cute::Stride<int64_t, cute::_1, int64_t>>;
 
 using EvtStore = cutlass::epilogue::threadblock::Sm80EVT<Store, EvtAddBias>;
 
@@ -314,8 +320,8 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 						      int buffer_index) {
 
 	// Safe Guard
-	if (!gpu_portion || !gpu_weights || !gpu_activations ||
-	    !gpu_weights->d_weights || !gpu_weights->d_bias || input_dim == 0 || output_dim == 0) {
+	if (!gpu_portion || !gpu_weights || !gpu_activations || !gpu_weights->d_weights ||
+	    !gpu_weights->d_bias || input_dim == 0 || output_dim == 0) {
 		return false;
 	}
 
@@ -333,7 +339,8 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 	// Ensure d_context_window is allocated on GPU for the gather scratchpad or GEMM input
 	GpuPortion* non_const_gpu = const_cast<GpuPortion*>(gpu_portion);
 	for (size_t i = 0; i < non_const_gpu->context_ptr; ++i) {
-		if (non_const_gpu->context_elements != input_dim || !non_const_gpu->d_context_window[i]) {
+		if (non_const_gpu->context_elements != input_dim ||
+		    !non_const_gpu->d_context_window[i]) {
 			if (non_const_gpu->d_context_window[i]) {
 				CUDA_CHECK(cudaFree(non_const_gpu->d_context_window[i]));
 				non_const_gpu->d_context_window[i] = nullptr;
@@ -347,9 +354,12 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 
 	// Phase 4: Forward Gather Kernel & PCIe Bandwidth Optimization
 	// If token IDs and embedding table are provided, branchlessly gather tokens into d_context_window on the GPU
-	if (gpu_portion->token_ids_active[buffer_index] && gpu_embeddings && gpu_embeddings->d_table) {
-		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
-		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count : (input_dim / emb_dim);
+	if (gpu_portion->token_ids_active[buffer_index] && gpu_embeddings &&
+	    gpu_embeddings->d_table) {
+		size_t emb_dim =
+			gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
+							      : (input_dim / emb_dim);
 		int threads = 256;
 		int blocks = static_cast<int>((input_dim + threads - 1) / threads);
 
@@ -385,7 +395,11 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			return false;
 	} else if (gpu_activations->d_inv_rms) {
 		float unity = 1.0f;
-		cudaMemcpyAsync(gpu_activations->d_inv_rms, &unity, sizeof(float), cudaMemcpyHostToDevice, stream);
+		cudaMemcpyAsync(gpu_activations->d_inv_rms,
+				&unity,
+				sizeof(float),
+				cudaMemcpyHostToDevice,
+				stream);
 	}
 
 	if (gpu_activations->output_elements != output_dim) {
@@ -423,29 +437,28 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			{static_cast<const ElementIn*>(gpu_weights->d_bias),
 			 ElementIn(0),
 			 {_0 {}, _1 {}, int32_t(N)}}, // Bias
-			{}			       // AddBias
-		},				       // EvtAddBias
+			{}			      // AddBias
+		},				      // EvtAddBias
 		{static_cast<ElementIn*>(gpu_activations->d_output),
 		 {int64_t(N), _1 {}, int64_t(M) * N}} // Store
 	};
 
-	typename Gemm::Arguments arguments(
-		cutlass::gemm::GemmUniversalMode::kGemm,
-		cutlass::gemm::GemmCoord(M, N, K),
-		1, // batch_count
-		callback_args,
-		gpu_portion->d_context_window[buffer_index], // ptr_A: x
-		gpu_weights->d_weights,			     // ptr_B: W
-		nullptr,				     // ptr_C (the EVT does the store)
-		nullptr,				     // ptr_D
-		int64_t(0),				     // batch_stride_A
-		int64_t(0),				     // batch_stride_B
-		int64_t(0),				     // batch_stride_C
-		int64_t(0),				     // batch_stride_D
-		int64_t(K),				     // lda
-		int64_t(K),				     // ldb
-		int64_t(0),				     // ldc
-		int64_t(0));				     // ldd
+	typename Gemm::Arguments arguments(cutlass::gemm::GemmUniversalMode::kGemm,
+					   cutlass::gemm::GemmCoord(M, N, K),
+					   1, // batch_count
+					   callback_args,
+					   gpu_portion->d_context_window[buffer_index], // ptr_A: x
+					   gpu_weights->d_weights,			// ptr_B: W
+					   nullptr,	// ptr_C (the EVT does the store)
+					   nullptr,	// ptr_D
+					   int64_t(0),	// batch_stride_A
+					   int64_t(0),	// batch_stride_B
+					   int64_t(0),	// batch_stride_C
+					   int64_t(0),	// batch_stride_D
+					   int64_t(K),	// lda
+					   int64_t(K),	// ldb
+					   int64_t(0),	// ldc
+					   int64_t(0)); // ldd
 
 	Gemm gemm_op;
 
@@ -475,10 +488,11 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 
 	// Milestone 3: Discrete Autoregressive Token Classification
 	// Compute Softmax probabilities and Argmax winning token on the GPU
-	size_t vocab_sz = (gpu_embeddings && gpu_embeddings->d_table)
-				  ? (gpu_embeddings->active_vocab_size > 0 ? gpu_embeddings->active_vocab_size
-									   : gpu_embeddings->vocab_size)
-				  : output_dim;
+	size_t vocab_sz =
+		(gpu_embeddings && gpu_embeddings->d_table)
+			? (gpu_embeddings->active_vocab_size > 0 ? gpu_embeddings->active_vocab_size
+								 : gpu_embeddings->vocab_size)
+			: output_dim;
 	if (gpu_activations->vocab_elements != vocab_sz || !gpu_activations->d_probs) {
 		if (gpu_activations->d_probs) {
 			CUDA_CHECK(cudaFree(gpu_activations->d_probs));
@@ -494,7 +508,8 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 	}
 
 	if (gpu_embeddings && gpu_embeddings->d_table) {
-		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : output_dim;
+		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim
+								   : output_dim;
 		int l_threads = 256;
 		int l_blocks = static_cast<int>((vocab_sz + l_threads - 1) / l_threads);
 		compute_tied_logits_kernel<<<l_blocks, l_threads, 0, stream>>>(
@@ -535,10 +550,13 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 					    buffer_index);
 }
 
-extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, int iterations,
-							 double* out_tflops,
-							 double* out_bandwidth_gb_s,
-							 float* out_avg_ms) {
+extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M,
+							  int N,
+							  int K,
+							  int iterations,
+							  double* out_tflops,
+							  double* out_bandwidth_gb_s,
+							  float* out_avg_ms) {
 	if (M <= 0 || N <= 0 || K <= 0 || iterations <= 0) {
 		return false;
 	}
@@ -560,14 +578,17 @@ extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, i
 	__nv_bfloat16* d_bias = nullptr;
 	__nv_bfloat16* d_out = nullptr;
 
-	if (cudaMalloc(&d_A, size_A) != cudaSuccess ||
-	    cudaMalloc(&d_B, size_B) != cudaSuccess ||
+	if (cudaMalloc(&d_A, size_A) != cudaSuccess || cudaMalloc(&d_B, size_B) != cudaSuccess ||
 	    cudaMalloc(&d_bias, size_bias) != cudaSuccess ||
 	    cudaMalloc(&d_out, size_out) != cudaSuccess) {
-		if (d_A) cudaFree(d_A);
-		if (d_B) cudaFree(d_B);
-		if (d_bias) cudaFree(d_bias);
-		if (d_out) cudaFree(d_out);
+		if (d_A)
+			cudaFree(d_A);
+		if (d_B)
+			cudaFree(d_B);
+		if (d_bias)
+			cudaFree(d_bias);
+		if (d_out)
+			cudaFree(d_out);
 		return false;
 	}
 
@@ -582,29 +603,27 @@ extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, i
 			{reinterpret_cast<const ElementIn*>(d_bias),
 			 ElementIn(0),
 			 {_0 {}, _1 {}, int32_t(N)}}, // Bias
-			{}			       // AddBias
-		},				       // EvtAddBias
-		{reinterpret_cast<ElementIn*>(d_out),
-		 {int64_t(N), _1 {}, int64_t(M) * N}} // Store
+			{}			      // AddBias
+		},				      // EvtAddBias
+		{reinterpret_cast<ElementIn*>(d_out), {int64_t(N), _1 {}, int64_t(M) * N}} // Store
 	};
 
-	typename Gemm::Arguments arguments(
-		cutlass::gemm::GemmUniversalMode::kGemm,
-		cutlass::gemm::GemmCoord(M, N, K),
-		1, // batch_count
-		callback_args,
-		reinterpret_cast<ElementIn*>(d_A),
-		reinterpret_cast<ElementIn*>(d_B),
-		nullptr,
-		nullptr,
-		int64_t(0),
-		int64_t(0),
-		int64_t(0),
-		int64_t(0),
-		int64_t(K),
-		int64_t(K),
-		int64_t(0),
-		int64_t(0));
+	typename Gemm::Arguments arguments(cutlass::gemm::GemmUniversalMode::kGemm,
+					   cutlass::gemm::GemmCoord(M, N, K),
+					   1, // batch_count
+					   callback_args,
+					   reinterpret_cast<ElementIn*>(d_A),
+					   reinterpret_cast<ElementIn*>(d_B),
+					   nullptr,
+					   nullptr,
+					   int64_t(0),
+					   int64_t(0),
+					   int64_t(0),
+					   int64_t(0),
+					   int64_t(K),
+					   int64_t(K),
+					   int64_t(0),
+					   int64_t(0));
 
 	Gemm gemm_op;
 
@@ -654,7 +673,8 @@ extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, i
 	cudaEventDestroy(start);
 	cudaEventDestroy(stop);
 
-	if (d_workspace) cudaFree(d_workspace);
+	if (d_workspace)
+		cudaFree(d_workspace);
 	cudaFree(d_A);
 	cudaFree(d_B);
 	cudaFree(d_bias);
@@ -665,17 +685,21 @@ extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, i
 	}
 
 	float avg_ms = total_ms / static_cast<float>(iterations);
-	if (out_avg_ms) *out_avg_ms = avg_ms;
+	if (out_avg_ms)
+		*out_avg_ms = avg_ms;
 
-	double flops_per_iter = 2.0 * static_cast<double>(M) * static_cast<double>(N) * static_cast<double>(K);
+	double flops_per_iter =
+		2.0 * static_cast<double>(M) * static_cast<double>(N) * static_cast<double>(K);
 	double total_flops = flops_per_iter * static_cast<double>(iterations);
 	double achieved_tflops = (total_flops / 1e12) / (total_ms / 1000.0);
-	if (out_tflops) *out_tflops = achieved_tflops;
+	if (out_tflops)
+		*out_tflops = achieved_tflops;
 
 	double bytes_per_iter = static_cast<double>(size_A + size_B + size_bias + size_out);
 	double total_bytes = bytes_per_iter * static_cast<double>(iterations);
 	double achieved_bw_gb_s = (total_bytes / 1e9) / (total_ms / 1000.0);
-	if (out_bandwidth_gb_s) *out_bandwidth_gb_s = achieved_bw_gb_s;
+	if (out_bandwidth_gb_s)
+		*out_bandwidth_gb_s = achieved_bw_gb_s;
 
 	return true;
 }
@@ -716,8 +740,10 @@ extern "C" CUDA_API bool run_vram_saturation_benchmark(size_t safety_headroom_by
 
 	if (cudaMalloc(&d_src, buf_size) != cudaSuccess ||
 	    cudaMalloc(&d_dst, buf_size) != cudaSuccess) {
-		if (d_src) cudaFree(d_src);
-		if (d_dst) cudaFree(d_dst);
+		if (d_src)
+			cudaFree(d_src);
+		if (d_dst)
+			cudaFree(d_dst);
 		return false;
 	}
 
@@ -757,14 +783,16 @@ extern "C" CUDA_API bool run_vram_saturation_benchmark(size_t safety_headroom_by
 		return false;
 	}
 
-	if (out_allocated_bytes) *out_allocated_bytes = buf_size * 2;
-	if (out_elapsed_ms) *out_elapsed_ms = total_ms;
+	if (out_allocated_bytes)
+		*out_allocated_bytes = buf_size * 2;
+	if (out_elapsed_ms)
+		*out_elapsed_ms = total_ms;
 
-	double total_bytes_transferred = 2.0 * static_cast<double>(buf_size) * static_cast<double>(passes);
+	double total_bytes_transferred =
+		2.0 * static_cast<double>(buf_size) * static_cast<double>(passes);
 	double achieved_bw = (total_bytes_transferred / 1e9) / (total_ms / 1000.0);
-	if (out_bandwidth_gb_s) *out_bandwidth_gb_s = achieved_bw;
+	if (out_bandwidth_gb_s)
+		*out_bandwidth_gb_s = achieved_bw;
 
 	return true;
 }
-
-

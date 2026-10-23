@@ -40,6 +40,13 @@ enum class TrainStatus {
 	Failed	 // a CUDA step failed (already reported on stderr)
 };
 
+struct Temperatures {
+
+	float h_temperature = 0.0;
+	int h_top_k = 0;
+	float h_top_p = 0;
+};
+
 class Parser;
 struct Input;
 
@@ -67,6 +74,12 @@ public:
 	size_t embedding_dim = 4;
 	size_t active_vocab_size = 0;
 
+	// Milestone 3: Discrete Autoregressive Token Classification
+	uint32_t last_predicted_token_id = 0;
+
+	size_t max_new_tokens = 128;
+
+
 	// CPU Memory (High precision float for initialization and updates)
 	std::vector<float> host_weights;
 	std::vector<float> host_bias;
@@ -76,6 +89,8 @@ public:
 	GpuWeights gpu_weights;
 	GpuActivations gpu_activations;
 	GpuPortion gpu_portion; // Reused across
+
+	GpuTemperatures gpu_temperatures;
 
 	// iterations to prevent reallocation
 	GpuEmbeddings gpu_embeddings;
@@ -125,14 +140,9 @@ public:
 	bool generate(const std::string& prompt,
 		      Parser& parser,
 		      Input& input,
-		      size_t max_new_tokens = 128,
-		      float temperature = 0.7f,
-		      int top_k = 40,
-		      float top_p = 0.9f,
+		      &max_new_tokens,
+		      Temperatures& temperature,
 		      std::function<void(const std::string&)> token_callback = nullptr);
-
-	// Milestone 3: Discrete Autoregressive Token Classification
-	uint32_t last_predicted_token_id = 0;
 };
 
 #endif
