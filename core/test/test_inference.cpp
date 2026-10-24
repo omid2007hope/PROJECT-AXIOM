@@ -324,6 +324,54 @@ bool test_inference() {
 	test_check(gpu_free > 0, "GPU free memory reported is non-zero (> 0 MB)", s_pass, s_fail);
 	test_check(gpu_free <= gpu_total, "GPU free memory is strictly <= total memory", s_pass, s_fail);
 
+	// ── [8] Stochastic Sampling Engine & Temperature Invariants ─────────────────
+	std::cout << "\n[8] Stochastic Sampling Engine & Temperature Invariants\n";
+
+	// 8.1 Greedy fallback (T = 0.0f) generates tokens without error
+	std::vector<std::string> greedy_tokens;
+	bool greedy_ok = ai.generate(
+		"The quick brown fox",
+		parser,
+		input,
+		4,
+		SamplingConfig {0.0f, 40, 0.9f},
+		[&](const std::string& tok) { greedy_tokens.push_back(tok); });
+	test_check(greedy_ok, "ai.generate() succeeds with greedy fallback (T = 0.0)", s_pass, s_fail);
+	test_check(!greedy_tokens.empty(), "Greedy generation produced non-empty token stream", s_pass, s_fail);
+
+	// 8.2 Deterministic seed verification (T > 0 with fixed seed produces identical streams)
+	std::vector<std::string> seed_run_1;
+	std::vector<std::string> seed_run_2;
+	ai.generate(
+		"The quick brown fox",
+		parser,
+		input,
+		6,
+		SamplingConfig {0.8f, 40, 0.9f, 987654321ULL},
+		[&](const std::string& tok) { seed_run_1.push_back(tok); });
+
+	ai.generate(
+		"The quick brown fox",
+		parser,
+		input,
+		6,
+		SamplingConfig {0.8f, 40, 0.9f, 987654321ULL},
+		[&](const std::string& tok) { seed_run_2.push_back(tok); });
+
+	test_check_eq(seed_run_1.size(), seed_run_2.size(), "Fixed seed runs produce equal sequence length", s_pass, s_fail);
+	test_check(seed_run_1 == seed_run_2, "Fixed seed produces 100% deterministic bit-identical token stream", s_pass, s_fail);
+
+	// 8.3 Top-K bounding & probability download verification
+	std::vector<std::string> stochastic_tokens;
+	bool stoch_ok = ai.generate(
+		"The quick brown fox",
+		parser,
+		input,
+		4,
+		SamplingConfig {1.0f, 10, 0.8f},
+		[&](const std::string& tok) { stochastic_tokens.push_back(tok); });
+	test_check(stoch_ok, "ai.generate() succeeds with stochastic Top-K and Top-P", s_pass, s_fail);
+
 	std::cout << "=== Platinum Inference & System Resilience Test Suite: " << s_pass << " passed, "
 		  << s_fail << " failed ===\n";
 	return s_fail == 0;

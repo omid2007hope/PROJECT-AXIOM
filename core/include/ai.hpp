@@ -44,6 +44,7 @@ struct SamplingConfig {
 	float temperature = 0.7f;
 	int top_k = 40;
 	float top_p = 0.9f;
+	uint64_t seed = 0;
 };
 
 class Parser;

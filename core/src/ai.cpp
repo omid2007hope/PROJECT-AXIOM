@@ -565,8 +565,6 @@ bool AI::generate(const std::string& prompt,
 		  const SamplingConfig& config,
 		  std::function<void(const std::string&)> token_callback) {
 	gpu_embeddings.temperature = config.temperature;
-	(void)config.top_k;
-	(void)config.top_p;
 
 	if (prompt.empty()) {
 		return false;
@@ -593,10 +591,87 @@ bool AI::generate(const std::string& prompt,
 			return false;
 		}
 
-		uint32_t token_id = last_predicted_token_id;
+		uint32_t token_id = 0;
 
-		if (token_id == 0 && !input.embedding_table.empty()) {
-			token_id = parser.decode_token(input, prediction);
+		if (config.temperature <= 1e-4f) {
+			// Greedy Fallback: directly use on-device GPU argmax winner
+			token_id = last_predicted_token_id;
+		} else {
+			size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
+			std::vector<float> probabilities(vocab_sz, 0.0f);
+			if (download_probabilities(&gpu_activations, probabilities.data(), vocab_sz)) {
+				std::vector<std::pair<float, uint32_t>> candidates;
+				candidates.reserve(vocab_sz);
+				for (uint32_t id = 1; id < vocab_sz; ++id) {
+					if (probabilities[id] > 0.0f) {
+						candidates.emplace_back(probabilities[id], id);
+					}
+				}
+
+				if (!candidates.empty()) {
+					// 1. Top-K Truncation: Isolate K highest probability tokens
+					if (config.top_k > 0 &&
+					    static_cast<size_t>(config.top_k) < candidates.size()) {
+						std::partial_sort(
+							candidates.begin(),
+							candidates.begin() + config.top_k,
+							candidates.end(),
+							[](const auto& a, const auto& b) {
+								return a.first > b.first;
+							});
+						candidates.resize(config.top_k);
+					} else {
+						std::sort(
+							candidates.begin(),
+							candidates.end(),
+							[](const auto& a, const auto& b) {
+								return a.first > b.first;
+							});
+					}
+
+					// 2. Top-P (Nucleus) Truncation: Cutoff cumulative mass at P
+					float cumulative = 0.0f;
+					size_t nucleus_size = 0;
+					for (const auto& c : candidates) {
+						cumulative += c.first;
+						nucleus_size++;
+						if (cumulative >= config.top_p && nucleus_size >= 1) {
+							break;
+						}
+					}
+					candidates.resize(nucleus_size);
+
+					// 3. Re-normalize & Categorical Random Draw
+					float sum_prob = 0.0f;
+					for (const auto& c : candidates) {
+						sum_prob += c.first;
+					}
+
+					if (sum_prob > 0.0f) {
+						std::mt19937_64 rng(config.seed != 0
+									    ? (config.seed + step)
+									    : std::random_device {}());
+						std::uniform_real_distribution<float> dist(0.0f, sum_prob);
+						float r = dist(rng);
+						float running_sum = 0.0f;
+						token_id = candidates.front().second;
+						for (const auto& c : candidates) {
+							running_sum += c.first;
+							if (r <= running_sum) {
+								token_id = c.second;
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if (token_id == 0) {
+			token_id = last_predicted_token_id;
+			if (token_id == 0 && !input.embedding_table.empty()) {
+				token_id = parser.decode_token(input, prediction);
+			}
 		}
 
 		if (token_id == 0 || token_id == vocab::EOS) {
