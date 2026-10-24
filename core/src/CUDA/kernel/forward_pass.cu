@@ -518,12 +518,9 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim
 								   : output_dim;
 
-		if (gpu_embeddings) {
-			float safe_temp = (GpuEmbeddings->temperature > 1e-4f)
-						  ? (1.0f / gpu_embeddings->temperature)
-						  : 1.0f
-		};
-
+		float inv_temp = (gpu_embeddings->temperature > 1e-4f)
+					 ? (1.0f / gpu_embeddings->temperature)
+					 : 1.0f;
 
 		int l_threads = 256;
 		int l_blocks = static_cast<int>((vocab_sz + l_threads - 1) / l_threads);
@@ -533,7 +530,7 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			static_cast<float*>(gpu_activations->d_probs),
 			vocab_sz,
 			emb_dim,
-			safe_temp);
+			inv_temp);
 	} else {
 		int d_threads = 256;
 		int d_blocks = static_cast<int>((output_dim + d_threads - 1) / d_threads);
