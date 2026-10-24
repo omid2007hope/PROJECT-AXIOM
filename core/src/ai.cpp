@@ -564,7 +564,7 @@ bool AI::generate(const std::string& prompt,
 		  size_t max_new_tokens,
 		  const SamplingConfig& config,
 		  std::function<void(const std::string&)> token_callback) {
-	(void)config.temperature;
+	gpu_embeddings.temperature = config.temperature;
 	(void)config.top_k;
 	(void)config.top_p;
 

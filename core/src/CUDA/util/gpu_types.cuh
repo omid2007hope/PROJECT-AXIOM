@@ -50,7 +50,10 @@ struct GpuEmbeddings {
 	// AdamW first moment (m_t) and second moment (v_t) tensors
 	void* d_m = nullptr; // device ptr to float (vocab_size * embedding_dim)
 	void* d_v = nullptr; // device ptr to float (vocab_size * embedding_dim)
+
+	float temperature = 1.0;
 };
+
 
 // GPU-side mirror of the AI weights and biases.
 struct GpuWeights {

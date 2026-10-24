@@ -199,15 +199,22 @@ __global__ static void compute_tied_logits_kernel(const __nv_bfloat16* __restric
 						  const __nv_bfloat16* __restrict__ table,
 						  float* __restrict__ logits,
 						  size_t vocab_size,
-						  size_t emb_dim) {
+						  size_t emb_dim,
+						  float inv_temp) {
+
 	size_t v = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+
 	if (v < vocab_size) {
+
 		float dot = 0.0f;
+
 		const __nv_bfloat16* emb_row = table + v * emb_dim;
+
 		for (size_t d = 0; d < emb_dim; ++d) {
 			dot += __bfloat162float(y[d]) * __bfloat162float(emb_row[d]);
 		}
-		logits[v] = (v == 0) ? -1e30f : dot; // PAD is never a prediction
+
+		logits[v] = (v == 0) ? -1e30f : (dot * inv_temp); // PAD is never a prediction
 	}
 }
 
@@ -510,6 +517,14 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 	if (gpu_embeddings && gpu_embeddings->d_table) {
 		size_t emb_dim = gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim
 								   : output_dim;
+
+		if (gpu_embeddings) {
+			float safe_temp = (GpuEmbeddings->temperature > 1e-4f)
+						  ? (1.0f / gpu_embeddings->temperature)
+						  : 1.0f
+		};
+
+
 		int l_threads = 256;
 		int l_blocks = static_cast<int>((vocab_sz + l_threads - 1) / l_threads);
 		compute_tied_logits_kernel<<<l_blocks, l_threads, 0, stream>>>(
@@ -517,7 +532,8 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			static_cast<const __nv_bfloat16*>(gpu_embeddings->d_table),
 			static_cast<float*>(gpu_activations->d_probs),
 			vocab_sz,
-			emb_dim);
+			emb_dim,
+			safe_temp);
 	} else {
 		int d_threads = 256;
 		int d_blocks = static_cast<int>((output_dim + d_threads - 1) / d_threads);
