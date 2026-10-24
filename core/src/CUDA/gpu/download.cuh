@@ -24,8 +24,7 @@ CUDA_API bool download_output(const GpuActivations* gpu_activations,
 			      size_t output_elements);
 
 // Copies the latest GPU argmax token prediction (uint32_t) to the host.
-CUDA_API bool download_pred_token(const GpuActivations* gpu_activations,
-				  uint32_t* h_pred_id);
+CUDA_API bool download_pred_token(const GpuActivations* gpu_activations, uint32_t* h_pred_id);
 
 // Copies the FP32 master weights and biases to the host.
 CUDA_API bool download_ai_weights(const GpuWeights* gpu,
@@ -33,6 +32,11 @@ CUDA_API bool download_ai_weights(const GpuWeights* gpu,
 				  size_t weight_elements,
 				  float* h_bias,
 				  size_t bias_elements);
+
+CUDA_API bool download_probabilities(const GpuActivations* gpu_activations,
+				     float* h_probs,
+				     size_t count);
+
 
 #ifdef __cplusplus
 }

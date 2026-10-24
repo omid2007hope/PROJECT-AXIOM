@@ -81,17 +81,15 @@ extern "C" CUDA_API bool download_output(const GpuActivations* gpu_activations,
 }
 
 extern "C" CUDA_API bool download_pred_token(const GpuActivations* gpu_activations,
-					      uint32_t* h_pred_id) {
+					     uint32_t* h_pred_id) {
 	if (!gpu_activations || !h_pred_id || !gpu_activations->d_pred_id)
 		return false;
 
 	if (!CUDA_CHECK(cudaDeviceSynchronize()))
 		return false;
 
-	return CUDA_CHECK(cudaMemcpy(h_pred_id,
-				     gpu_activations->d_pred_id,
-				     sizeof(uint32_t),
-				     cudaMemcpyDeviceToHost));
+	return CUDA_CHECK(cudaMemcpy(
+		h_pred_id, gpu_activations->d_pred_id, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 }
 
 extern "C" CUDA_API bool download_ai_weights(const GpuWeights* gpu,
@@ -115,4 +113,17 @@ extern "C" CUDA_API bool download_ai_weights(const GpuWeights* gpu,
 
 	return CUDA_CHECK(cudaMemcpy(
 		h_bias, gpu->d_bias_master, bias_elements * sizeof(float), cudaMemcpyDeviceToHost));
+}
+
+extern "C" CUDA_API bool download_probabilities(const GpuActivations* gpu_activations,
+						float* h_probs,
+						size_t count) {
+	if (!gpu_activations || !h_probs || !gpu_activations->d_probs)
+		return false;
+	if (count > gpu_activations->vocab_elements)
+		return false;
+	if (!CUDA_CHECK(cudaDeviceSynchronize()))
+		return false;
+	return CUDA_CHECK(cudaMemcpy(
+		h_probs, gpu_activations->d_probs, count * sizeof(float), cudaMemcpyDeviceToHost));
 }
